@@ -37,7 +37,8 @@ Navigate to the **♾️ Routing** tab. This tells StatusForge where to send you
 
 * **Option A: StatusForge Native (Recommended)**
   * *Best for:* Creators who want a direct, secure connection to Twitch and Kick.
-  * *Setup:* Enter your Twitch and Kick Developer App credentials (Client ID and Secret). Click **Save Broadcast Config**, and then click the **CONNECT** buttons to securely authorize your accounts via OAuth2. 
+  * *Setup:* Generate your App credentials at the **[Twitch Console](https://dev.twitch.tv/console)** and **[Kick Developer Portal](https://kick.com/settings/developer)**. Enter your Client ID and Secret in StatusForge. 
+  * *(Note: Kick also requires your numeric Channel ID. To find it, visit `https://kick.com/api/v1/channels/YOUR_USERNAME` in your browser and copy the first `"id"` number).* * Click **Save Broadcast Config**, and then click the **CONNECT** buttons to securely authorize your accounts via OAuth2. 
 * **Option B: Streamer.bot (Advanced)**
   * *Best for:* Power users who want to trigger local OBS scene changes or complex macros when a game changes.
   * *Setup:* Ensure your Streamer.bot HTTP Server is running. Enter the port (default is `8080`) and StatusForge will route all category updates directly into your local bot.
@@ -66,7 +67,7 @@ StatusForge taps into a massive web of public and private APIs to keep your stre
 
 ### 🟢 Kick API (Public Frontend Routes)
 Because Kick's official developer portal requires a registered App, StatusForge uses their public website endpoints to silently pull live data.
-* **Official Developer Portal:** `https://dev.kick.com/`
+* **Developer Portal & App Creation:** `https://kick.com/settings/developer`
 * **The Core Endpoint:** `GET https://kick.com/api/v1/channels/{username}`
   * *What we look for:* Returns a massive JSON payload. We extract the `"id"` (the numeric Channel ID required by the backend to push updates), the `"user_id"`, the direct `"playback_url"` (.m3u8), and `"recent_livestream.categories.category_id"` to silently check the current category.
 * **Secondary Endpoint:** `GET https://api.kick.com/public/v1/categories?q={game_title}`
@@ -74,6 +75,7 @@ Because Kick's official developer portal requires a registered App, StatusForge 
 
 ### 🟣 Twitch API (Helix)
 Twitch has the most heavily documented and strictly enforced API. You absolutely must have an OAuth2 Bearer token to talk to it.
+* **Developer Console:** `https://dev.twitch.tv/console`
 * **API Documentation:** `https://dev.twitch.tv/docs/api/reference`
 * **The Metadata Endpoint:** `GET https://api.twitch.tv/helix/search/categories?query={game_title}`
   * *What we look for:* Extracts the `"id"` (e.g., `509658` for Just Chatting) and the official `"name"`. Twitch rejects updates if you send a text string instead of the exact numeric ID.
@@ -88,6 +90,7 @@ RAWG is the ultimate open-source database for pulling rich metadata and is the b
 ### 🔵 SteamGridDB API
 While RAWG is great for 16:9 wallpapers, SteamGridDB is the absolute king of finding 600x900 vertical "Box Art" (the standard poster size used on Twitch).
 * **API Documentation:** `https://www.steamgriddb.com/api/v2`
+* **API Key Generation:** `https://www.steamgriddb.com/profile/preferences/api`
 * **The Core Endpoints:** 1. `GET /api/v2/search/autocomplete/{game_title}` (Finds the game's internal GridDB ID).
   2. `GET /api/v2/grids/game/{game_id}` (Pulls the actual artwork).
   * *What we look for:* Extracts `"data[0].url"` to pull the direct image URL of the highest-voted vertical cover art submitted by the community, ensuring perfect fit for vertical OBS layouts.
