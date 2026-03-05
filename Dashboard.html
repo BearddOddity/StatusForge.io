@@ -256,6 +256,17 @@
                 </div>
             </div>
             <button onclick="commitEngineSettings()" class="btn-primary" style="margin-bottom: 30px;">Save Widget / Engine Config?</button>
+
+            <div class="card" style="border-color: rgba(0,255,136,0.3); margin-top: 30px; background: rgba(0,255,136,0.02);">
+                <h3 style="margin:0 0 15px 0; color:#00ff88; font-size: 16px; text-transform: uppercase; font-weight: 900;">Config Backup & Restore</h3>
+                <p style="color:rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 20px;">Export your current settings and API keys to a file, or import a previous backup to instantly restore your setup.</p>
+                <div style="display:flex; gap:15px;">
+                    <button onclick="exportConfig()" class="btn-primary" style="flex:1;">📥 EXPORT BACKUP</button>
+                    <button onclick="document.getElementById('importFile').click()" class="btn-primary" style="flex:1; background:transparent; color:white; border: 1px solid rgba(255,255,255,0.2);">📤 IMPORT BACKUP</button>
+                    <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importConfig(event)">
+                </div>
+            </div>
+
         </div>
 
 <div id="screen-sb" class="screen">
@@ -708,6 +719,55 @@
         
         // 2. Force the Electron Desktop window to close instantly
         window.close();
+    }
+
+    // === BACKUP RESTORE LOGIC ===
+    async function exportConfig() {
+        try {
+            const res = await fetch('http://127.0.0.1:5050/export-config', {
+                headers: { 'X-Forge-Token': forgeToken } // SECURED
+            });
+            const data = await res.json();
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 4));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "StatusForge_Config_Backup.json");
+            document.body.appendChild(downloadAnchorNode); 
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            forgeToast("Backup Exported Successfully", "success");
+        } catch (err) {
+            forgeToast("Failed to export backup.", "error");
+        }
+    }
+
+    function importConfig(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                const res = await fetch('http://127.0.0.1:5050/import-config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Forge-Token': forgeToken // SECURED
+                    },
+                    body: JSON.stringify(parsed)
+                });
+                if (res.ok) {
+                    forgeToast("Backup Imported! Rebooting settings...", "success");
+                    setTimeout(() => bootConfigFromDisk(), 1000); // Instantly refresh UI
+                } else {
+                    forgeToast("Invalid or corrupted backup file.", "error");
+                }
+            } catch (err) {
+                forgeToast("Failed to parse config file.", "error");
+            }
+            event.target.value = ''; // Reset input so you can upload the same file again if needed
+        };
+        reader.readAsText(file);
     }
 </script>
 </body>

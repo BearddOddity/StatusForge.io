@@ -71,7 +71,7 @@ meta_lock = threading.Lock()
 VAULT_PATH = os.path.join(BASE_DIR, "vault.json")
 CUSTOM_META_PATH = os.path.join(BASE_DIR, "Custom_Meta.json")
 TOKEN_PATH = os.path.join(BASE_DIR, "Widget_Token.txt")
-CONFIG_PATH = os.path.join(os.path.dirname(BASE_DIR), "Config.json")
+CONFIG_PATH = os.path.join(BASE_DIR, "Config.json") # FIX: Keeps settings safely inside the folder
 KICK_DB_PATH = os.path.join(BASE_DIR, "kick_db.json")
 
 # === OAUTH2 ENDPOINTS ===
@@ -129,6 +129,72 @@ DEFAULT_CONFIG = {
     "broadcaster": {"routing_mode": "streamer_bot", "twitch_client": "", "twitch_secret": "", "twitch_token": "", "twitch_refresh": "", "twitch_broadcaster_id": "", "kick_client": "", "kick_secret": "", "kick_channel_id": "", "kick_token": "", "kick_refresh": ""}
 }
 load_json(CONFIG_PATH, DEFAULT_CONFIG)
+
+# === BACKUP ENDPOINTS ===
+@app.route('/export-config', methods=['GET', 'OPTIONS'])
+@require_local_auth
+def export_config():
+    config = load_json(CONFIG_PATH, DEFAULT_CONFIG)
+    return jsonify(config)
+
+@app.route('/import-config', methods=['POST', 'OPTIONS'])
+@require_local_auth
+def import_config():
+    try:
+        raw_data = request.json
+        
+        # 1. Ensure it's actually a dictionary payload
+        if not isinstance(raw_data, dict):
+            return jsonify({"status": "error", "message": "Payload must be a JSON object."}), 400
+            
+        # 2. Ensure the core framework exists
+        if "engine_settings" not in raw_data or "broadcaster" not in raw_data:
+            return jsonify({"status": "error", "message": "Missing core config sections."}), 400
+
+        # 🛡️ ANTI-TAMPER SANITIZATION
+        # We completely ignore the uploaded file structure. We build a fresh, clean dictionary 
+        # and strictly force the data types (str, int, bool) to prevent injection crashes.
+        safe_config = {
+            "api_keys": {
+                "rawg": str(raw_data.get("api_keys", {}).get("rawg", "")),
+                "steamgrid": str(raw_data.get("api_keys", {}).get("steamgrid", "")),
+                "igdb_client": str(raw_data.get("api_keys", {}).get("igdb_client", "")),
+                "igdb_secret": str(raw_data.get("api_keys", {}).get("igdb_secret", "")),
+                "igdb_token": str(raw_data.get("api_keys", {}).get("igdb_token", ""))
+            },
+            "engine_settings": {
+                "idle_category": str(raw_data["engine_settings"].get("idle_category", "Just Chatting"))[:100], # Cap length to 100 chars
+                "sb_port": int(raw_data["engine_settings"].get("sb_port", 8080)),
+                "scan_interval": int(raw_data["engine_settings"].get("scan_interval", 5)),
+                "widget_poll_rate": int(raw_data["engine_settings"].get("widget_poll_rate", 3)),
+                "safe_mode": bool(raw_data["engine_settings"].get("safe_mode", False)),
+                "auto_push": bool(raw_data["engine_settings"].get("auto_push", False)),
+                "widget_fade_timer": int(raw_data["engine_settings"].get("widget_fade_timer", 15))
+            },
+            "broadcaster": {
+                "routing_mode": str(raw_data["broadcaster"].get("routing_mode", "streamer_bot")),
+                "twitch_client": str(raw_data["broadcaster"].get("twitch_client", "")),
+                "twitch_secret": str(raw_data["broadcaster"].get("twitch_secret", "")),
+                "twitch_token": str(raw_data["broadcaster"].get("twitch_token", "")),
+                "twitch_refresh": str(raw_data["broadcaster"].get("twitch_refresh", "")),
+                "twitch_broadcaster_id": str(raw_data["broadcaster"].get("twitch_broadcaster_id", "")),
+                "kick_client": str(raw_data["broadcaster"].get("kick_client", "")),
+                "kick_secret": str(raw_data["broadcaster"].get("kick_secret", "")),
+                "kick_channel_id": str(raw_data["broadcaster"].get("kick_channel_id", "")),
+                "kick_token": str(raw_data["broadcaster"].get("kick_token", "")),
+                "kick_refresh": str(raw_data["broadcaster"].get("kick_refresh", ""))
+            }
+        }
+        
+        # Save the freshly sanitized dictionary to the hard drive
+        save_json(CONFIG_PATH, safe_config)
+        return jsonify({"status": "success"})
+        
+    except ValueError:
+        # If they tried to pass a string where an integer belongs (like sb_port = "hello"), it fails safely here
+        return jsonify({"status": "error", "message": "Type mismatch. Config file is corrupted."}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # === MASTER CATEGORY SYNCING ===
 def sync_kick_database():
@@ -649,6 +715,7 @@ def get_status():
     payload = status_data.copy()
     payload["system_info"] = {"os": CURRENT_OS, "active_path": BASE_DIR.replace("\\", "/"), "missing_deps": []}
     payload["fade_timer"] = config.get("engine_settings", {}).get("widget_fade_timer", 15) 
+    payload["widget_poll_rate"] = config.get("engine_settings", {}).get("widget_poll_rate", 3)
     payload["broadcast_status"] = broadcast_status 
     return jsonify(payload)
 

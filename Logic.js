@@ -6,10 +6,10 @@ let startTime = 0;
 let pollRate = 3000;
 let lastKnownPulse = 0;
 
-// Widget (Pull poll rate from engine)
+// Widget (Pull poll rate from public status engine)
 async function initializeWidget() {
     try {
-        const url = 'http://127.0.0.1:5050/settings?nocache=' + new Date().getTime();
+        const url = 'http://127.0.0.1:5050/status?nocache=' + new Date().getTime();
         const setRes = await fetch(url);
         const setJson = await setRes.json();
         pollRate = (setJson.widget_poll_rate || 3) * 1000;
@@ -107,7 +107,6 @@ function updateTimer() {
     const s = String(diff % 60).padStart(2, '0');
     const el = document.getElementById("s"); 
     if (el) el.innerText = `⏱️ ${h}:${m}:${s}`;
-
 }
 
 // Start polling
