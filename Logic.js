@@ -1,4 +1,4 @@
-/* === Global & Setup === */
+/* === Global & Setup (v1.0.5) === */
 let lastGame = "";
 let sessionInterval;
 let widgetFadeTimer = null; 
