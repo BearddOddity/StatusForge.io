@@ -12,7 +12,9 @@
         .main-content::-webkit-scrollbar { width: 8px; }
         .main-content::-webkit-scrollbar-thumb { background: rgba(0, 255, 136, 0.5); border-radius: 10px; }
         
-        h1.logo { font-weight: 900; font-size: 28px; margin-bottom: 40px; background: linear-gradient(to right, #fff, #666); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; }
+        h1.logo { font-weight: 900; font-size: 28px; margin-bottom: 5px; background: linear-gradient(to right, #fff, #666); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; }
+        .version-stamp { color: rgba(255,255,255,0.3); font-size: 10px; font-weight: 800; text-align: center; margin-bottom: 30px; letter-spacing: 2px; }
+        
         .nav-btn { background: transparent; border: 1px solid transparent; color: rgba(255,255,255,0.5); font-family: 'Montserrat'; font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; padding: 15px 20px; text-align: left; border-radius: 15px; margin-bottom: 10px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 10px; }
         .nav-btn:hover { background: rgba(255,255,255,0.05); color: white; transform: translateX(5px); }
         .nav-btn.active { background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); color: #00ff88; transform: translateX(5px); box-shadow: 0 0 15px rgba(0,255,136,0.1); }
@@ -99,6 +101,8 @@
 
 <nav class="sidebar">
         <h1 class="logo">StatusForge.io</h1>
+        <div class="version-stamp">v1.0.5</div>
+        
         <button class="nav-btn active" id="nav-dashboard" onclick="swapViews('dashboard')">⏳ Status Room</button>
         <button class="nav-btn" id="nav-vault" onclick="swapViews('vault')">⚒️ The Forge</button>
         <button class="nav-btn" id="nav-api" onclick="swapViews('api')">🗝️ API Keys</button>
@@ -171,9 +175,12 @@
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h3 style="margin:0; color:white; font-size: 18px;">Status Terminal</h3>
-                    <button onclick="nukeTerminal()" class="btn-primary" style="width: auto; padding: 8px 15px; font-size: 10px; background: #ff4444; color: white; border-radius: 10px;">PURGE LOGS</button>
+                    <div style="display:flex; gap: 10px;">
+                        <button onclick="exportLogs()" class="btn-primary" style="width: auto; padding: 8px 15px; font-size: 10px; background: transparent; border: 1px solid rgba(0,255,136,0.5); color: #00ff88; border-radius: 10px;">EXPORT LOGS</button>
+                        <button onclick="nukeTerminal()" class="btn-primary" style="width: auto; padding: 8px 15px; font-size: 10px; background: #ff4444; color: white; border-radius: 10px;">PURGE LOGS</button>
+                    </div>
                 </div>
-                <div id="logTerminal" style="background: #000; color: #00ff88; font-family: monospace; font-size: 12px; padding: 20px; height: 150px; overflow-y: auto; border-radius: 15px; border: 1px solid rgba(0, 255, 136, 0.2); white-space: pre-wrap;">Awaiting Engine connection...</div>
+                <div id="logTerminal" style="background: #000; color: #00ff88; font-family: monospace; font-size: 12px; padding: 20px; height: 350px; overflow-y: auto; border-radius: 15px; border: 1px solid rgba(0, 255, 136, 0.2); white-space: pre-wrap;">Awaiting Engine connection...</div>
             </div>
         </div>
 
@@ -220,6 +227,16 @@
                     <button onclick="lockOverrideInVault('list')" class="btn-primary" style="flex:2;">🔒 LOCK INTO THE FORGE</button>
                     <button onclick="lockOverrideInVault('delist')" class="btn-primary" style="flex:1; background:#ff4444; color:white;">💀 EXILE APPLICATION</button>
                 </div>
+                
+                <div style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 30px; padding-top: 30px;">
+                    <h3 style="margin:0 0 15px 0; color:#00ff88; font-size: 14px; text-transform: uppercase; font-weight: 900;">Database Backup & Restore</h3>
+                    <p style="color:rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 20px;">Export your complete game tracking database and custom metadata for safe keeping.</p>
+                    <div style="display:flex; gap:15px;">
+                        <button onclick="exportMetadata()" class="btn-primary" style="flex:1; font-size: 12px;">📥 EXPORT DATABASE</button>
+                        <button onclick="document.getElementById('importMetaFile').click()" class="btn-primary" style="flex:1; background:transparent; color:white; border: 1px solid rgba(255,255,255,0.2); font-size: 12px;">📤 IMPORT DATABASE</button>
+                        <input type="file" id="importMetaFile" accept=".json" style="display:none;" onchange="importMetadata(event)">
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -227,15 +244,17 @@
             <h2 class="screen-title">Metadata API Keys</h2>
             <div class="card grid-2">
                 <div>
-                    <label style="color:#00ff88;">1. RAWG API Key (Primary)</label>
-                    <input type="password" id="rawgKey" placeholder="••••••••••••••••••••••••••••••••">
-                </div>
-                <div>
-                    <label>2. SteamGridDB API Key</label>
+                    <label style="color:#00ff88;">SteamGridDB API Key (Primary Cover Art)</label>
                     <input type="password" id="sgdbKey" placeholder="••••••••••••••••••••••••••••••••">
                 </div>
+                <div>
+                    <label>RAWG API Key (Deep Fallback)</label>
+                    <input type="password" id="rawgKey" placeholder="••••••••••••••••••••••••••••••••">
+                </div>
             </div>
-            <p style="font-size: 11px; color: rgba(255,255,255,0.4); text-align: center; margin-bottom: 20px;">* Steam and GOG's API are open no need to apply them, IGDB is dynamically powered by your Twitch App credentials!</p>
+            <p style="font-size: 11px; color: rgba(255,255,255,0.4); text-align: center; margin-bottom: 20px; line-height: 1.6;">
+                * The Engine Waterfall uses <b>Steam, IGDB, GOG, and Itch.io</b> as open endpoints (no keys required).<br>Provide your SteamGridDB and RAWG keys above to unlock high-fidelity vertical cover art and deep fallback metadata!
+            </p>
             <button onclick="commitEngineSettings()" class="btn-primary">Save API Config</button>
         </div>
 
@@ -422,9 +441,18 @@
                 dwnBtn.onclick = () => window.forgeAPI.installUpdate();
                 forgeToast("Update ready to install.", "success");
             }
+            else if (data.status === 'none') {
+                text.innerText = 'Up To Date';
+                console.log("OTA Updater: App is currently on the latest version.");
+            }
+            else if (data.status === 'error') {
+                btn.style.color = '#ff4444';
+                text.innerText = 'Update Error';
+                forgeToast("OTA Update Error. Check console.", "error");
+                console.error("OTA Updater Failed:", data.error);
+            }
         });
 
-        // Tell the engine to silently check for updates 5 seconds after boot
         setTimeout(() => window.forgeAPI.checkUpdate(), 5000);
     }
 
@@ -582,8 +610,8 @@
             document.getElementById('sbPort').value = config.sb_port || 8080;
             document.getElementById('widgetPollRate').value = config.widget_poll_rate || 3;
             document.getElementById('widgetFadeTimer').value = config.widget_fade_timer !== undefined ? config.widget_fade_timer : 15;
-            document.getElementById('rawgKey').value = config.rawg_key || "";
             document.getElementById('sgdbKey').value = config.sgdb_key || "";
+            if(document.getElementById('rawgKey')) document.getElementById('rawgKey').value = config.rawg_key || "";
             document.getElementById('routingMode').value = config.routing_mode || "streamer_bot";
             document.getElementById('twitchClient').value = config.twitch_client || "";
             document.getElementById('twitchSecret').value = config.twitch_secret || "";
@@ -604,7 +632,8 @@
             sb_port: parseInt(document.getElementById('sbPort').value) || 8080,
             widget_poll_rate: parseInt(document.getElementById('widgetPollRate').value) || 3,
             widget_fade_timer: parseInt(document.getElementById('widgetFadeTimer').value) >= 0 ? parseInt(document.getElementById('widgetFadeTimer').value) : 15,
-            rawg_key: document.getElementById('rawgKey').value.trim(), sgdb_key: document.getElementById('sgdbKey').value.trim(),
+            sgdb_key: document.getElementById('sgdbKey').value.trim(),
+            rawg_key: document.getElementById('rawgKey') ? document.getElementById('rawgKey').value.trim() : "",
             igdb_client: document.getElementById('igdb_client') ? document.getElementById('igdb_client').value.trim() : "",
             igdb_secret: document.getElementById('igdb_secret') ? document.getElementById('igdb_secret').value.trim() : "",
             routing_mode: document.getElementById('routingMode').value,
@@ -705,6 +734,23 @@
         } 
         catch(err) { forgeToast("Failed to clear logs.", "error"); }
     }
+
+    async function exportLogs() {
+        try {
+            const res = await fetch('http://127.0.0.1:5050/download-logs', { headers: { 'X-Forge-Token': forgeToken } });
+            const data = await res.json();
+            const blob = new Blob([data.logs], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `StatusForge_Logs_${new Date().toISOString().slice(0,10)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            forgeToast("Logs exported successfully.", "success");
+        } catch(e) { forgeToast("Failed to export logs.", "error"); }
+    }
     
     async function killForgeProcess() {
         if(!confirm("Power down StatusForge?")) return;
@@ -721,12 +767,10 @@
         window.close();
     }
 
-    // === BACKUP RESTORE LOGIC ===
+    // === CONFIG BACKUP RESTORE LOGIC ===
     async function exportConfig() {
         try {
-            const res = await fetch('http://127.0.0.1:5050/export-config', {
-                headers: { 'X-Forge-Token': forgeToken } // SECURED
-            });
+            const res = await fetch('http://127.0.0.1:5050/export-config', { headers: { 'X-Forge-Token': forgeToken } });
             const data = await res.json();
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 4));
             const downloadAnchorNode = document.createElement('a');
@@ -735,10 +779,8 @@
             document.body.appendChild(downloadAnchorNode); 
             downloadAnchorNode.click();
             downloadAnchorNode.remove();
-            forgeToast("Backup Exported Successfully", "success");
-        } catch (err) {
-            forgeToast("Failed to export backup.", "error");
-        }
+            forgeToast("Config Exported Successfully", "success");
+        } catch (err) { forgeToast("Failed to export config backup.", "error"); }
     }
 
     function importConfig(event) {
@@ -750,22 +792,52 @@
                 const parsed = JSON.parse(e.target.result);
                 const res = await fetch('http://127.0.0.1:5050/import-config', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Forge-Token': forgeToken // SECURED
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-Forge-Token': forgeToken },
                     body: JSON.stringify(parsed)
                 });
                 if (res.ok) {
-                    forgeToast("Backup Imported! Rebooting settings...", "success");
-                    setTimeout(() => bootConfigFromDisk(), 1000); // Instantly refresh UI
-                } else {
-                    forgeToast("Invalid or corrupted backup file.", "error");
-                }
-            } catch (err) {
-                forgeToast("Failed to parse config file.", "error");
-            }
-            event.target.value = ''; // Reset input so you can upload the same file again if needed
+                    forgeToast("Config Imported! Rebooting settings...", "success");
+                    setTimeout(() => bootConfigFromDisk(), 1000); 
+                } else { forgeToast("Invalid or corrupted config file.", "error"); }
+            } catch (err) { forgeToast("Failed to parse config file.", "error"); }
+            event.target.value = ''; 
+        };
+        reader.readAsText(file);
+    }
+
+    // === METADATA BACKUP RESTORE LOGIC ===
+    async function exportMetadata() {
+        try {
+            const res = await fetch('http://127.0.0.1:5050/export-meta', { headers: { 'X-Forge-Token': forgeToken } });
+            const data = await res.json();
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 4));
+            const a = document.createElement('a');
+            a.href = dataStr;
+            a.download = "StatusForge_Database_Backup.json";
+            document.body.appendChild(a); 
+            a.click();
+            a.remove();
+            forgeToast("Database Exported Successfully", "success");
+        } catch (err) { forgeToast("Failed to export database.", "error"); }
+    }
+
+    function importMetadata(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                const res = await fetch('http://127.0.0.1:5050/import-meta', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Forge-Token': forgeToken },
+                    body: JSON.stringify(parsed)
+                });
+                if (res.ok) {
+                    forgeToast("Database Imported Successfully!", "success");
+                } else { forgeToast("Invalid database backup.", "error"); }
+            } catch (err) { forgeToast("Failed to parse database file.", "error"); }
+            event.target.value = '';
         };
         reader.readAsText(file);
     }

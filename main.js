@@ -66,6 +66,10 @@ autoUpdater.on('update-not-available', () => {
     if (mainWindow) mainWindow.webContents.send('update-status', { status: 'none' });
 });
 
+autoUpdater.on('error', (err) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { status: 'error', error: err.message });
+});
+
 ipcMain.on('download-update', () => {
     if (mainWindow) mainWindow.webContents.send('update-status', { status: 'downloading', percent: 0 });
     autoUpdater.downloadUpdate();
