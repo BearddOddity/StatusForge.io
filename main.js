@@ -1,10 +1,14 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let engineProcess;
+let tray = null;
+let isQuitting = false; // Differentiates between "Stow" and "Shut Down"
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -16,6 +20,16 @@ function createWindow() {
             nodeIntegration: false,     // SECURED
             contextIsolation: true,     // SECURED
             preload: path.join(__dirname, 'preload.js')
+        }
+    });
+
+    // === SYSTEM TRAY INTERCEPT ===
+    // When "Stow" or "X" is clicked, hide window instead of closing
+    mainWindow.on('close', function (event) {
+        if (!isQuitting) {
+            event.preventDefault();
+            mainWindow.hide();
+            return false;
         }
     });
 
@@ -33,28 +47,98 @@ function createWindow() {
     mainWindow.on('closed', function () { mainWindow = null; });
 }
 
+function createTray() {
+    let iconPath = path.join(__dirname, 'icon.png');
+    
+    // Safety check: Generates a temporary icon if icon.png isn't added yet
+    if (!fs.existsSync(iconPath)) {
+        const fallbackIcon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAAaADAAQAAAABAAAAAQAAAAD5Ip3+AAAADUlEQVQI12NgYGAAQQAAoAAh8nI8vAAAAABJRU5ErkJggg==');
+        tray = new Tray(fallbackIcon);
+    } else {
+        tray = new Tray(iconPath);
+    }
+
+    const contextMenu = Menu.buildFromTemplate([
+        { label: 'Open Status Room', click: () => { mainWindow.show(); } },
+        { type: 'separator' },
+        { 
+            label: 'Quit StatusForge', 
+            click: () => { 
+                isQuitting = true; 
+                if (engineProcess) engineProcess.kill();
+                app.quit(); 
+            } 
+        }
+    ]);
+    
+    tray.setToolTip('StatusForge is monitoring...');
+    tray.setContextMenu(contextMenu);
+    
+    // Left-clicking the tray icon restores the dashboard
+    tray.on('click', () => {
+        if (mainWindow) {
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
+}
+
 function launchEngine() {
     let enginePath = process.platform === "win32" 
         ? path.join(__dirname, 'presence.exe') 
         : path.join(__dirname, 'presence');
         
-    engineProcess = spawn(enginePath);
+    // Standard spawn handling for both dev and compiled modes
+    if (fs.existsSync(enginePath)) {
+        engineProcess = spawn(enginePath, [], { stdio: 'inherit' });
+    } else {
+        engineProcess = spawn(enginePath);
+    }
 }
 
-app.on('ready', () => {
+app.whenReady().then(() => {
     console.log("Igniting Standalone Engine...");
     launchEngine();
     createWindow();
+    createTray(); // Boot the system tray
+    
+    if (app.isPackaged) autoUpdater.checkForUpdates().catch(err => console.log(err));
+});
+
+// App stays alive in background tray when windows are closed
+app.on('window-all-closed', function () {
+    if (process.platform !== 'darwin') {
+        // Do nothing. Keeps app in tray.
+    }
+});
+
+app.on('activate', () => {
+    if (mainWindow === null) {
+        createWindow();
+    } else {
+        mainWindow.show();
+    }
+});
+
+// === IPC COMMUNICATION ===
+ipcMain.on('quit-app', () => {
+    isQuitting = true;
+    if (engineProcess) engineProcess.kill();
+    app.quit();
+});
+
+// NEW SECURITY PATCH: Securely read the token from disk and hand it to the frontend
+ipcMain.handle('read-secure-token', () => {
+    try {
+        const tokenPath = path.join(__dirname, 'Widget_Token.txt');
+        return fs.readFileSync(tokenPath, 'utf8').trim();
+    } catch(err) { return null; }
 });
 
 // === OVER-THE-AIR (OTA) UPDATER ===
-const { autoUpdater } = require('electron-updater');
-
-// We want the user to click the download button, not force it automatically
 autoUpdater.autoDownload = false; 
 
 ipcMain.on('check-update', () => {
-    // Only check for updates if running the compiled app, not in dev mode
     if (app.isPackaged) autoUpdater.checkForUpdates().catch(err => console.log(err));
 });
 
@@ -84,15 +168,12 @@ autoUpdater.on('update-downloaded', () => {
 });
 
 ipcMain.on('install-update', () => {
+    isQuitting = true;
     if (engineProcess) {
         engineProcess.kill();
         engineProcess = null;
     }
     autoUpdater.quitAndInstall();
-});
-
-app.on('window-all-closed', function () {
-    if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('quit', () => {

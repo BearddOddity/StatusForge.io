@@ -32,7 +32,6 @@
         .btn-primary:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(0,255,136,0.4); }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         
-        /* OS Tag alignment */
         .top-tags-container { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 10px; margin-right: 0; }
         .tag { padding: 5px 12px; border-radius: 8px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 5px; }
         .tag-os { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); }
@@ -80,6 +79,75 @@
 
         .status-standby { filter: grayscale(100%) opacity(30%); }
         .status-standby-text { color: rgba(255,255,255,0.4); }
+
+        /* TOOLTIP SYSTEM */
+        .tooltip-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 10px;
+            font-weight: 900;
+            cursor: help;
+            margin-left: 10px;
+            transition: 0.3s;
+            vertical-align: middle;
+        }
+        .tooltip-wrapper:hover {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            box-shadow: 0 0 10px rgba(0,255,136,0.2);
+        }
+        .tooltip-text {
+            visibility: hidden;
+            opacity: 0;
+            width: 260px;
+            background-color: #0a0a0a;
+            color: #fff;
+            text-align: left;
+            border-radius: 10px;
+            padding: 15px;
+            position: absolute;
+            z-index: 100;
+            bottom: 130%;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            transition: opacity 0.3s, transform 0.3s;
+            font-size: 11px;
+            font-weight: 500;
+            line-height: 1.6;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.9);
+            pointer-events: none;
+            text-transform: none;
+            letter-spacing: normal;
+        }
+        .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: rgba(0, 255, 136, 0.3) transparent transparent transparent;
+        }
+        .tooltip-wrapper:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        .tooltip-text.active {
+            visibility: visible;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+            pointer-events: auto;
+        }
     </style>
 </head>
 <body>
@@ -114,7 +182,10 @@
         
         <div style="flex-grow: 1;"></div>
         
-        <button class="nav-btn" style="color: #ff4444; border: 1px solid rgba(255,68,68,0.2); justify-content: center; background: rgba(255,68,68,0.05);" onclick="killForgeProcess()">🛑 SHUT DOWN</button>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="nav-btn" style="color: #00ff88; border: 1px solid rgba(0,255,136,0.2); justify-content: center; background: rgba(0,255,136,0.05);" onclick="window.close()">🔽 STOW IN TRAY</button>
+            <button class="nav-btn" style="color: #ff4444; border: 1px solid rgba(255,68,68,0.2); justify-content: center; background: rgba(255,68,68,0.05);" onclick="killForgeProcess()">🛑 SHUT DOWN</button>
+        </div>
     </nav>
 
     <main class="main-content" id="mainAppArea">
@@ -122,6 +193,16 @@
 
 <div id="screen-dashboard" class="screen active">
             <h2 class="screen-title">Status Room</h2>
+            
+            <div id="welcomeBanner" style="display: none; background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.3); padding: 20px; border-radius: 20px; margin-bottom: 25px; position: relative; align-items: center; justify-content: space-between;">
+                <div>
+                    <h3 style="margin: 0 0 5px 0; color: #00ff88; font-size: 16px;">Welcome to the Forge ⚒️</h3>
+                    <p style="margin: 0; color: rgba(255,255,255,0.7); font-size: 12px; line-height: 1.5;">
+                        To get started, head over to the <b>🗝️ API Keys</b> tab to add your cover art keys, and the <b>♾️ Routing</b> tab to connect your stream.
+                    </p>
+                </div>
+                <button onclick="dismissWelcomeBanner()" style="background: transparent; border: none; color: rgba(255,255,255,0.5); font-size: 20px; cursor: pointer; padding: 0 10px; transition: 0.3s;">&times;</button>
+            </div>
             
             <div class="top-tags-container">
                 <div id="osTag" class="tag tag-os">OS: Scanning...</div>
@@ -168,6 +249,9 @@
                 </div>
                 <div id="urlContainer" style="margin-top:20px; padding:20px; background:rgba(0,255,136,0.1); border:1px dashed #00ff88; border-radius:20px; display:none; text-align:center;">
                     <span id="generatedUrl" style="font-family:monospace; color:#00ff88; display:block; margin-bottom:15px; word-break:break-all;"></span>
+                    <div id="obsDimensions" style="font-size: 11px; font-weight: 800; color: white; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;">
+                        Recommended OBS Size: <span style="color: #ffb800;">Width: 900 | Height: 500</span>
+                    </div>
                     <button id="copyBtn" class="btn-primary" style="width:auto; padding:10px 20px;" onclick="snagUrlForOBS()">Copy Browser Source</button>
                 </div>
             </div>
@@ -185,9 +269,17 @@
         </div>
 
 <div id="screen-vault" class="screen">
-            <h2 class="screen-title">The Forge</h2>
+            <h2 class="screen-title" style="display: flex; align-items: center;">
+                The Forge
+                <div class="tooltip-wrapper">?
+                    <div class="tooltip-text" style="color: #fff; font-size: 11px; text-transform: none;">
+                        Lock in permanent database overrides here.<br><br>
+                        Type the exact Game Title or App Name your PC runs, fill out only the blanks you want to replace (like a custom Cover Art URL), and hit <b>Lock Into The Forge</b>.<br><br>
+                        Use <b>Exile Application</b> to permanently block background apps from being tracked.
+                    </div>
+                </div>
+            </h2>
             <div class="card" style="border-color: rgba(0,255,136,0.3);">
-                <p style="color:rgba(255,255,255,0.6); font-size: 13px; line-height: 1.6; margin-bottom: 20px;">Use this forge to lock in permanent database overrides. Type the exact game name, fill out only the blanks you want to replace, and lock it in.</p>
                 <div class="grid-2">
                     <div style="grid-column: 1 / -1;">
                         <label style="color:#00ff88;">Game Title / Application Title (Required)</label>
@@ -229,8 +321,15 @@
                 </div>
                 
                 <div style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 30px; padding-top: 30px;">
-                    <h3 style="margin:0 0 15px 0; color:#00ff88; font-size: 14px; text-transform: uppercase; font-weight: 900;">Database Backup & Restore</h3>
-                    <p style="color:rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 20px;">Export your complete game tracking database and custom metadata for safe keeping.</p>
+                    <h3 style="margin:0 0 15px 0; color:#00ff88; font-size: 14px; text-transform: uppercase; font-weight: 900; display: flex; align-items: center;">
+                        Database Backup & Restore
+                        <div class="tooltip-wrapper">?
+                            <div class="tooltip-text" style="color: #fff;">
+                                <b>Export Database:</b> Downloads your complete game tracking history, including all custom metadata, overridden cover art, and Exiled Applications.<br><br>
+                                Keep this file safe so you never lose your custom library mappings!
+                            </div>
+                        </div>
+                    </h3>
                     <div style="display:flex; gap:15px;">
                         <button onclick="exportMetadata()" class="btn-primary" style="flex:1; font-size: 12px;">📥 EXPORT DATABASE</button>
                         <button onclick="document.getElementById('importMetaFile').click()" class="btn-primary" style="flex:1; background:transparent; color:white; border: 1px solid rgba(255,255,255,0.2); font-size: 12px;">📤 IMPORT DATABASE</button>
@@ -241,20 +340,31 @@
         </div>
 
 <div id="screen-api" class="screen">
-            <h2 class="screen-title">Metadata API Keys</h2>
+            <h2 class="screen-title" style="display: flex; align-items: center;">
+                Metadata API Keys
+                <div class="tooltip-wrapper">?
+                    <div class="tooltip-text">
+                        <b style="color: #00ff88;">The Engine Waterfall</b> natively pulls data from Steam, IGDB, GOG, and Itch.io automatically (no keys required).<br><br>
+                        Providing a <b>SteamGridDB</b> key ensures you get perfect 600x900 vertical box art for your overlays. A <b>RAWG</b> key acts as a deep-search fallback for obscure titles.
+                    </div>
+                </div>
+            </h2>
             <div class="card grid-2">
                 <div>
-                    <label style="color:#00ff88;">SteamGridDB API Key (Primary Cover Art)</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-left: 20px; margin-bottom: 10px;">
+                        <label style="margin: 0; color:#00ff88;">SteamGridDB API Key</label>
+                        <a href="#" onclick="window.shellAPI.openExternal('https://www.steamgriddb.com/profile/preferences/api')" style="font-size: 10px; color: rgba(255,255,255,0.4); text-decoration: none; border-bottom: 1px dashed rgba(255,255,255,0.4);">Get Key Here</a>
+                    </div>
                     <input type="password" id="sgdbKey" placeholder="••••••••••••••••••••••••••••••••">
                 </div>
                 <div>
-                    <label>RAWG API Key (Deep Fallback)</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-left: 20px; margin-bottom: 10px;">
+                        <label style="margin: 0;">RAWG API Key</label>
+                        <a href="#" onclick="window.shellAPI.openExternal('https://rawg.io/apidocs')" style="font-size: 10px; color: rgba(255,255,255,0.4); text-decoration: none; border-bottom: 1px dashed rgba(255,255,255,0.4);">Get Key Here</a>
+                    </div>
                     <input type="password" id="rawgKey" placeholder="••••••••••••••••••••••••••••••••">
                 </div>
             </div>
-            <p style="font-size: 11px; color: rgba(255,255,255,0.4); text-align: center; margin-bottom: 20px; line-height: 1.6;">
-                * The Engine Waterfall uses <b>Steam, IGDB, GOG, and Itch.io</b> as open endpoints (no keys required).<br>Provide your SteamGridDB and RAWG keys above to unlock high-fidelity vertical cover art and deep fallback metadata!
-            </p>
             <button onclick="commitEngineSettings()" class="btn-primary">Save API Config</button>
         </div>
 
@@ -262,23 +372,45 @@
             <h2 class="screen-title">Widget / Engine Config</h2>
             <div class="card grid-2">
                 <div>
-                    <label>Idle / Fallback Category</label>
+                    <label style="display: flex; align-items: center; margin-left: 20px;">
+                        Idle / Fallback Category
+                        <div class="tooltip-wrapper">?
+                            <div class="tooltip-text">The default category StatusForge pushes to Twitch/Kick when it detects no Listed Apps or games are currently running.</div>
+                        </div>
+                    </label>
                     <input type="text" id="idleCategory" placeholder="Just Chatting">
                 </div>
                 <div>
-                    <label>Widget delay (Seconds)</label>
+                    <label style="display: flex; align-items: center; margin-left: 20px;">
+                        Widget Poll Rate (Sec)
+                        <div class="tooltip-wrapper">?
+                            <div class="tooltip-text">How often the OBS Browser Source checks the local Engine for updates. Lower numbers respond faster but use slightly more CPU. (Default: 3)</div>
+                        </div>
+                    </label>
                     <input type="number" id="widgetPollRate" placeholder="3">
                 </div>
                 <div style="grid-column: 1 / -1;">
-                    <label>Widget Fade Timer (Seconds) - Set to 0 for always visible</label>
+                    <label style="display: flex; align-items: center; margin-left: 20px;">
+                        Widget Fade Timer (Sec)
+                        <div class="tooltip-wrapper">?
+                            <div class="tooltip-text">How long the overlay stays visible on stream before smoothly fading out. <b>Set to 0 to keep it visible permanently.</b></div>
+                        </div>
+                    </label>
                     <input type="number" id="widgetFadeTimer" placeholder="15" min="0" max="300">
                 </div>
             </div>
             <button onclick="commitEngineSettings()" class="btn-primary" style="margin-bottom: 30px;">Save Widget / Engine Config?</button>
 
             <div class="card" style="border-color: rgba(0,255,136,0.3); margin-top: 30px; background: rgba(0,255,136,0.02);">
-                <h3 style="margin:0 0 15px 0; color:#00ff88; font-size: 16px; text-transform: uppercase; font-weight: 900;">Config Backup & Restore</h3>
-                <p style="color:rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 20px;">Export your current settings and API keys to a file, or import a previous backup to instantly restore your setup.</p>
+                <h3 style="margin:0 0 15px 0; color:#00ff88; font-size: 16px; text-transform: uppercase; font-weight: 900; display: flex; align-items: center;">
+                    Config Backup & Restore
+                    <div class="tooltip-wrapper">?
+                        <div class="tooltip-text" style="color: #fff;">
+                            <b>Export Backup:</b> Downloads a secure .json file containing your Idle Category, routing choices, and all saved API keys.<br><br>
+                            <b>Import Backup:</b> Instantly overwrites your current setup with a previously saved configuration. Perfect for migrating StatusForge to a new PC.
+                        </div>
+                    </div>
+                </h3>
                 <div style="display:flex; gap:15px;">
                     <button onclick="exportConfig()" class="btn-primary" style="flex:1;">📥 EXPORT BACKUP</button>
                     <button onclick="document.getElementById('importFile').click()" class="btn-primary" style="flex:1; background:transparent; color:white; border: 1px solid rgba(255,255,255,0.2);">📤 IMPORT BACKUP</button>
@@ -299,14 +431,24 @@
                     </select>
                 </div>
                 <div>
-                    <label>Auto-Push Categories</label>
+                    <label style="display: flex; align-items: center; margin-left: 20px;">
+                        Auto-Push Categories
+                        <div class="tooltip-wrapper">?
+                            <div class="tooltip-text"><b>ON:</b> StatusForge automatically changes your stream category the moment a game launches.<br><br><b>OFF:</b> Manual Mode. You must click 'PUSH LIVE' at the bottom to update your stream.</div>
+                        </div>
+                    </label>
                     <select id="autoPushToggle" onchange="dimManualOverrides(this.value === 'true')">
                         <option value="false">Off (Manual Mode)</option>
                         <option value="true">On (Automated Mode)</option>
                     </select>
                 </div>
                 <div>
-                    <label style="color:#ff4444;">Testing Mode / Off-Stream Gaming</label>
+                    <label style="display: flex; align-items: center; margin-left: 20px; color:#ff4444;">
+                        Testing / Off-Stream Mode
+                        <div class="tooltip-wrapper">?
+                            <div class="tooltip-text"><b>Blocks the Engine from sending updates to Twitch/Kick.</b><br><br>Perfect for off-stream gaming while still letting your local widgets track your session.</div>
+                        </div>
+                    </label>
                     <select id="safeModeToggle" style="border-color: rgba(255,68,68,0.5);">
                         <option value="false">Off (Allows API to push info)</option>
                         <option value="true">On (Blocks API From pushing Info)</option>
@@ -326,9 +468,24 @@
 
             <div class="card grid-2" id="nativeConfigSection" style="display: none; border-color: rgba(145, 70, 255, 0.3);">
                 
-                <div style="grid-column: 1 / -1;">
-                    <h3 style="margin:0; font-size:16px; color:#9146FF;">Twitch (OAuth2)</h3>
-                    <p style="font-size:12px; color:rgba(255,255,255,0.5); margin: 5px 0 15px 0;">Provide your App credentials, click Save Broadcast Config down at the bottom Before clicking Connect, to lock your tokens and Broadcaster ID into the vault.</p>
+                <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin:0; font-size:16px; color:#9146FF; display: flex; align-items: center;">
+                        Twitch (OAuth2)
+                        <div class="tooltip-wrapper">?
+                            <div class="tooltip-text" style="color:#fff; width: 340px;">
+                                <b style="color: #9146FF;">How to get your Twitch Client ID & Secret:</b><br><br>
+                                1. Go to the Twitch Developer Console and log in.<br>
+                                2. Click <b>Applications -> Register Your Application</b>.<br>
+                                3. Fill out the form exactly like this:<br>
+                                &nbsp;&nbsp;&nbsp;• <b>Name:</b> StatusForge Local (or anything you want)<br>
+                                &nbsp;&nbsp;&nbsp;• <b>OAuth Redirect URLs:</b> http://localhost:5050/twitch/callback <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#ffb800;">(⚠️ CRITICAL: Must be exact!)</span><br>
+                                &nbsp;&nbsp;&nbsp;• <b>Category:</b> Application Integration<br>
+                                4. Click <b>Create</b>.<br>
+                                5. Click <b>Manage</b> on your new app.<br>
+                                6. Copy your <b>Client ID</b>. Then, click <b>New Secret</b> and copy your <b>Client Secret</b>. Paste both below.
+                            </div>
+                        </div>
+                    </h3>
                 </div>
                 <div>
                     <label>Twitch Client ID</label>
@@ -341,13 +498,26 @@
                 <div style="grid-column: 1 / -1;">
                     <button class="btn-oauth" onclick="triggerTwitchAuth()">
                         <svg style="width: 30px; height: 30px; fill: #9146FF; filter: drop-shadow(0 0 12px rgba(145,70,255,1));" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
-                        CONNECT
+                        CONNECT TWITCH
                     </button>
                 </div>
                 
-                <div style="grid-column: 1 / -1; margin-top: 15px;">
-                    <h3 style="margin:0; font-size:16px; color:#53f518;">Kick (OAuth2 PKCE)</h3>
-                    <p style="font-size:12px; color:rgba(255,255,255,0.5); margin: 5px 0 15px 0;">Provide your App credentials, click Save Broadcast Config down at the bottom Before clicking Connect, to lock your tokens and Broadcaster ID into the vault.</p>
+                <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                    <h3 style="margin:0; font-size:16px; color:#53f518; display: flex; align-items: center;">
+                        Kick (OAuth2 PKCE)
+                        <div class="tooltip-wrapper">?
+                            <div class="tooltip-text" style="color:#fff; width: 340px;">
+                                <b style="color: #53f518;">How to get your Kick Client ID & Secret:</b><br><br>
+                                1. Go to your Kick Creator Dashboard -> <b>Developer / API</b>.<br>
+                                2. Click <b>Create Application</b>.<br>
+                                3. Fill out the form exactly like this:<br>
+                                &nbsp;&nbsp;&nbsp;• <b>App Name:</b> StatusForge Local<br>
+                                &nbsp;&nbsp;&nbsp;• <b>Redirect URI:</b> http://localhost:5050/kick/callback <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#ffb800;">(⚠️ CRITICAL: Must be exact!)</span><br>
+                                4. Click <b>Create</b>.<br>
+                                5. Copy the <b>Client ID</b> & <b>Client Secret</b> below.
+                            </div>
+                        </div>
+                    </h3>
                 </div>
                 <div>
                     <label>Kick Client ID</label>
@@ -358,15 +528,22 @@
                     <input type="password" id="kickSecret" placeholder="••••••••••••••••••••••••">
                 </div>
                 <div style="grid-column: 1 / -1;">
-                    <label>Kick Channel ID</label>
-                    <input type="password" id="kickChannelId" placeholder="e.g. 12345678">
+                    <label>Kick Username</label>
+                    <input type="text" id="kickChannelId" placeholder="e.g. bearddoddity">
                 </div>
                 
                 <div style="grid-column: 1 / -1;">
                     <button class="btn-oauth" onclick="triggerKickAuth()">
                         <svg style="width: 30px; height: 30px; fill: #53f518; filter: drop-shadow(0 0 12px rgba(83,245,24,1));" viewBox="0 0 24 24"><path d="M0,0H8V8H12V4H16V0H24V4H20V8H16V16H20V20H24V24H16V20H12V16H8V24H0Z"/></svg>
-                        CONNECT
+                        CONNECT KICK
                     </button>
+                </div>
+
+                <div style="grid-column: 1 / -1; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px; text-align: center;">
+                    <button class="btn-primary" style="background: transparent; border: 1px solid #ffb800; color: #ffb800; width: auto; padding: 10px 30px; font-size: 12px;" onclick="testStreamConnection()">
+                        📡 TEST CONNECTION
+                    </button>
+                    <p style="font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 10px;">Pushes your Idle Category to stream to verify tokens.</p>
                 </div>
             </div>
 
@@ -394,12 +571,11 @@
     window.onload = async () => {
         console.log("StatusForge UI mounted. Forging connections...⚒️");
         
-        // 1. Grab the security token immediately on boot
-        try {
-            const tokenRes = await (await fetch('http://127.0.0.1:5050/get-token')).json();
-            forgeToken = tokenRes.token;
-        } catch(err) {
-            console.error("Critical Security Error: Cannot retrieve token.", err);
+        // NEW SECURITY PATCH: Fetch token via secure IPC tunnel, not HTTP
+        forgeToken = await window.forgeAPI.getSecureToken();
+        
+        if (!forgeToken) {
+            console.error("Critical Security Error: Cannot retrieve local token.");
             forgeToast("Security token missing. Engine disconnected.", "error");
         }
 
@@ -620,7 +796,18 @@
             document.getElementById('kickChannelId').value = config.kick_channel_id || "";
             dimManualOverrides(config.auto_push);
             toggleRoutingUI();
+            
+            // First time UI Logic
+            const bannerCleared = localStorage.getItem('sf_first_run_cleared');
+            if (!bannerCleared && !config.twitch_client && !config.kick_client && !config.sgdb_key) {
+                document.getElementById('welcomeBanner').style.display = 'flex';
+            }
         } catch(err) { forgeToast("Failed to load local config file.", "error"); }
+    }
+
+    function dismissWelcomeBanner() {
+        document.getElementById('welcomeBanner').style.display = 'none';
+        localStorage.setItem('sf_first_run_cleared', 'true');
     }
 
     async function commitEngineSettings() {
@@ -654,18 +841,36 @@
         } catch(err) { forgeToast("Engine error. Settings not saved.", "error"); }
     }
 
-    function triggerKickAuth() {
+    async function triggerKickAuth() {
         if (!document.getElementById('kickClient').value || !document.getElementById('kickSecret').value) {
             forgeToast("Save your Kick Client ID and Secret first.", "error"); return;
         }
-        window.location.href = "http://127.0.0.1:5050/kick/login";
+        await commitEngineSettings();
+        window.shellAPI.openExternal("http://127.0.0.1:5050/kick/login");
     }
     
-    function triggerTwitchAuth() {
+    async function triggerTwitchAuth() {
         if (!document.getElementById('twitchClient').value || !document.getElementById('twitchSecret').value) {
             forgeToast("Save your Twitch Client ID and Secret first.", "error"); return;
         }
-        window.location.href = "http://127.0.0.1:5050/twitch/login";
+        await commitEngineSettings();
+        window.shellAPI.openExternal("http://127.0.0.1:5050/twitch/login");
+    }
+
+    async function testStreamConnection() {
+        const idleCat = document.getElementById('idleCategory').value || "Just Chatting";
+        try {
+            const res = await fetch('http://127.0.0.1:5050/push-stream', { 
+                method: 'POST', 
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Forge-Token': forgeToken 
+                }, 
+                body: JSON.stringify({ category: idleCat }) 
+            });
+            if(res.ok) { forgeToast("Test Signal Sent!", "success"); } 
+            else { forgeToast("Test failed. Check terminal.", "error"); }
+        } catch(err) { forgeToast("Engine offline.", "error"); }
     }
 
     async function forceCategoryUpdate() {
@@ -709,8 +914,16 @@
     async function craftWidgetToken() {
         try {
             const layoutSelected = document.getElementById('layoutChoice').value;
-            const tokenData = await (await fetch('http://127.0.0.1:5050/get-token')).json();
-            document.getElementById('generatedUrl').innerText = `http://127.0.0.1:5050/forge-widget/${tokenData.token}/${layoutSelected}`;
+            // SECURITY PATCH: Use the IPC token directly instead of fetching it via HTTP
+            document.getElementById('generatedUrl').innerText = `http://127.0.0.1:5050/forge-widget/${forgeToken}/${layoutSelected}`;
+            
+            const dimText = document.getElementById('obsDimensions');
+            if (layoutSelected === 'Vertical.html') {
+                dimText.innerHTML = `OBS Size: <span style="color: #ffb800;">Width: 400 | Height: 600</span>`;
+            } else {
+                dimText.innerHTML = `OBS Size: <span style="color: #ffb800;">Width: 900 | Height: 500</span>`;
+            }
+
             document.getElementById('urlContainer').style.display = 'block';
             forgeToast("Secure URL Generated.", "success");
         } catch(err) { forgeToast("Security token failure.", "error"); }
@@ -763,8 +976,12 @@
             }); 
         } catch(err) {}
         
-        // 2. Force the Electron Desktop window to close instantly
-        window.close();
+        // 2. Force the Electron Main process to quit (instead of hiding to tray)
+        if (window.forgeAPI) {
+            window.forgeAPI.quitApp();
+        } else {
+            window.close();
+        }
     }
 
     // === CONFIG BACKUP RESTORE LOGIC ===
@@ -841,6 +1058,36 @@
         };
         reader.readAsText(file);
     }
+
+    // === TOOLTIP HYBRID LOGIC (Hover + Click-to-Lock) ===
+    document.addEventListener('DOMContentLoaded', () => {
+        const wrappers = document.querySelectorAll('.tooltip-wrapper');
+
+        wrappers.forEach(wrapper => {
+            wrapper.addEventListener('click', (e) => {
+                e.stopPropagation(); 
+                const tooltipText = wrapper.querySelector('.tooltip-text');
+                
+                document.querySelectorAll('.tooltip-text.active').forEach(activeTip => {
+                    if (activeTip !== tooltipText) activeTip.classList.remove('active');
+                });
+                tooltipText.classList.toggle('active');
+            });
+            
+            const tooltipContent = wrapper.querySelector('.tooltip-text');
+            if (tooltipContent) {
+                tooltipContent.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+            }
+        });
+
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.tooltip-text.active').forEach(activeTip => {
+                activeTip.classList.remove('active');
+            });
+        });
+    });
 </script>
 </body>
 </html>

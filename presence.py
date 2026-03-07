@@ -104,7 +104,6 @@ def load_json(path, default):
 
 def save_json(path, data):
     try:
-        # sort_keys=True ensures the JSON is perfectly ordered for GitHub diffing!
         with open(path, 'w') as f: json.dump(data, f, indent=4, sort_keys=True)
     except Exception as e: log_smart(f"[DATABASE ERROR] Failed to save {os.path.basename(path)}: {str(e)}", "error", 60)
 
@@ -298,7 +297,9 @@ def refresh_twitch_token():
 def kick_login():
     config = load_json(CONFIG_PATH, DEFAULT_CONFIG)
     client_id = config.get("broadcaster", {}).get("kick_client", "")
-    if not client_id: return "Error: Save Kick Client ID in dashboard first.", 400
+    if not client_id: 
+        return "<html><body style='background:#050505; color:#ff4444; font-family:sans-serif; text-align:center; padding-top:10%;'><h1>❌ Missing Credentials</h1><p style='color:#fff;'>Please save your Kick Client ID in the StatusForge dashboard first.</p><p style='color:rgba(255,255,255,0.5);'>You may close this tab.</p></body></html>", 400
+    
     verifier, challenge = generate_pkce_pair()
     state_token = secrets.token_urlsafe(16)
     pkce_vault['verifier'] = verifier
@@ -319,14 +320,24 @@ def kick_callback():
         save_json(CONFIG_PATH, config)
         log_smart("[OAUTH] Native Kick connection established and locked into vault.", "info", 0)
         threading.Thread(target=sync_kick_database, daemon=True).start()
-        return "<script>alert('Kick Connected Successfully!'); window.location.href='/';</script>"
+        return """
+        <html>
+            <body style="background:#050505; color:#00ff88; font-family:sans-serif; text-align:center; padding-top:10%;">
+                <h1 style="font-size: 40px;">✅ Kick Connected!</h1>
+                <p style="color: #fff; font-size: 18px;">StatusForge has securely received your token.</p>
+                <p style="color: rgba(255,255,255,0.5);">You may now close this browser tab and return to the StatusForge app.</p>
+            </body>
+        </html>
+        """
     return f"Kick Auth Failed: {res.text}"
 
 @app.route('/twitch/login')
 def twitch_login():
     config = load_json(CONFIG_PATH, DEFAULT_CONFIG)
     client_id = config.get("broadcaster", {}).get("twitch_client", "")
-    if not client_id: return "Error: Save Twitch Client ID in dashboard first.", 400
+    if not client_id: 
+        return "<html><body style='background:#050505; color:#ff4444; font-family:sans-serif; text-align:center; padding-top:10%;'><h1>❌ Missing Credentials</h1><p style='color:#fff;'>Please save your Twitch Client ID in the StatusForge dashboard first.</p><p style='color:rgba(255,255,255,0.5);'>You may close this tab.</p></body></html>", 400
+    
     scopes = urllib.parse.quote("channel:manage:broadcast")
     return redirect(f"{TWITCH_AUTH_URL}?response_type=code&client_id={client_id}&redirect_uri={urllib.parse.quote(TWITCH_REDIRECT_URI)}&scope={scopes}")
 
@@ -345,7 +356,15 @@ def twitch_callback():
         if user_res.status_code == 200: config["broadcaster"]["twitch_broadcaster_id"] = user_res.json()["data"][0]["id"]
         save_json(CONFIG_PATH, config)
         log_smart("[OAUTH] Native Twitch connection established and numeric ID grabbed.", "info", 0)
-        return "<script>alert('Twitch Connected!'); window.location.href='/';</script>"
+        return """
+        <html>
+            <body style="background:#050505; color:#9146FF; font-family:sans-serif; text-align:center; padding-top:10%;">
+                <h1 style="font-size: 40px;">✅ Twitch Connected!</h1>
+                <p style="color: #fff; font-size: 18px;">StatusForge has securely received your token.</p>
+                <p style="color: rgba(255,255,255,0.5);">You may now close this browser tab and return to the StatusForge app.</p>
+            </body>
+        </html>
+        """
     return f"Twitch Auth Failed: {res.text}"
 
 # === METADATA WATERFALL & ID SCANNERS ===
@@ -772,9 +791,6 @@ def trigger_pulse():
     status_data["last_pulse"] = time.time()
     return jsonify({"status": "Pulse triggered"})
 
-@app.route('/get-token')
-def get_token(): return jsonify({"token": WIDGET_TOKEN})
-
 @app.route('/api/kick-db')
 def serve_kick_db(): return jsonify(list(load_json(KICK_DB_PATH, {}).keys()))
 
@@ -854,7 +870,19 @@ def manage_settings():
         
         current_config["broadcaster"]["kick_client"] = data.get("kick_client", "")
         current_config["broadcaster"]["kick_secret"] = data.get("kick_secret", "")
-        current_config["broadcaster"]["kick_channel_id"] = data.get("kick_channel_id", "")
+        
+        # === AUTOMATIC KICK USERNAME TO ID LOOKUP ===
+        kick_input = data.get("kick_channel_id", "").strip()
+        if kick_input and not kick_input.isdigit():
+            try:
+                res = requests.get(f"https://kick.com/api/v1/channels/{kick_input}", timeout=5)
+                if res.status_code == 200:
+                    kick_input = str(res.json().get("id", ""))
+                    log_smart(f"[SYSTEM] Automatically resolved Kick Username to ID: {kick_input}", "info", 0)
+            except Exception as e:
+                log_smart(f"[SYSTEM ERROR] Failed to resolve Kick Username: {str(e)}", "warning", 0)
+
+        current_config["broadcaster"]["kick_channel_id"] = kick_input
         
         save_json(CONFIG_PATH, current_config)
         log_smart("[SYSTEM] User saved Engine / Routing configuration to the vault.", "info", 0)
