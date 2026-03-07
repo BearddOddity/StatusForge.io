@@ -1,6 +1,6 @@
 {
   "name": "statusforge.io",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "StatusForge.io Rich Presence Engine",
   "main": "main.js",
   "scripts": {
@@ -13,12 +13,14 @@
     "appId": "com.bearddoddity.statusforge.io",
     "productName": "StatusForge.io",
     "asar": false,
-    "publish": [{
-      "provider": "github",
-      "owner": "BeardedOddity",
-      "repo": "StatusForge.io",
-      "releaseType": "draft"
-    }],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "BeardedOddity",
+        "repo": "StatusForge.io",
+        "releaseType": "draft"
+      }
+    ],
     "directories": {
       "output": "dist"
     },
