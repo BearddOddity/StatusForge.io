@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
@@ -140,6 +140,11 @@ ipcMain.on('quit-app', () => {
 
 ipcMain.on('stow-app', () => {
     if (mainWindow) mainWindow.hide();
+});
+
+// NEW: Captures link clicks from the frontend and securely opens them in the host OS
+ipcMain.on('open-external', (event, url) => {
+    shell.openExternal(url);
 });
 
 ipcMain.handle('read-secure-token', () => {

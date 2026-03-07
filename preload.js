@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, shell } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('forgeAPI', {
     checkUpdate: () => ipcRenderer.send('check-update'),
@@ -21,7 +21,8 @@ contextBridge.exposeInMainWorld('shellAPI', {
     openExternal: (url) => {
         // SECURITY PATCH: Only allow safe web protocols to execute
         if (url.startsWith('https://') || url.startsWith('http://')) {
-            shell.openExternal(url);
+            // THE FIX: Tunnel the request to main.js instead of running it here
+            ipcRenderer.send('open-external', url);
         } else {
             console.error("Blocked attempt to open unsafe protocol:", url);
         }

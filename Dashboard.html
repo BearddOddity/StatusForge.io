@@ -114,11 +114,14 @@
             padding: 15px;
             position: absolute;
             z-index: 100;
-            bottom: 130%;
+            /* FIX: Drop downwards instead of popping up */
+            top: 150%;
+            bottom: auto;
             left: 50%;
-            transform: translateX(-50%) translateY(10px);
+            transform: translateX(-50%) translateY(-10px);
             transition: opacity 0.3s, transform 0.3s;
-            font-size: 11px;
+            /* FIX: Increased font size to 13px */
+            font-size: 13px;
             font-weight: 500;
             line-height: 1.6;
             border: 1px solid rgba(0, 255, 136, 0.3);
@@ -130,12 +133,14 @@
         .tooltip-text::after {
             content: "";
             position: absolute;
-            top: 100%;
+            /* FIX: Moved arrow to point upwards at the button */
+            bottom: 100%;
+            top: auto;
             left: 50%;
             margin-left: -6px;
             border-width: 6px;
             border-style: solid;
-            border-color: rgba(0, 255, 136, 0.3) transparent transparent transparent;
+            border-color: transparent transparent rgba(0, 255, 136, 0.3) transparent;
         }
         .tooltip-wrapper:hover .tooltip-text {
             visibility: visible;
@@ -272,7 +277,7 @@
             <h2 class="screen-title" style="display: flex; align-items: center;">
                 The Forge
                 <div class="tooltip-wrapper">?
-                    <div class="tooltip-text" style="color: #fff; font-size: 11px; text-transform: none;">
+                    <div class="tooltip-text" style="color: #fff;">
                         Lock in permanent database overrides here.<br><br>
                         Type the exact Game Title or App Name your PC runs, fill out only the blanks you want to replace (like a custom Cover Art URL), and hit <b>Lock Into The Forge</b>.<br><br>
                         Use <b>Exile Application</b> to permanently block background apps from being tracked.
