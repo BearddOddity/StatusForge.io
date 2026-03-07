@@ -169,7 +169,7 @@
 
 <nav class="sidebar">
         <h1 class="logo">StatusForge.io</h1>
-        <div class="version-stamp">v1.0.5</div>
+        <div class="version-stamp" id="ui-version">v---</div>
         
         <button class="nav-btn active" id="nav-dashboard" onclick="swapViews('dashboard')">⏳ Status Room</button>
         <button class="nav-btn" id="nav-vault" onclick="swapViews('vault')">⚒️ The Forge</button>
@@ -183,7 +183,7 @@
         <div style="flex-grow: 1;"></div>
         
         <div style="display: flex; flex-direction: column; gap: 10px;">
-            <button class="nav-btn" style="color: #00ff88; border: 1px solid rgba(0,255,136,0.2); justify-content: center; background: rgba(0,255,136,0.05);" onclick="window.close()">🔽 STOW IN TRAY</button>
+            <button class="nav-btn" style="color: #00ff88; border: 1px solid rgba(0,255,136,0.2); justify-content: center; background: rgba(0,255,136,0.05);" onclick="window.forgeAPI.stowApp()">🔽 STOW IN TRAY</button>
             <button class="nav-btn" style="color: #ff4444; border: 1px solid rgba(255,68,68,0.2); justify-content: center; background: rgba(255,68,68,0.05);" onclick="killForgeProcess()">🛑 SHUT DOWN</button>
         </div>
     </nav>
@@ -571,12 +571,21 @@
     window.onload = async () => {
         console.log("StatusForge UI mounted. Forging connections...⚒️");
         
-        // NEW SECURITY PATCH: Fetch token via secure IPC tunnel, not HTTP
-        forgeToken = await window.forgeAPI.getSecureToken();
-        
-        if (!forgeToken) {
+        // SECURITY PATCH: Fetch token via secure IPC tunnel, not HTTP
+        try {
+            forgeToken = await window.forgeAPI.getSecureToken();
+            if (!forgeToken) throw new Error("Null token");
+        } catch(err) {
             console.error("Critical Security Error: Cannot retrieve local token.");
             forgeToast("Security token missing. Engine disconnected.", "error");
+        }
+
+        // DYNAMIC VERSIONING INJECTION
+        if (window.forgeAPI && window.forgeAPI.getAppVersion) {
+            try {
+                const currentVer = await window.forgeAPI.getAppVersion();
+                document.getElementById('ui-version').innerText = `v${currentVer}`;
+            } catch(e) {}
         }
 
         bootConfigFromDisk();
@@ -968,7 +977,6 @@
     async function killForgeProcess() {
         if(!confirm("Power down StatusForge?")) return;
         
-        // 1. Tell the background Python Engine to self-destruct
         try { 
             await fetch('http://127.0.0.1:5050/shutdown', { 
                 method: 'POST',
@@ -976,7 +984,6 @@
             }); 
         } catch(err) {}
         
-        // 2. Force the Electron Main process to quit (instead of hiding to tray)
         if (window.forgeAPI) {
             window.forgeAPI.quitApp();
         } else {

@@ -8,7 +8,7 @@ const { autoUpdater } = require('electron-updater');
 let mainWindow;
 let engineProcess;
 let tray = null;
-let isQuitting = false; // Differentiates between "Stow" and "Shut Down"
+let isQuitting = false;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -17,14 +17,13 @@ function createWindow() {
         title: "StatusForge",
         autoHideMenuBar: true,
         webPreferences: { 
-            nodeIntegration: false,     // SECURED
-            contextIsolation: true,     // SECURED
+            nodeIntegration: false,     
+            contextIsolation: true,     
             preload: path.join(__dirname, 'preload.js')
         }
     });
 
     // === SYSTEM TRAY INTERCEPT ===
-    // When "Stow" or "X" is clicked, hide window instead of closing
     mainWindow.on('close', function (event) {
         if (!isQuitting) {
             event.preventDefault();
@@ -50,7 +49,6 @@ function createWindow() {
 function createTray() {
     let iconPath = path.join(__dirname, 'icon.png');
     
-    // Safety check: Generates a temporary icon if icon.png isn't added yet
     if (!fs.existsSync(iconPath)) {
         const fallbackIcon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAAaADAAQAAAABAAAAAQAAAAD5Ip3+AAAADUlEQVQI12NgYGAAQQAAoAAh8nI8vAAAAABJRU5ErkJggg==');
         tray = new Tray(fallbackIcon);
@@ -59,7 +57,16 @@ function createTray() {
     }
 
     const contextMenu = Menu.buildFromTemplate([
-        { label: 'Open Status Room', click: () => { mainWindow.show(); } },
+        { 
+            label: 'Open Status Room', 
+            click: () => { 
+                if (mainWindow) {
+                    mainWindow.show(); 
+                } else {
+                    createWindow();
+                }
+            } 
+        },
         { type: 'separator' },
         { 
             label: 'Quit StatusForge', 
@@ -74,11 +81,12 @@ function createTray() {
     tray.setToolTip('StatusForge is monitoring...');
     tray.setContextMenu(contextMenu);
     
-    // Left-clicking the tray icon restores the dashboard
     tray.on('click', () => {
         if (mainWindow) {
             mainWindow.show();
             mainWindow.focus();
+        } else {
+            createWindow();
         }
     });
 }
@@ -88,11 +96,15 @@ function launchEngine() {
         ? path.join(__dirname, 'presence.exe') 
         : path.join(__dirname, 'presence');
         
-    // Standard spawn handling for both dev and compiled modes
     if (fs.existsSync(enginePath)) {
-        engineProcess = spawn(enginePath, [], { stdio: 'inherit' });
+        engineProcess = spawn(enginePath, [], { 
+            stdio: 'inherit',
+            windowsHide: true // THE STEALTH PATCH: Kills the black terminal box
+        });
     } else {
-        engineProcess = spawn(enginePath);
+        engineProcess = spawn(enginePath, [], { 
+            windowsHide: true // THE STEALTH PATCH
+        });
     }
 }
 
@@ -100,12 +112,11 @@ app.whenReady().then(() => {
     console.log("Igniting Standalone Engine...");
     launchEngine();
     createWindow();
-    createTray(); // Boot the system tray
+    createTray(); 
     
     if (app.isPackaged) autoUpdater.checkForUpdates().catch(err => console.log(err));
 });
 
-// App stays alive in background tray when windows are closed
 app.on('window-all-closed', function () {
     if (process.platform !== 'darwin') {
         // Do nothing. Keeps app in tray.
@@ -127,7 +138,10 @@ ipcMain.on('quit-app', () => {
     app.quit();
 });
 
-// NEW SECURITY PATCH: Securely read the token from disk and hand it to the frontend
+ipcMain.on('stow-app', () => {
+    if (mainWindow) mainWindow.hide();
+});
+
 ipcMain.handle('read-secure-token', () => {
     try {
         const tokenPath = path.join(__dirname, 'Widget_Token.txt');
@@ -135,8 +149,15 @@ ipcMain.handle('read-secure-token', () => {
     } catch(err) { return null; }
 });
 
+ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+});
+
 // === OVER-THE-AIR (OTA) UPDATER ===
 autoUpdater.autoDownload = false; 
+
+// NEW FLAG: Allows your app to see and download -hotfix and -beta versions
+autoUpdater.allowPrerelease = true; 
 
 ipcMain.on('check-update', () => {
     if (app.isPackaged) autoUpdater.checkForUpdates().catch(err => console.log(err));

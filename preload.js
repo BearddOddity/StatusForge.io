@@ -7,11 +7,16 @@ contextBridge.exposeInMainWorld('forgeAPI', {
     onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, data) => callback(data)),
     quitApp: () => ipcRenderer.send('quit-app'),
     
-    // NEW: Securely request the master token directly from the Node backend
-    getSecureToken: () => ipcRenderer.invoke('read-secure-token')
+    // Safely asks the main process to hide the window to the tray
+    stowApp: () => ipcRenderer.send('stow-app'),
+    
+    // Securely request the master token directly from the Node backend
+    getSecureToken: () => ipcRenderer.invoke('read-secure-token'),
+    
+    // Dynamically pull the exact app version from package.json
+    getAppVersion: () => ipcRenderer.invoke('get-app-version')
 });
 
-// Exposes the system browser for secure OAuth logins & external links
 contextBridge.exposeInMainWorld('shellAPI', {
     openExternal: (url) => {
         // SECURITY PATCH: Only allow safe web protocols to execute

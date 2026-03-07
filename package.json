@@ -1,6 +1,6 @@
 {
   "name": "statusforge.io",
-  "version": "1.0.5-hotfix",
+  "version": "1.0.6-hotfix",
   "description": "StatusForge.io Rich Presence Engine",
   "main": "main.js",
   "scripts": {
@@ -17,13 +17,14 @@
       "provider": "github",
       "owner": "BeardedOddity",
       "repo": "StatusForge.io",
-	  "releaseType": "draft"
+      "releaseType": "draft"
     }],
     "directories": {
       "output": "dist"
     },
     "files": [
       "main.js",
+      "preload.js",
       "presence*",
       "Dashboard.html",
       "Logic.js",
