@@ -3,13 +3,17 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "spark"
   ],
   "permissions": [
     "core:default",
     "fs:default",
     "shell:allow-execute",
     "core:path:default",
-    "core:resources:default"
+    "core:resources:default",
+    "log:default",
+    "updater:default",
+    "window-state:default"
   ]
 }
