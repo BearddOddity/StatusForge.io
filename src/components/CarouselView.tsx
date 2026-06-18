@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback, useRef } from "react";
 import type { ForgeLibraryEntry } from "@/types";
 import { Card, CoverImage } from "./ui";
 
@@ -26,10 +26,6 @@ export default function CarouselView({
     },
     [entries.length, onSelect]
   );
-
-  // scrollIntoView removed: it conflicts with the translateX transform-based
-  // positioning and causes cards to bleed outside the viewport in narrow /
-  // portrait layouts. The transform on the track handles centering correctly.
 
   if (entries.length === 0) {
     return (
@@ -112,36 +108,36 @@ function CarouselCard({
   onSelect: () => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = cardRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    setTilt({
-      x: (y - 0.5) * -20,
-      y: (x - 0.5) * 20,
-    });
-  }, []);
+  const tiltRef = useRef({ x: 0, y: 0 });
 
   const baseTiltY = offset * 4;
   const baseTiltX = Math.abs(offset) * -1.5;
 
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isActive) return;
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    tiltRef.current = {
+      x: (y - 0.5) * -20,
+      y: (x - 0.5) * 20,
+    };
+    const el = cardRef.current?.firstElementChild as HTMLElement | null;
+    if (el) {
+      el.style.transform = `rotateX(${tiltRef.current.x + baseTiltX}deg) rotateY(${tiltRef.current.y + baseTiltY}deg) scale(1.07)`;
+    }
+  }, [isActive, baseTiltX, baseTiltY]);
+
   const handleMouseLeave = useCallback(() => {
-    setTilt({ x: baseTiltX, y: baseTiltY });
-  }, [baseTiltX, baseTiltY]);
+    tiltRef.current = { x: 0, y: 0 };
+    const el = cardRef.current?.firstElementChild as HTMLElement | null;
+    if (el) {
+      el.style.transform = isActive ? "scale(1.07)" : undefined;
+    }
+  }, [isActive]);
 
   const dist = Math.abs(offset);
-  const isHovered = tilt.x !== 0 || tilt.y !== 0;
-
-  // Mouse tilt only applies to active card
-  const mouseTiltX = isActive ? tilt.x : 0;
-  const mouseTiltY = isActive ? tilt.y : 0;
-
-  const finalTiltX = baseTiltX + mouseTiltX;
-  const finalTiltY = baseTiltY + mouseTiltY;
-
   const cardScale = isActive ? 1.07 : Math.max(0.65, 0.82 - dist * 0.04);
   const cardOpacity = isActive ? 1 : Math.max(0.25, 0.55 - dist * 0.06);
 
@@ -173,9 +169,9 @@ function CarouselCard({
             borderRadius: 16,
             overflow: "hidden",
             transform: isActive
-              ? `rotateX(${finalTiltX}deg) rotateY(${finalTiltY}deg) scale(${cardScale})`
+              ? `rotateX(${baseTiltX}deg) rotateY(${baseTiltY}deg) scale(${cardScale})`
               : `scale(${cardScale})`,
-            transition: "transform 0.15s ease-out",
+            transition: isActive ? "transform 0.15s ease-out" : "transform 0.3s ease-out",
             border: isActive ? "2px solid rgba(145,70,255,0.5)" : "1px solid rgba(255,255,255,0.1)",
             boxShadow: isActive
               ? "0 20px 60px rgba(0,0,0,0.7), 0 8px 24px rgba(0,0,0,0.5), 0 0 40px rgba(145,70,255,0.2), 0 0 60px rgba(145,70,255,0.08)"

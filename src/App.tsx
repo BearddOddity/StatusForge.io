@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { EngineStatus, ViewId } from "@/types";
 import { fetchEngineStatus, fetchWidgetToken } from "@/hooks/useTauriApi";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -70,25 +70,27 @@ function App() {
   }, [wsData]);
 
   const fetchStatus = useCallback(async () => {
-    const data = await fetchEngineStatus();
+    const [data, token] = await Promise.all([
+      fetchEngineStatus(),
+      fetchWidgetToken(),
+    ]);
     setEngineStatus((prev) => ({
       ...prev,
       running: data.running,
       game_title: data.game_title || prev.game_title,
       process_name: data.process_name || prev.process_name,
       is_playing: data.is_playing,
+      widgetToken: token,
     }));
-    const token = await fetchWidgetToken();
-    setEngineStatus((prev) => ({ ...prev, widgetToken: token }));
   }, []);
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
+    const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  const NavButton = ({
+  const NavButton = useCallback(({
     id,
     label,
     icon,
@@ -104,9 +106,9 @@ function App() {
       <span className="nav-item-icon">{icon}</span>
       <span className="nav-item-label">{label}</span>
     </button>
-  );
+  ), [currentView]);
 
-  const views: Record<ViewId, React.ReactNode> = {
+  const views = useMemo(() => ({
     dashboard: (
       <DashboardView
         engineStatus={engineStatus}
@@ -124,7 +126,7 @@ function App() {
     ),
     library: <LibraryView toast={toast} />,
     dev: <DevView />,
-  };
+  }), [engineStatus, wsConnected, toast, fetchStatus, devUnlocked]);
 
   const [sidebarIconOnly, setSidebarIconOnly] = useState(() => {
     try {
@@ -141,16 +143,6 @@ function App() {
     };
     window.addEventListener("storage", handler);
     return () => window.removeEventListener("storage", handler);
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      try {
-        const stored = localStorage.getItem("statusforge_system_prefs");
-        if (stored) setSidebarIconOnly(JSON.parse(stored).sidebarIconOnly ?? false);
-      } catch {}
-    }, 1000);
-    return () => clearInterval(interval);
   }, []);
 
   return (
