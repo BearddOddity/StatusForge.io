@@ -1,118 +1,93 @@
-name: Build All Platforms (Win, Mac, Linux)
+name: Build All Platforms
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
-  build-win:
+  build-windows:
     runs-on: windows-latest
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Build Python Engine (Windows)
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller flask flask-cors requests psutil pywin32
-          pyinstaller --onefile presence.py
-          copy dist\presence.exe .\presence.exe
-
-      - name: Set up Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
 
-      - name: Install Node Dependencies
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
         run: npm install
 
-      - name: Build Electron App (Windows)
+      - name: Build Tauri app (Windows)
+        uses: tauri-apps/tauri-action@v0
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: npm run build:win
-
-      - name: Upload Windows Artifact
-        uses: actions/upload-artifact@v4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: StatusForge-Windows
-          path: dist/*.exe
+          tagName: v__VERSION__
+          releaseName: "StatusForge v__VERSION__"
+          releaseBody: "Cross-platform build"
+          releaseDraft: true
+          prerelease: false
 
-  build-mac:
+  build-macos:
     runs-on: macos-latest
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Build Python Engine (Mac)
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller flask flask-cors requests psutil
-          pyinstaller --onefile presence.py
-          cp dist/presence ./presence
-
-      - name: Set up Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
 
-      - name: Install Node Dependencies
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
         run: npm install
 
-      - name: Build Electron App (Mac)
+      - name: Build Tauri app (macOS)
+        uses: tauri-apps/tauri-action@v0
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: npm run build:mac
-
-      - name: Upload Mac Artifact
-        uses: actions/upload-artifact@v4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: StatusForge-Mac
-          path: dist/*.dmg
+          tagName: v__VERSION__
+          releaseName: "StatusForge v__VERSION__"
+          releaseBody: "Cross-platform build"
+          releaseDraft: true
+          prerelease: false
 
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Build Python Engine (Linux)
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller flask flask-cors requests psutil
-          pyinstaller --onefile presence.py
-          cp dist/presence ./presence
-
-      - name: Set up Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
 
-      - name: Install Node Dependencies
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install dependencies
         run: npm install
 
-      - name: Build Electron App (Linux)
+      - name: Build Tauri app (Linux)
+        uses: tauri-apps/tauri-action@v0
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: npm run build:linux
-
-      - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: StatusForge-Linux
-          path: dist/*.AppImage
+          tagName: v__VERSION__
+          releaseName: "StatusForge v__VERSION__"
+          releaseBody: "Cross-platform build"
+          releaseDraft: true
+          prerelease: false
