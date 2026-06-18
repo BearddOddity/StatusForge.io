@@ -19,3 +19,14 @@ Custom_Meta.json
 vault.json
 Widget_Token.txt
 debug.log
+
+# Ignore sensitive config (contains API keys/tokens)
+Config.json
+
+# Ignore local game database
+Forge_Database.json
+
+# Ignore dev artifacts
+not required/
+**/target/
+*.log
