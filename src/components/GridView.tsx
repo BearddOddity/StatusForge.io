@@ -1,5 +1,5 @@
 import type { ForgeLibraryEntry } from "@/types";
-import { useState, useRef, useCallback, type MouseEvent } from "react";
+import { useRef, useCallback, type MouseEvent } from "react";
 import { Card, CoverImage } from "./ui";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -44,37 +44,43 @@ function GridCard({
   entry: ForgeLibraryEntry;
   onSelect: (entry: ForgeLibraryEntry) => void;
 }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const innerRef = useRef<HTMLDivElement>(null);
+  const tiltRef = useRef({ x: 0, y: 0 });
 
   const handleMouseMove = useCallback((e: MouseEvent<HTMLDivElement>) => {
-    const rect = cardRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-    setTilt({
+    tiltRef.current = {
       x: (y - 0.5) * -20,
       y: (x - 0.5) * 20,
-    });
+    };
+    const el = innerRef.current;
+    if (el) {
+      el.style.transform = `rotateX(${tiltRef.current.x}deg) rotateY(${tiltRef.current.y}deg) scale(1.07)`;
+      el.style.border = "1px solid rgba(145, 70, 255, 0.35)";
+      el.style.boxShadow = `0 25px 60px rgba(0,0,0,0.65), 0 0 40px rgba(145,70,255,0.2), ${tiltRef.current.y * -3}px ${tiltRef.current.x * 3}px 25px rgba(0,0,0,0.35)`;
+    }
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    setTilt({ x: 0, y: 0 });
+    tiltRef.current = { x: 0, y: 0 };
+    const el = innerRef.current;
+    if (el) {
+      el.style.transform = "scale(1)";
+      el.style.border = "1px solid rgba(255, 255, 255, 0.05)";
+      el.style.boxShadow = "0 4px 12px rgba(0,0,0,0.2)";
+    }
   }, []);
-
-  const isHovered = tilt.x !== 0 || tilt.y !== 0;
 
   return (
     <div
-      ref={cardRef}
       className="group relative cursor-pointer grid-view-card-3d"
       onClick={() => onSelect(entry)}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{
         perspective: 600,
-        zIndex: isHovered ? 10 : 0,
-        transition: "z-index 0s",
         padding: 10,
         margin: -10,
         boxSizing: "content-box",
@@ -82,18 +88,16 @@ function GridCard({
     >
       {/* 3D inner — the visual card that rotates (border + cover move together) */}
       <div
+        ref={innerRef}
         className="w-full h-full rounded-xl"
         style={{
-          transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale(${isHovered ? 1.07 : 1})`,
-          transition: "transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+          transition: "transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), border 0.3s, box-shadow 0.3s",
           transformStyle: "preserve-3d",
           background: "rgba(0, 0, 0, 0.25)",
-          border: isHovered ? "1px solid rgba(145, 70, 255, 0.35)" : "1px solid rgba(255, 255, 255, 0.05)",
+          border: "1px solid rgba(255, 255, 255, 0.05)",
           borderRadius: 12,
           overflow: "hidden",
-          boxShadow: isHovered
-            ? `0 25px 60px rgba(0,0,0,0.65), 0 0 40px rgba(145,70,255,0.2), ${tilt.y * -3}px ${tilt.x * 3}px 25px rgba(0,0,0,0.35)`
-            : "0 4px 12px rgba(0,0,0,0.2)",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
         }}
       >
         {/* Cover art — 2:3 ratio */}

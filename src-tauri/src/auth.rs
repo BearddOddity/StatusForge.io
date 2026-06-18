@@ -249,7 +249,7 @@ async fn handle_kick_callback(
     }
 
     // Exchange code for tokens
-    let token_resp = match exchange_kick_token(&code, client_id, client_secret, &pkce.verifier) {
+    let token_resp = match exchange_kick_token(&code, client_id, client_secret, &pkce.verifier).await {
         Ok(r) => r,
         Err(e) => return Html(build_popup_response("kick", false, &e)),
     };
@@ -326,13 +326,13 @@ struct TokenResponse {
     expires_in: Option<u64>,
 }
 
-fn exchange_kick_token(
+async fn exchange_kick_token(
     code: &str,
     client_id: &str,
     client_secret: &str,
     code_verifier: &str,
 ) -> Result<TokenResponse, String> {
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client error: {}", e))?;
@@ -350,13 +350,14 @@ fn exchange_kick_token(
         .post(KICK_TOKEN_URL)
         .form(&params)
         .send()
+        .await
         .map_err(|e| format!("Kick token exchange failed: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Kick token exchange: {}", resp.text().unwrap_or_default()));
+        return Err(format!("Kick token exchange: {}", resp.text().await.unwrap_or_default()));
     }
 
-    let json: serde_json::Value = resp.json().map_err(|e| format!("Kick token parse error: {}", e))?;
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Kick token parse error: {}", e))?;
     Ok(TokenResponse {
         access_token: json["access_token"].as_str().unwrap_or("").to_string(),
         refresh_token: json["refresh_token"].as_str().map(|s| s.to_string()),

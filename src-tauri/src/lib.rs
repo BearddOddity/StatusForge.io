@@ -99,21 +99,27 @@ fn read_widget_token() -> Option<String> {
 }
 
 #[tauri::command]
-fn get_engine_status() -> Result<EngineStatus, String> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+async fn get_engine_status() -> Result<EngineStatus, String> {
+    let token = read_widget_token();
+    // Use a shared client to avoid re-creating connection pool on every call
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    let client = CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .expect("Failed to build HTTP client")
+    });
 
     let mut request = client.get("http://127.0.0.1:53735/status");
-    if let Some(token) = read_widget_token() {
-        request = request.header("X-Forge-Token", token);
+    if let Some(t) = token {
+        request = request.header("X-Forge-Token", t);
     }
 
-    match request.send() {
+    match request.send().await {
         Ok(response) => {
             if response.status().is_success() {
                 let data: serde_json::Value = response.json()
+                    .await
                     .map_err(|e| format!("Failed to parse status: {}", e))?;
                 Ok(EngineStatus {
                     running: true,
@@ -133,13 +139,13 @@ fn get_engine_status() -> Result<EngineStatus, String> {
 }
 
 #[tauri::command]
-fn get_widget_token() -> Result<String, String> {
+async fn get_widget_token() -> Result<String, String> {
     let base = app_base_dir()?;
     let config_path = base.join("Config.json");
-    assert_path_in_base(&config_path, &base)?;
 
     if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path)
+        let content = tokio::fs::read_to_string(&config_path)
+            .await
             .map_err(|e| format!("Failed to read config: {}", e))?;
         let config: serde_json::Value = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse config: {}", e))?;
@@ -487,7 +493,7 @@ fn start_native_engine_loop(
 
             // Load forge DB
             let base = app_base_dir().unwrap_or_default();
-            let forge_db_path = base.join("ForgeDB.json");
+            let forge_db_path = base.join("Forge_Database.json");
             let (listed, delisted, strict) = if let Ok(content) = std::fs::read_to_string(&forge_db_path) {
                 if let Ok(db) = serde_json::from_str::<serde_json::Value>(&content) {
                     let listed: std::collections::HashMap<String, String> = db
