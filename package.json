@@ -2,54 +2,26 @@
   "name": "statusforge.io",
   "version": "1.0.8",
   "description": "StatusForge.io Rich Presence Engine",
-  "main": "main.js",
+  "type": "module",
   "scripts": {
-    "start": "electron .",
-    "build:win": "electron-builder --win --x64 --publish always",
-    "build:mac": "electron-builder --mac --universal --publish always",
-    "build:linux": "electron-builder --linux AppImage --publish always"
-  },
-  "build": {
-    "appId": "com.bearddoddity.statusforge.io",
-    "productName": "StatusForge.io",
-    "asar": false,
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "BeardedOddity",
-        "repo": "StatusForge.io",
-        "releaseType": "draft"
-      }
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "main.js",
-      "preload.js",
-      "presence*",
-      "Dashboard.html",
-      "Logic.js",
-      "layouts/**/*",
-      "node_modules/**/*"
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "mac": {
-      "target": "dmg",
-      "x64ArchFiles": "presence"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
-    "extract-zip": "^2.0.1"
+    "@tauri-apps/api": "^2.11.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "electron": "^40.7.0",
-    "electron-builder": "^26.8.1"
+    "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/cli": "^2.1.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
   }
 }

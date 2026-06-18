@@ -1,0 +1,295 @@
+@import "tailwindcss";
+
+/* Custom theme extensions */
+@theme {
+  --color-theme-bg: #050505;
+  --color-accent: #9146ff;
+  --color-accent-dark: #6b2cff;
+  --animate-slide-in: slide-in 0.3s ease;
+  --animate-fade-out: fade-out 0.3s ease 3.2s forwards;
+  --animate-shimmer-sweep: shimmer-sweep 16s linear infinite;
+  --animate-cover-breathe: cover-breathe 8s ease-in-out infinite;
+  --animate-glint-slide: glint-slide 8s linear infinite;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    background-position: 300% 0;
+  }
+  100% {
+    background-position: -300% 0;
+  }
+}
+
+@keyframes cover-breathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.015);
+  }
+}
+
+@keyframes glint-slide {
+  0% {
+    background-position: 250% 0;
+  }
+  100% {
+    background-position: -250% 0;
+  }
+}
+
+/* Floating card */
+@keyframes float-card-in {
+  from { transform: translateX(40px) scale(0.96); opacity: 0; }
+  to   { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes float-card-out {
+  from { transform: translateX(0) scale(1); opacity: 1; }
+  to   { transform: translateX(40px) scale(0.96); opacity: 0; }
+}
+@keyframes float-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-float-card-in  { animation: float-card-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-float-card-out { animation: float-card-out 0.2s ease-in forwards; }
+.animate-float-backdrop { animation: float-backdrop-in 0.2s ease forwards; }
+
+/* Base overrides */
+html, body {
+  overflow-x: hidden;
+}
+body {
+  @apply bg-theme-bg text-white/80 h-screen overflow-hidden m-0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 0px;
+}
+::-webkit-scrollbar:horizontal {
+  display: none;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Carousel track — perf for giant libraries */
+.carousel-track {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 400px auto;
+  contain: layout style;
+}
+
+/* Carousel — hide scrollbar but keep scroll behavior */
+.carousel-scroll::-webkit-scrollbar {
+  display: none;
+}
+.carousel-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Grid View — Giant Library optimized
+   ═══════════════════════════════════════════════════════════════════════════
+   • min() + minmax() prevents overflow on narrow viewports (research §1)
+   • content-visibility: auto skips off-screen rendering (perf §1)
+   • Container queries adapt card internals to card width, not viewport
+   • aspect-ratio prevents CLS on image load (perf §4)
+   • lazy-loading defers off-screen images
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.grid-view-container {
+  container-name: grid-view;
+  container-type: inline-size;
+}
+
+.grid-view-grid {
+  display: grid;
+  gap: 12px;
+  padding: 4px;
+  /* Safe minmax: column never overflows its container */
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
+}
+
+/* ── Individual card ───────────────────────────────────────────────────────── */
+.grid-view-card {
+  position: relative;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  /* Perf: skip rendering off-screen cards entirely */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px auto;
+  /* Layout isolation: card internals don't reflow siblings */
+  contain: layout style paint;
+}
+
+.grid-view-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(145, 70, 255, 0.15);
+  border-color: rgba(145, 70, 255, 0.3);
+}
+
+/* ── 3D card variant — border + cover tilt together on hover ───────────────── */
+.grid-view-card-3d {
+  position: relative;
+}
+
+/* ── Cover image ────────────────────────────────────────────────────────────── */
+.grid-view-cover {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: inherit;
+}
+
+/* ── Gradient overlay at bottom of cover ────────────────────────────────────── */
+.grid-view-gradient {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 50%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ── Title plate ────────────────────────────────────────────────────────────── */
+.grid-view-title {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 6px 8px;
+}
+
+/* ── Genre badge — hidden on narrow cards via container query ───────────────── */
+.grid-view-genre-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+/* Show genre badge only when the container is wide enough for cards > ~140px */
+@container grid-view (min-width: 400px) {
+  .grid-view-genre-badge {
+    display: flex;
+  }
+}
+
+/* ── Hover glint ────────────────────────────────────────────────────────────── */
+.grid-view-glint {
+  inset: 0;
+  position: absolute;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.04) 42%,
+    rgba(255, 255, 255, 0.12) 48%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0.12) 52%,
+    rgba(255, 255, 255, 0.04) 58%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 250% 100%;
+}
+
+.group:hover .grid-view-glint {
+  opacity: 1;
+  animation: grid-glint-sweep 3s linear infinite;
+}
+
+@keyframes grid-glint-sweep {
+  0%   { background-position: 250% 0; }
+  100% { background-position: -250% 0; }
+}
+
+/* ── Hover holo border ─────────────────────────────────────────────────────── */
+.grid-view-holo {
+  inset: 0;
+  position: absolute;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(145, 70, 255, 0.35),
+    rgba(59, 130, 246, 0.35),
+    rgba(236, 72, 153, 0.35),
+    rgba(145, 70, 255, 0.35)
+  );
+  background-size: 300% 300%;
+}
+
+.group:hover .grid-view-holo {
+  opacity: 1;
+  animation: holo-shift 4s ease infinite;
+}
+
+@supports (mask-composite: xor) {
+  .group:hover .grid-view-holo {
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: xor;
+    padding: 1.5px;
+  }
+}
+
+@keyframes holo-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* Select dropdown styling */
+select option {
+  background: #111;
+  color: #fff;
+}
