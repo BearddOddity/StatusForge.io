@@ -1935,7 +1935,7 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
       >
         <div className="grid grid-cols-2 gap-4">
           {[
-            { label: "App Version", value: "1.0.8", icon: "🚀" },
+            { label: "App Version", value: "0.5.0", icon: "🚀" },
             { label: "Tauri Version", value: "2.x Sidecar", icon: "🦀" },
             { label: "Runtime Host", value: navigator.platform, icon: "💻" },
             { label: "Local Database", value: "Forge_Database.json", icon: "📂" },
