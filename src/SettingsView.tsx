@@ -19,7 +19,7 @@ import {
   Toggle,
   SettingsRow,
   SettingsInput,
-  SettingsSelect,
+  GlassSelect,
   SettingsPanel,
   EditRemoveButtons,
 } from "@/components/SettingsComponents";
@@ -2476,16 +2476,16 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
                 Set granularity of runtime stdout logging
               </p>
             </div>
-            <select
+            <GlassSelect
               value={prefs.logLevel}
-              onChange={(e) => set("logLevel", e.target.value as any)}
-              className="select-glass font-mono"
-            >
-              <option value="error">Error</option>
-              <option value="warn">Warning</option>
-              <option value="info">Info</option>
-              <option value="debug">Debug</option>
-            </select>
+              options={[
+                { value: "error", label: "Error" },
+                { value: "warn", label: "Warning" },
+                { value: "info", label: "Info" },
+                { value: "debug", label: "Debug" },
+              ]}
+              onChange={(v) => set("logLevel", v as any)}
+            />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
@@ -2494,13 +2494,11 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
                 Set default localization for dashboard displays
               </p>
             </div>
-            <select
+            <GlassSelect
               value={prefs.language}
-              onChange={(e) => set("language", e.target.value)}
-              className="select-glass"
-            >
-              <option value="en">English (US)</option>
-            </select>
+              options={[{ value: "en", label: "English (US)" }]}
+              onChange={(v) => set("language", v)}
+            />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
@@ -2509,15 +2507,15 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
                 Opt-in for experimental developer versions or production builds
               </p>
             </div>
-            <select
+            <GlassSelect
               value={prefs.updateChannel}
-              onChange={(e) => set("updateChannel", e.target.value as any)}
-              className="select-glass font-mono"
-            >
-              <option value="stable">Stable</option>
-              <option value="beta">Beta (Nightly)</option>
-              <option value="closed-beta">Closed Beta (Dev)</option>
-            </select>
+              options={[
+                { value: "stable", label: "Stable" },
+                { value: "beta", label: "Beta (Nightly)" },
+                { value: "closed-beta", label: "Closed Beta (Dev)" },
+              ]}
+              onChange={(v) => set("updateChannel", v as any)}
+            />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
@@ -3102,15 +3100,15 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
               Roundness parameters of container cards and action buttons
             </p>
           </div>
-          <select
+          <GlassSelect
             value={prefs.borderRadius}
-            onChange={(e) => set("borderRadius", e.target.value as any)}
-            className="select-glass"
-          >
-            <option value="sharp">{radiusLabel("sharp")}</option>
-            <option value="soft">{radiusLabel("soft")}</option>
-            <option value="rounded">{radiusLabel("rounded")}</option>
-          </select>
+            options={[
+              { value: "sharp", label: radiusLabel("sharp") },
+              { value: "soft", label: radiusLabel("soft") },
+              { value: "rounded", label: radiusLabel("rounded") },
+            ]}
+            onChange={(v) => set("borderRadius", v as any)}
+          />
         </div>
 
         {/* Font Scale */}
@@ -3165,7 +3163,7 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs text-white/75 font-medium">(Quality)</span>
+              <span className="text-xs text-white/75 font-medium">Quality</span>
               <p className="text-[10px] text-white/35 mt-0.5">
                 Enable transitions and rich dynamic layout movements
               </p>
@@ -3177,7 +3175,7 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
-              <span className="text-xs text-white/75 font-medium">(Performance)</span>
+              <span className="text-xs text-white/75 font-medium">Performance</span>
               <p className="text-[10px] text-white/35 mt-0.5 font-sans">
                 Instantly terminate all hover translations and scales for optimal hardware response
               </p>
@@ -3227,15 +3225,15 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                 Set overall element padding and row gap sizes
               </p>
             </div>
-            <select
+            <GlassSelect
               value={prefs.density}
-              onChange={(e) => set("density", e.target.value as any)}
-              className="select-glass"
-            >
-              <option value="compact">{densityLabel("compact")}</option>
-              <option value="default">{densityLabel("default")}</option>
-              <option value="spacious">{densityLabel("spacious")}</option>
-            </select>
+              options={[
+                { value: "compact", label: densityLabel("compact") },
+                { value: "default", label: densityLabel("default") },
+                { value: "spacious", label: densityLabel("spacious") },
+              ]}
+              onChange={(v) => set("density", v as any)}
+            />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>

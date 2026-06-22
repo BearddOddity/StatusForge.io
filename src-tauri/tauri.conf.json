@@ -56,16 +56,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../presence.py",
-      "../forge_scanner.py",
-      "../spark.py",
-      "../presence/**/*",
-      "../widgets/**/*",
-      "../Config.json",
-      "../Forge_Database.json",
-      "../public/**/*"
-    ],
+    "resources": {
+      "../presence.py": "",
+      "../forge_scanner.py": "",
+      "../spark.py": "",
+      "../presence/": "presence/",
+      "../widgets/": "widgets/",
+      "../Config.json": "",
+      "../Forge_Database.json": "",
+      "../public/": "public/"
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }

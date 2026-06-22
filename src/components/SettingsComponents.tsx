@@ -1,4 +1,5 @@
-import React, { useState, type ReactNode } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 // ─── Sub-tab button ──────────────────────────────────────────────────────────
 export function SubTabBtn({
@@ -140,9 +141,109 @@ export function SettingsInput({ className, ...props }: React.InputHTMLAttributes
   return <input className={`input-glass ${className || ""}`} {...props} />;
 }
 
-// ─── Settings Select ────────────────────────────────────────────────────────
+// ─── Settings Select (native fallback) ─────────────────────────────────────
 export function SettingsSelect({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select className={`select-glass ${className || ""}`} {...props} />;
+}
+
+// ─── Glass Select (custom dropdown) ─────────────────────────────────────────
+interface GlassSelectOption {
+  value: string;
+  label: string;
+}
+
+export function GlassSelect({
+  value,
+  options,
+  onChange,
+  className = "",
+}: {
+  value: string;
+  options: GlassSelectOption[];
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 0 });
+  const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        ref.current &&
+        !ref.current.contains(e.target as Node) &&
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open && ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    }
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+
+  const trigger = (
+    <div ref={ref} className={`glass-select-wrapper ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`glass-select-trigger ${open ? "open" : ""}`}
+      >
+        <span>{selected?.label ?? value}</span>
+        <svg
+          className={`glass-select-arrow ${open ? "rotated" : ""}`}
+          width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke="rgba(255,255,255,0.4)" strokeWidth="2"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+    </div>
+  );
+
+  if (!open) return trigger;
+
+  const menu = createPortal(
+    <div
+      ref={menuRef}
+      className="glass-select-menu open"
+      style={{ position: "fixed", top: menuPos.top, left: menuPos.left, width: menuPos.width, zIndex: 9999 }}
+    >
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => { onChange(opt.value); setOpen(false); }}
+          className={`glass-select-option ${opt.value === value ? "selected" : ""}`}
+        >
+          {opt.label}
+          {opt.value === value && (
+            <svg className="glass-select-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </button>
+      ))}
+    </div>,
+    document.body
+  );
+
+  return (
+    <>
+      {trigger}
+      {menu}
+    </>
+  );
 }
 
 // ─── Settings Panel ─────────────────────────────────────────────────────────
