@@ -14,7 +14,7 @@ import DevView from "@/dev/DevView";
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewId>("dashboard");
-  const [appVersion] = useState("1.0.8");
+  const [appVersion] = useState("0.5.0");
   const [devUnlocked, setDevUnlocked] = useState(false);
   const devClickRef = useRef(0);
   const devTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
