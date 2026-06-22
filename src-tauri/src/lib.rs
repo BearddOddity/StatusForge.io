@@ -19,9 +19,38 @@ fn engine_process() -> &'static Mutex<Option<std::process::Child>> {
 fn app_base_dir() -> Result<std::path::PathBuf, String> {
     let exe_path = std::env::current_exe()
         .map_err(|e| format!("Failed to get exe path: {}", e))?;
-    let base = exe_path.parent()
+    let exe_dir = exe_path.parent()
         .ok_or_else(|| "Failed to get exe parent directory".to_string())?;
-    let canonical = std::fs::canonicalize(base)
+
+    // In dev mode, the exe is deep in target/debug/. Resources live at the workspace root.
+    // Check if Config.json is directly in the exe's parent (production bundle layout).
+    if exe_dir.join("Config.json").exists() {
+        let canonical = std::fs::canonicalize(exe_dir)
+            .map_err(|e| format!("Failed to canonicalize base dir: {}", e))?;
+        return Ok(canonical);
+    }
+
+    // Check resources/ subfolder (Tauri v2 bundled layout: exe in root, resources in resources/).
+    let resources_dir = exe_dir.join("resources");
+    if resources_dir.join("Config.json").exists() {
+        let canonical = std::fs::canonicalize(&resources_dir)
+            .map_err(|e| format!("Failed to canonicalize resources dir: {}", e))?;
+        return Ok(canonical);
+    }
+
+    // Dev mode: walk up from exe dir to find workspace root (where Config.json lives).
+    let mut dir = exe_dir.to_path_buf();
+    for _ in 0..10 {
+        if dir.join("Config.json").exists() {
+            let canonical = std::fs::canonicalize(&dir)
+                .map_err(|e| format!("Failed to canonicalize base dir: {}", e))?;
+            return Ok(canonical);
+        }
+        if !dir.pop() { break; }
+    }
+
+    // Fallback: just use exe dir.
+    let canonical = std::fs::canonicalize(exe_dir)
         .map_err(|e| format!("Failed to canonicalize base dir: {}", e))?;
     Ok(canonical)
 }
@@ -270,9 +299,7 @@ fn start_python_engine() -> Result<String, String> {
     if process_guard.is_some() {
         return Ok("Engine already running".to_string());
     }
-    let app_dir = std::env::current_exe()
-        .map(|p| p.parent().unwrap().to_owned())
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let app_dir = app_base_dir()?;
 
     let python_path = which::which("python")
         .or_else(|_| which::which("python3"))
