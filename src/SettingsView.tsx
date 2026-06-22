@@ -23,6 +23,7 @@ import {
   SettingsPanel,
   EditRemoveButtons,
 } from "@/components/SettingsComponents";
+import OAuthConnectModal from "@/components/OAuthConnectModal";
 
 // ─── Engine Sub-tab ─────────────────────────────────────────────────────────
 function EngineSubTab({
@@ -40,7 +41,8 @@ function EngineSubTab({
   const [keychainInfo, setKeychainInfo] = useState<KeychainStatus | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [platform, setPlatform] = useState<string>("windows");
-  const skipSave = useRef(false);
+  const skipSave = useRef(false);
+  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(null);
 
   const loadConfig = useCallback(async () => {
     skipSave.current = true;
@@ -1226,7 +1228,7 @@ function ApiKeysSubTab({
       >
         <div
           ref={floatingRef}
-          className={`relative w-[380px] h-full max-h-[600px] m-4 flex flex-col bg-[#0c0c0c] border border-white/10 rounded-2xl shadow-2xl shadow-purple-900/20 ${
+          className={`relative w-[380px] h-full max-h-[600px] m-4 flex flex-col bg-black/20 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-purple-900/20 ${
             floatingClosing ? "animate-float-card-out" : "animate-float-card-in"
           }`}
         >
@@ -1657,7 +1659,7 @@ function RoutingSubTab({
       >
         <div
           ref={floatingRef}
-          className={`relative w-[380px] h-full max-h-[600px] m-4 flex flex-col bg-[#0c0c0c] border border-white/10 rounded-2xl shadow-2xl shadow-purple-900/20 ${
+          className={`relative w-[380px] h-full max-h-[600px] m-4 flex flex-col bg-black/20 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-purple-900/20 ${
             floatingClosing ? "animate-float-card-out" : "animate-float-card-in"
           }`}
         >
@@ -1861,7 +1863,7 @@ function RoutingSubTab({
 
                         {entry.connectUrl && (
                           <button
-                            onClick={() => window.open(entry.connectUrl, "_blank")}
+                            onClick={() => setOauthModal({ platform: entry.key as "twitch" | "kick", url: entry.connectUrl })}
                             className="btn-cta"
                           >
                             🔗 Connect {entry.label}
@@ -1914,6 +1916,20 @@ function RoutingSubTab({
           <span className="text-[10px] text-white/25">{entryCount} integrations configured</span>
         </div>
       </SettingsPanel>
+
+      {oauthModal && (
+        <OAuthConnectModal
+          open={!!oauthModal}
+          onClose={() => setOauthModal(null)}
+          platform={oauthModal.platform}
+          connectUrl={oauthModal.url}
+          onSuccess={() => {
+            loadConfig();
+            setOauthModal(null);
+            toast(oauthModal.platform.charAt(0).toUpperCase() + oauthModal.platform.slice(1) + " connected!", "success");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2610,6 +2626,43 @@ const BG_PRESETS: { name: string; color: string }[] = [
   { name: "Slate", color: "#0d1117" },
 ];
 
+
+// ─── Image Compression Helper ────────────────────────────────────────────────
+// Compresses uploaded images to JPEG at 85% quality, max 1920px, to keep
+// data URLs small enough for localStorage (~5MB quota).
+function compressImage(file: File, maxSize = 1920, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Reject files larger than 25MB (before compression)
+    if (file.size > 25 * 1024 * 1024) {
+      reject(new Error("Image too large. Max 25 MB."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.width;
+        let h = img.height;
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+          else { w = Math.round(w * maxSize / h); h = maxSize; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas not supported")); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 // ─── Theme Sub-tab ────────────────────────────────────────────────────────────
 function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
   const [prefs, setPrefs] = useState<ThemePrefs>(() => {
@@ -2660,7 +2713,11 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
       try {
         localStorage.setItem("statusforge_theme_prefs", JSON.stringify(prefs));
         themeStyle(prefs);
-      } catch {}
+      } catch {
+        if (prefs.bgImage.startsWith("data:") && prefs.bgImage.length > 4 * 1024 * 1024) {
+          toast("Background image too large for storage. Try a smaller image.", "error");
+        }
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [prefs]);
@@ -2945,11 +3002,19 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = (ev) => {
-                        set("bgImage", ev.target?.result as string);
-                      };
-                      reader.readAsDataURL(file);
+                      set("bgImage", "");
+                      compressImage(file)
+                        .then((compressed) => {
+                          try {
+                            set("bgImage", compressed);
+                          } catch {
+                            toast("Failed to save background — image may be too large", "error");
+                          }
+                        })
+                        .catch((err) => {
+                          toast(err.message || "Failed to process image", "error");
+                        });
+                      e.target.value = "";
                     }}
                   />
                 </label>
@@ -2979,11 +3044,19 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = (ev) => {
-                    set("bgImage", ev.target?.result as string);
-                  };
-                  reader.readAsDataURL(file);
+                  set("bgImage", "");
+                  compressImage(file)
+                    .then((compressed) => {
+                      try {
+                        set("bgImage", compressed);
+                      } catch {
+                        toast("Failed to save background — image may be too large", "error");
+                      }
+                    })
+                    .catch((err) => {
+                      toast(err.message || "Failed to process image", "error");
+                    });
+                  e.target.value = "";
                 }}
               />
             </label>

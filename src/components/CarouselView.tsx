@@ -139,7 +139,7 @@ function CarouselCard({
 
   const dist = Math.abs(offset);
   const cardScale = isActive ? 1.07 : Math.max(0.65, 0.82 - dist * 0.04);
-  const cardOpacity = isActive ? 1 : Math.max(0.25, 0.55 - dist * 0.06);
+  const unfocusAmount = isActive ? 0 : Math.min(1, dist * 0.15);
 
   return (
     <div
@@ -158,8 +158,8 @@ function CarouselCard({
           width: CARD_WIDTH,
           height: CARD_HEIGHT,
           perspective: 1200,
-          opacity: cardOpacity,
-          transition: "opacity 0.3s ease",
+          filter: isActive ? "none" : `brightness(${1 - unfocusAmount * 0.7}) blur(${unfocusAmount * 3}px)`,
+          transition: "filter 0.3s ease",
         }}
       >
         <div

@@ -457,22 +457,20 @@ export function AddGameOverlayPanel({
             <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
               Genre
             </label>
-            <select
+            <input
               value={genre}
               onChange={(e) => setGenre(e.target.value)}
-              className="select-glass w-full"
-            >
-              <option value="">Select genre...</option>
-              {[
-                ...new Set([...gameCategories, ...libraryGenres]),
-              ]
+              placeholder="e.g. Action, RPG..."
+              className="input-glass"
+              list="genre-suggestions"
+            />
+            <datalist id="genre-suggestions">
+              {[...new Set([...gameCategories, ...libraryGenres])]
                 .sort()
                 .map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
+                  <option key={g} value={g} />
                 ))}
-            </select>
+            </datalist>
           </div>
           <div className="mb-4">
             <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">

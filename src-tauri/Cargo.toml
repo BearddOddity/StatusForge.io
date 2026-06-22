@@ -46,6 +46,8 @@ url = "2.5"
 base64 = "0.22"
 thiserror = "2"
 urlencoding = "2"
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+rcgen = "0.13"
 
 # Platform-specific dependencies for game detection (Windows + Linux only)
 # macOS is not actively maintained for the native engine.

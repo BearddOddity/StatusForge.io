@@ -15,6 +15,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use axum_server::tls_rustls::RustlsConfig;
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -44,7 +46,7 @@ const KICK_CATEGORIES_URL: &str = "https://api.kick.com/public/v2/categories?lim
 
 const TWITCH_AUTH_URL: &str = "https://id.twitch.tv/oauth2/authorize";
 const TWITCH_TOKEN_URL: &str = "https://id.twitch.tv/oauth2/token";
-const TWITCH_REDIRECT_URI: &str = "http://127.0.0.1:53735/oauth/callback/twitch";
+const TWITCH_REDIRECT_URI: &str = "https://127.0.0.1:53735/oauth/callback/twitch";
 const TWITCH_USERS_URL: &str = "https://api.twitch.tv/helix/users";
 
 /// postMessage origin — NOT wildcard "*" (Security Audit #2)
@@ -567,23 +569,46 @@ pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// OAuth Callback Server (Axum, binds 127.0.0.1 only — Security Audit #1)
+// Self-signed TLS cert for local OAuth callback (Twitch requires https://)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Generate a self-signed TLS cert + key (PEM) for local OAuth callback.
+/// Covers both `localhost` and `127.0.0.1` SANs.
+fn generate_self_signed_pem() -> Result<(String, String), String> {
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".into(), "127.0.0.1".into()])
+        .map_err(|e| format!("Failed to generate self-signed cert: {}", e))?;
+    let cert_pem = cert.cert.pem();
+    let key_pem = cert.key_pair.serialize_pem();
+    Ok((cert_pem, key_pem))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OAuth Callback Server (Axum + rustls via axum-server, binds 127.0.0.1 only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub async fn start_oauth_server(oauth_state: SharedOAuthState) -> Result<(), String> {
     let app = Router::new()
-        .route("/oauth/callback/:platform", get(oauth_callback))
+        .route("/oauth/callback/{platform}", get(oauth_callback))
         .route("/health", get(auth_health))
         .with_state(oauth_state);
 
-    let listener = tokio::net::TcpListener::bind(OAUTH_CALLBACK_ADDR)
-        .await
-        .map_err(|e| format!("Failed to bind OAuth server to {}: {}", OAUTH_CALLBACK_ADDR, e))?;
+    let (cert_pem, key_pem) = generate_self_signed_pem()?;
 
-    log::info!("[AUTH] OAuth callback server listening on {}", OAUTH_CALLBACK_ADDR);
+    let tls_config = RustlsConfig::from_pem(cert_pem.into_bytes(), key_pem.into_bytes())
+        .await
+        .map_err(|e| format!("Failed to build TLS config: {}", e))?;
+
+    let addr: std::net::SocketAddr = OAUTH_CALLBACK_ADDR
+        .parse()
+        .map_err(|e| format!("Invalid callback address {}: {}", OAUTH_CALLBACK_ADDR, e))?;
+
+    log::info!("[AUTH] OAuth callback server listening on {} (TLS)", OAUTH_CALLBACK_ADDR);
 
     tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, app).await {
+        if let Err(e) = axum_server::bind_rustls(addr, tls_config)
+            .serve(app.into_make_service())
+            .await
+        {
             log::error!("[AUTH] OAuth server error: {}", e);
         }
     });

@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "docs:kick": "npx tsx ../shared/kick-mcp/fetch-kick-docs.ts --out ./kick-docs",
+    "docs:kick:list": "npx tsx ../shared/kick-mcp/cli.ts list",
+    "docs:kick:search": "npx tsx ../shared/kick-mcp/cli.ts search"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
