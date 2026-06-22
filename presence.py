@@ -34,6 +34,17 @@ def forge_bootstrap():
             print("[StatusForge] ✅ Components forged successfully. Rebooting Engine...\n")
             os.execv(sys.executable, [sys.executable] + sys.argv)
         except Exception as repair_err:
+            # Fallback: if current interpreter has no pip (e.g. hermes venv), try python3
+            import shutil
+            py3 = shutil.which("python3")
+            if py3 and py3 != sys.executable:
+                print(f"[StatusForge] 🔄 Retrying with system python: {py3}")
+                try:
+                    subprocess.check_call([py3, "-m", "pip", "install"] + required_libs)
+                    print("[StatusForge] ✅ Components forged. Rebooting with system python...\n")
+                    os.execv(py3, [py3] + sys.argv)
+                except Exception:
+                    pass
             print(f"\n[StatusForge] 💀 FATAL: Auto-repair failed. Error: {repair_err}")
             sys.exit(1)
 

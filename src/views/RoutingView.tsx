@@ -3,6 +3,7 @@ import type { AppConfig, ToastType } from "@/types";
 import { tauriApi, saveConfig } from "@/hooks/useTauriApi";
 import { Card, Btn, Field } from "@/components/primitives";
 import { GlassSelect } from "@/components/SettingsComponents";
+import OAuthConnectModal from "@/components/OAuthConnectModal";
 
 export default function RoutingView({
   toast,
@@ -10,7 +11,8 @@ export default function RoutingView({
   toast: (msg: string, type?: ToastType) => void;
 }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(null);
 
   const loadConfig = useCallback(async () => {
     const res = await tauriApi("export_config");
@@ -113,7 +115,7 @@ export default function RoutingView({
         <Btn
           className="mt-2.5"
           onClick={() =>
-            window.open("http://127.0.0.1:53735/twitch/login", "_blank")
+            setOauthModal({ platform: "twitch", url: "http://127.0.0.1:53735/twitch/login" })
           }
         >
           🔗 Connect Twitch
@@ -142,7 +144,7 @@ export default function RoutingView({
         <Btn
           className="mt-2.5"
           onClick={() =>
-            window.open("http://127.0.0.1:53735/kick/login", "_blank")
+            setOauthModal({ platform: "kick", url: "http://127.0.0.1:53735/kick/login" })
           }
         >
           🔗 Connect Kick
@@ -157,6 +159,20 @@ export default function RoutingView({
           Reset
         </Btn>
       </div>
+
+      {oauthModal && (
+        <OAuthConnectModal
+          open={!!oauthModal}
+          onClose={() => setOauthModal(null)}
+          platform={oauthModal.platform}
+          connectUrl={oauthModal.url}
+          onSuccess={() => {
+            loadConfig();
+            setOauthModal(null);
+            toast(oauthModal.platform.charAt(0).toUpperCase() + oauthModal.platform.slice(1) + " connected!", "success");
+          }}
+        />
+      )}
     </div>
   );
 }

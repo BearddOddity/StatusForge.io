@@ -57,6 +57,17 @@
   }
 }
 
+@keyframes oauth-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+}
+
 /* Respect reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -101,7 +112,13 @@ body {
   font-size: calc(1rem * var(--user-font-scale));
 }
 
-/* Background image layer */
+/* Base body background — shows behind the app when no image is set */
+body {
+  background-color: var(--user-bg, #050505);
+  margin: 0;
+}
+
+/* Background image layer — sits behind all content via z-index: -1 */
 body::before {
   content: "";
   position: fixed;
@@ -135,7 +152,7 @@ body::before {
 .carousel-track {
   content-visibility: auto;
   contain-intrinsic-size: auto 400px auto;
-  contain: layout style;
+  contain: layout style paint;
 }
 
 /* Carousel — hide scrollbar but keep scroll behavior */
@@ -363,9 +380,9 @@ input[type="submit"]:not(:disabled):hover {
 
 /* ── Shared card shell ────────────────────────────────────────────────────── */
 .card-glass {
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, var(--user-panel-opacity, 0.3));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -830,12 +847,12 @@ input[type="submit"]:not(:disabled):hover {
 
 /* ── Modal panel ───────────────────────────────────────────────────────────── */
 .modal-panel {
-  background: rgba(10, 10, 12, 0.9);
+  background: rgba(0, 0, 0, calc(0.35 + var(--user-panel-opacity, 0.3) * 0.5));
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 80px rgba(145, 70, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 80px color-mix(in srgb, var(--user-accent, #9146FF) 12%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   animation: var(--user-modal-anim, slide-in 0.3s ease);
   overflow: hidden;
 }

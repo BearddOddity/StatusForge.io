@@ -55,7 +55,7 @@
 
     async function initializeWidget() {
         try {
-            const url = 'http://127.0.0.1:5050/settings?nocache=' + new Date().getTime();
+            const url = 'http://127.0.0.1:53735/settings?nocache=' + new Date().getTime();
             const setRes = await fetch(url);
             const setJson = await setRes.json();
             pollRate = (setJson.widget_poll_rate || 3) * 1000;
@@ -66,7 +66,7 @@
 
     async function pollEngine() {
         try {
-            const url = 'http://127.0.0.1:5050/status?nocache=' + new Date().getTime();
+            const url = 'http://127.0.0.1:53735/status?nocache=' + new Date().getTime();
             const res = await fetch(url);
             const data = await res.json();
             const w = document.getElementById("w");

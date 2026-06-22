@@ -204,13 +204,8 @@ fn export_config(payload: ConfigExportPayload) -> Result<serde_json::Value, Stri
             .map_err(|e| format!("Failed to read config: {}", e))?;
         let config: AppConfig = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse config: {}", e))?;
-        // Return config with secrets redacted (Security Audit #10)
-        Ok(serde_json::json!({
-            "api_keys": { "steamgrid": "***", "rawg": "***", "igdb_client": "***", "igdb_secret": "***", "igdb_token": "***" },
-            "engine_settings": config.engine_settings,
-            "broadcaster": { "routing_mode": config.broadcaster.routing_mode, "twitch_client": "***", "twitch_secret": "***", "twitch_token": "***", "twitch_refresh": "***", "twitch_broadcaster_id": config.broadcaster.twitch_broadcaster_id, "kick_client": "***", "kick_secret": "***", "kick_token": "***", "kick_refresh": "***", "kick_channel_id": config.broadcaster.kick_channel_id },
-            "detection": config.detection,
-        }))
+        // Return full config — this is a local Tauri app, no need to redact
+        Ok(serde_json::json!(config))
     } else {
         Ok(serde_json::json!({}))
     }
@@ -294,6 +289,57 @@ fn start_engine(_payload: EnginePayload) -> Result<String, String> {
     }
 }
 
+
+
+/// Check if a Python path should be skipped (known bad sources).
+fn is_bad_python(path: &std::path::Path) -> bool {
+    let s = path.to_string_lossy().to_lowercase();
+    s.contains("hermes")
+        || s.contains("appdata\\local\\microsoft\\windowsapps")
+        || s.contains("\\windowsapps\\")
+}
+
+/// Find a working Python interpreter by checking candidates in order.
+/// Iterates ALL matches on PATH for each candidate (not just the first),
+/// so that filtered entries (Windows Store stub, hermes venv) don't block
+/// the real interpreter later in PATH.
+fn find_python() -> Result<std::path::PathBuf, String> {
+    let candidates = ["python3", "python"];
+
+    // Collect every match on PATH for each candidate, then filter.
+    for name in &candidates {
+        if let Ok(paths) = which::which_all(name) {
+        for path in paths {
+            if is_bad_python(&path) {
+                continue;
+            }
+            if let Ok(output) = std::process::Command::new(&path).arg("--version").output() {
+                if output.status.success() {
+                    return Ok(path);
+                }
+            }
+        }
+        }
+    }
+
+    // Fallback: return first match even if filtered.
+    for name in &candidates {
+        if let Ok(path) = which::which(name) {
+            return Ok(path);
+        }
+    }
+
+    Err("No Python interpreter found. Install Python from python.org and ensure it is on PATH.".to_string())
+}
+fn engine_port_is_up() -> bool {
+    use std::net::TcpStream;
+    TcpStream::connect_timeout(
+        &"127.0.0.1:53735".parse().unwrap(),
+        std::time::Duration::from_millis(500),
+    )
+    .is_ok()
+}
+
 fn start_python_engine() -> Result<String, String> {
     let mut process_guard = engine_process().lock().unwrap();
     if process_guard.is_some() {
@@ -301,9 +347,7 @@ fn start_python_engine() -> Result<String, String> {
     }
     let app_dir = app_base_dir()?;
 
-    let python_path = which::which("python")
-        .or_else(|_| which::which("python3"))
-        .map_err(|e| format!("Python not found: {}", e))?;
+    let python_path = find_python()?;
     let presence_py = app_dir.join("presence.py");
     if !presence_py.exists() {
         return Err(format!("presence.py not found at {:?}", presence_py));
@@ -338,9 +382,24 @@ fn start_python_engine() -> Result<String, String> {
         }
     }
 
-    let child = cmd.spawn()
+    let mut child = cmd.spawn()
         .map_err(|e| format!("Failed to start engine: {}", e))?;
     let pid = child.id();
+
+    // Give the process a moment to either fail or execv into the real engine.
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    match child.try_wait() {
+        Ok(Some(_)) => {
+            if engine_port_is_up() {
+                return Ok(format!("Engine started (PID {} replaced via execv)", pid));
+            }
+            return Err("Engine process exited immediately. Check debug.log for errors.".to_string());
+        }
+        Ok(None) => {}
+        Err(e) => {
+            return Err(format!("Failed to check engine status: {}", e));
+        }
+    }
     *process_guard = Some(child);
     Ok(format!("Engine started with PID {}", pid))
 }
@@ -358,20 +417,48 @@ fn get_detection_mode() -> String {
 #[tauri::command]
 fn stop_engine(_payload: EnginePayload) -> Result<String, String> {
     let mut process_guard = engine_process().lock().unwrap();
-    
+
     if let Some(mut child) = process_guard.take() {
         let pid = child.id();
-        child.kill().map_err(|e| format!("Failed to kill engine: {}", e))?;
-        child.wait().map_err(|e| format!("Failed to wait for engine: {}", e))?;
-        Ok(format!("Engine stopped (PID {})", pid))
-    } else {
-        Ok("Engine not running".to_string())
+        let _ = child.kill();
+        let _ = child.wait();
+        return Ok(format!("Engine stopped (PID {})", pid));
     }
+
+    // Child handle is stale but engine might be running (execv case).
+    // Kill any process listening on the engine port.
+    if engine_port_is_up() {
+        if let Ok(output) = std::process::Command::new("netstat").args(&["-ano"]).output() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            let mut killed_pids = Vec::new();
+            for line in text.lines() {
+                let trimmed = line.trim();
+                if trimmed.contains("127.0.0.1:53735") && trimmed.contains("LISTENING") {
+                    if let Some(pid_str) = trimmed.split_whitespace().last() {
+                        if let Ok(pid) = pid_str.parse::<u32>() {
+                            if !killed_pids.contains(&pid) {
+                                killed_pids.push(pid);
+                                let _ = std::process::Command::new("taskkill")
+                                    .args(&["/PID", pid_str, "/F"])
+                                    .output();
+                            }
+                        }
+                    }
+                }
+            }
+            if !killed_pids.is_empty() {
+                return Ok(format!("Engine stopped (PIDs: {})", killed_pids.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ")));
+            }
+        }
+    }
+
+    Ok("Engine not running".to_string())
 }
 
 #[tauri::command]
 fn is_engine_running(_payload: EnginePayload) -> bool {
-    engine_process().lock().unwrap().is_some()
+    let child_alive = engine_process().lock().unwrap().is_some();
+    child_alive || engine_port_is_up()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

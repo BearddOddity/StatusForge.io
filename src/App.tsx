@@ -144,8 +144,29 @@ function App() {
     return () => window.removeEventListener("storage", handler);
   }, []);
 
+  // Apply saved theme (background, colors, etc.) on mount so it works
+  // even before the user visits the Settings > Theme tab.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("statusforge_theme_prefs");
+      if (!stored) return;
+      const prefs = JSON.parse(stored);
+      const root = document.documentElement;
+      if (prefs.accentColor) root.style.setProperty("--user-accent", prefs.accentColor);
+      if (prefs.bgColor) root.style.setProperty("--user-bg", prefs.bgColor);
+      root.style.setProperty("--user-bg-opacity", String((prefs.bgOpacity ?? 100) / 100));
+      root.style.setProperty("--user-bg-blur", `${prefs.bgBlur ?? 0}px`);
+      root.style.setProperty("--user-bg-image", prefs.bgImage ? `url(${prefs.bgImage})` : "none");
+      root.style.setProperty("--user-panel-opacity", String((prefs.panelOpacity ?? 30) / 100));
+      root.style.setProperty("--user-font-scale", String((prefs.fontScale ?? 100) / 100));
+      const radius = prefs.borderRadius === "sharp" ? "2px" : prefs.borderRadius === "soft" ? "8px" : "16px";
+      root.style.setProperty("--user-radius", radius);
+      root.style.setProperty("--user-density", prefs.density === "compact" ? "0.75rem" : prefs.density === "spacious" ? "1.5rem" : "1rem");
+    } catch {}
+  }, []);
+
   return (
-    <div className="flex h-screen w-full bg-[#050505] text-white/80 font-sans">
+    <div className="flex h-screen w-full bg-transparent text-white/80 font-sans">
       {/* Sidebar */}
       <nav className={`sidebar-glass flex flex-col px-3 pb-5 z-10 shrink-0 ${sidebarIconOnly ? "pt-8 w-[68px] sidebar-icon-only" : "pt-1 w-[240px]"}`}>
         <div className={`text-center ${sidebarIconOnly ? "hidden" : ""}`}>

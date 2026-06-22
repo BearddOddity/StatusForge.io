@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { ForgeLibraryEntry, ToastType } from "@/types";
 import { fetchWidgetToken } from "@/hooks/useTauriApi";
 import { Card, Btn } from "@/components/ui";
@@ -80,6 +81,15 @@ export default function LibraryView({
   useEffect(() => { localStorage.setItem("sf_sortBy", sortBy); }, [sortBy]);
   useEffect(() => { localStorage.setItem("sf_sortDir", sortDir); }, [sortDir]);
   const [sortOpen, setSortOpen] = useState(false);
+  const sortBtnRef = useRef<HTMLDivElement>(null);
+  const [sortMenuPos, setSortMenuPos] = useState({ top: 0, right: 0 });
+
+  useEffect(() => {
+    if (sortOpen && sortBtnRef.current) {
+      const rect = sortBtnRef.current.getBoundingClientRect();
+      setSortMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+  }, [sortOpen]);
 
   // Search filter + sort
   const filteredLibrary = useMemo(() => {
@@ -287,7 +297,7 @@ export default function LibraryView({
           <div className="divider-v h-6" />
 
           {/* Sort */}
-          <div className="relative shrink-0">
+          <div className="relative shrink-0" ref={sortBtnRef}>
             <button
               onClick={() => setSortOpen(!sortOpen)}
               className="flex items-center gap-1.5 px-2.5 py-2 text-xs font-semibold text-white/50 hover:text-white/80 active:text-white transition-all cursor-pointer border-none rounded-lg bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.1]"
@@ -298,31 +308,6 @@ export default function LibraryView({
               </svg>
               <span className="hidden sm:inline">{sortLabel}</span>
             </button>
-            {sortOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 surface-glass rounded-xl overflow-hidden min-w-[140px]">
-                  {(["title", "genre", "year", "developer"] as const).map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => {
-                        if (sortBy === opt) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-                        else { setSortBy(opt); setSortDir("asc"); }
-                        setSortOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors cursor-pointer border-none ${
-                        sortBy === opt ? "bg-[color-mix(in_srgb,var(--user-accent,#9146FF)_20%,transparent)] text-[var(--user-accent,#c084fc)]" : "bg-transparent text-white/60 hover:bg-white/[0.06] hover:text-white/80"
-                      }`}
-                    >
-                      <span>{opt === "title" ? "Title" : opt === "genre" ? "Genre" : opt === "year" ? "Year" : "Developer"}</span>
-                      {sortBy === opt && (
-                        <span className="text-[10px]">{sortDir === "asc" ? "↑" : "↓"}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
           </div>
 
           {/* Divider */}
@@ -418,6 +403,37 @@ export default function LibraryView({
       )}
       {showAddGame && (
         <AddGamePanel onScan={handleAddGameScan} onSaveBase={saveBaseMetadata} onClose={() => setShowAddGame(false)} toast={toast} />
+      )}
+
+      {/* Sort dropdown — portaled to body to escape stacking contexts */}
+      {sortOpen && createPortal(
+        <>
+          <div className="fixed inset-0 z-[100]" onClick={() => setSortOpen(false)} />
+          <div
+            className="fixed z-[101] surface-glass rounded-xl overflow-hidden min-w-[140px]"
+            style={{ top: sortMenuPos.top, right: sortMenuPos.right }}
+          >
+            {(["title", "genre", "year", "developer"] as const).map((opt) => (
+              <button
+                key={opt}
+                onClick={() => {
+                  if (sortBy === opt) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+                  else { setSortBy(opt); setSortDir("asc"); }
+                  setSortOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors cursor-pointer border-none ${
+                  sortBy === opt ? "bg-[color-mix(in_srgb,var(--user-accent,#9146FF)_20%,transparent)] text-[var(--user-accent,#c084fc)]" : "bg-transparent text-white/60 hover:bg-white/[0.06] hover:text-white/80"
+                }`}
+              >
+                <span>{opt === "title" ? "Title" : opt === "genre" ? "Genre" : opt === "year" ? "Year" : "Developer"}</span>
+                {sortBy === opt && (
+                  <span className="text-[10px]">{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body
       )}
     </div>
   );
