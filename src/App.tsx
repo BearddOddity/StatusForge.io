@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import appIcon from "../icons/icon.png";
 import type { EngineStatus, ViewId } from "@/types";
 import { fetchEngineStatus, fetchWidgetToken } from "@/hooks/useTauriApi";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToasts, ToastContainer } from "@/components/Toast";
-import { invoke } from "@tauri-apps/api/core";
-
 import DashboardView from "@/views/DashboardView";
 import EngineConfigView from "@/views/EngineConfigView";
 import ApiKeysView from "@/views/ApiKeysView";
@@ -148,36 +147,34 @@ function App() {
   return (
     <div className="flex h-screen w-full bg-[#050505] text-white/80 font-sans">
       {/* Sidebar */}
-      <nav className={`sidebar-glass flex flex-col px-3 py-5 z-10 ${sidebarIconOnly ? "sidebar-icon-only" : "w-[240px] shrink-0"}`}>
-        <div className="px-3 pb-5 text-center">
+      <nav className={`sidebar-glass flex flex-col px-3 pb-5 z-10 shrink-0 ${sidebarIconOnly ? "pt-8 w-[68px] sidebar-icon-only" : "pt-1 w-[240px]"}`}>
+        <div className={`text-center ${sidebarIconOnly ? "hidden" : ""}`}>
           <img
-            src="/icon.png"
+            src={appIcon}
             alt="StatusForge"
             className="w-full max-w-[220px] h-auto object-contain"
           />
-          <div
-            className="badge badge-ghost mt-3 mx-auto w-fit cursor-pointer select-none"
-            onClick={handleDevUnlock}
-            title="StatusForge"
-          >
-            v{appVersion}
-          </div>
+
         </div>
+
+        <button
+          className="nav-item cursor-pointer"
+          onClick={() => setSidebarIconOnly((v) => !v)}
+          title={sidebarIconOnly ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <span className="nav-item-icon">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4">
+              <rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor" opacity="0.7" />
+              <rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor" opacity="0.7" />
+              <rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor" opacity="0.7" />
+            </svg>
+          </span>
+
+        </button>
 
         <NavButton id="dashboard" label="Status Room" icon="⏳" />
         <NavButton id="library" label="Library" icon="📚" />
         <NavButton id="settings" label="Settings" icon="⚙️" />
-
-        <button
-          onClick={async () => {
-            try { await invoke("spark_toggle_window"); } catch {}
-          }}
-          className="nav-item"
-          title="Spark"
-        >
-          <span className="nav-item-icon">⚡</span>
-          {!sidebarIconOnly && <span className="nav-item-label">Spark</span>}
-        </button>
 
         {devUnlocked && (
           <NavButton id="dev" label="Dev Tools" icon="🛠" />

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { AppConfig, ToastType } from "@/types";
 import { tauriApi, saveConfig } from "@/hooks/useTauriApi";
 import { Card, Btn, Field } from "@/components/primitives";
+import { GlassSelect } from "@/components/SettingsComponents";
 
 export default function RoutingView({
   toast,
@@ -58,14 +59,15 @@ export default function RoutingView({
       <Card>
         <h3 className="text-white font-semibold mb-5">Mode</h3>
         <Field label="Routing Mode">
-          <select
+          <GlassSelect
             value={bc.routing_mode || "streamer_bot"}
-            onChange={(e) => set("broadcaster", "routing_mode", e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-black/40 border border-white/15 rounded-lg text-white text-sm outline-none focus:border-purple-500 cursor-pointer"
-          >
-            <option value="streamer_bot">Streamer.bot</option>
-            <option value="native">Native (Direct API)</option>
-          </select>
+            options={[
+              { value: "streamer_bot", label: "Streamer.bot" },
+              { value: "native", label: "Native (Direct API)" },
+            ]}
+            onChange={(v) => set("broadcaster", "routing_mode", v)}
+            className="w-full"
+          />
         </Field>
         {(bc.routing_mode || "streamer_bot") === "streamer_bot" && (
           <>

@@ -9,48 +9,48 @@ use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 static ENGINE_PROCESS: OnceLock<Mutex<Option<std::process::Child>>> = OnceLock::new();
+static APP_BASE_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
 
 fn engine_process() -> &'static Mutex<Option<std::process::Child>> {
     ENGINE_PROCESS.get_or_init(|| Mutex::new(None))
 }
 
-/// Returns the canonical base directory for the application (where the exe resides).
+/// Initialize the app base directory from the Tauri resource dir.
+/// Must be called from `setup()` so we have an AppHandle.
+fn init_app_base_dir(app: &tauri::AppHandle) {
+    // resource_dir() returns the platform-specific resource directory.
+    // On Windows installed: next to the exe (e.g. C:\Program Files\StatusForge.io\)
+    // In dev: the src-tauri/ directory (where Cargo.toml lives)
+    // Bundled resources via ../ in tauri.conf.json land in _up_/ subdir of resource_dir.
+    let resource_dir = app.path().resource_dir()
+        .expect("Failed to resolve resource dir");
+
+    // In dev mode, resource_dir is src-tauri/ but our data files (Config.json,
+    // presence.py, etc.) live in the workspace root (parent of src-tauri/).
+    // In production, resources are bundled directly into resource_dir.
+    let base = if resource_dir.join("Config.json").exists() {
+        resource_dir.to_path_buf()
+    } else if resource_dir.parent().map_or(false, |p| p.join("Config.json").exists()) {
+        resource_dir.parent().unwrap().to_path_buf()
+    } else {
+        resource_dir.to_path_buf()
+    };
+
+    let _ = APP_BASE_DIR.set(base.to_path_buf());
+}
+
+/// Returns the canonical base directory for the application.
 /// All config/data files MUST live under this directory.
 fn app_base_dir() -> Result<std::path::PathBuf, String> {
+    if let Some(dir) = APP_BASE_DIR.get() {
+        return Ok(dir.clone());
+    }
+    // Fallback if init hasn't been called yet (shouldn't happen in practice)
     let exe_path = std::env::current_exe()
         .map_err(|e| format!("Failed to get exe path: {}", e))?;
-    let exe_dir = exe_path.parent()
+    let base = exe_path.parent()
         .ok_or_else(|| "Failed to get exe parent directory".to_string())?;
-
-    // In dev mode, the exe is deep in target/debug/. Resources live at the workspace root.
-    // Check if Config.json is directly in the exe's parent (production bundle layout).
-    if exe_dir.join("Config.json").exists() {
-        let canonical = std::fs::canonicalize(exe_dir)
-            .map_err(|e| format!("Failed to canonicalize base dir: {}", e))?;
-        return Ok(canonical);
-    }
-
-    // Check resources/ subfolder (Tauri v2 bundled layout: exe in root, resources in resources/).
-    let resources_dir = exe_dir.join("resources");
-    if resources_dir.join("Config.json").exists() {
-        let canonical = std::fs::canonicalize(&resources_dir)
-            .map_err(|e| format!("Failed to canonicalize resources dir: {}", e))?;
-        return Ok(canonical);
-    }
-
-    // Dev mode: walk up from exe dir to find workspace root (where Config.json lives).
-    let mut dir = exe_dir.to_path_buf();
-    for _ in 0..10 {
-        if dir.join("Config.json").exists() {
-            let canonical = std::fs::canonicalize(&dir)
-                .map_err(|e| format!("Failed to canonicalize base dir: {}", e))?;
-            return Ok(canonical);
-        }
-        if !dir.pop() { break; }
-    }
-
-    // Fallback: just use exe dir.
-    let canonical = std::fs::canonicalize(exe_dir)
+    let canonical = std::fs::canonicalize(base)
         .map_err(|e| format!("Failed to canonicalize base dir: {}", e))?;
     Ok(canonical)
 }
@@ -1274,6 +1274,7 @@ pub fn run() {
         .manage(oauth_state.clone())
         .manage(Arc::new(NativeEngineState::default()))
         .setup(move |app| {
+            init_app_base_dir(app.handle());
             let handle = app.handle().clone();
             start_spark_scanner(spark_state.clone(), handle);
 
