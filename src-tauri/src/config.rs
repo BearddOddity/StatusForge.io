@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 /// Top-level configuration container
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(default)]
 pub struct AppConfig {
     #[serde(default)]
     pub api_keys: ApiKeys,
@@ -16,13 +16,11 @@ pub struct AppConfig {
     pub engine_settings: EngineSettings,
     #[serde(default)]
     pub broadcaster: BroadcasterConfig,
-    #[serde(default)]
-    pub detection: DetectionConfig,
 }
 
 /// API keys for external services
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(default)]
 pub struct ApiKeys {
     #[serde(default)]
     pub steamgrid: String,
@@ -38,7 +36,7 @@ pub struct ApiKeys {
 
 /// Engine/runtime settings
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(default)]
 pub struct EngineSettings {
     #[serde(default = "default_idle_category")]
     pub idle_category: String,
@@ -62,10 +60,11 @@ pub struct EngineSettings {
     pub sb_action_name: String,
     #[serde(default = "default_widget_token")]
     pub widget_token: String,
-    #[serde(default = "default_detection_mode")]
-    pub detection_mode: DetectionMode,
     #[serde(default = "default_spark_pin")]
     pub spark_pin: String,
+    /// Optional user-set pairing key mixed into the SPARK heartbeat HMAC secret.
+    #[serde(default)]
+    pub spark_pairing_key: String,
     #[serde(default = "default_emulator_detection")]
     pub emulator_detection: bool,
     #[serde(default = "default_ram_threshold")]
@@ -106,8 +105,8 @@ impl Default for EngineSettings {
             strict_forge_mode: false,
             sb_action_name: default_sb_action_name(),
             widget_token: default_widget_token(),
-            detection_mode: default_detection_mode(),
             spark_pin: default_spark_pin(),
+            spark_pairing_key: String::new(),
             emulator_detection: default_emulator_detection(),
             ram_threshold: default_ram_threshold(),
             process_filter_bypass: false,
@@ -124,47 +123,13 @@ impl Default for EngineSettings {
     }
 }
 
-/// Detection mode: Python (legacy), Native (Rust), or Spark (dual-PC)
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum DetectionMode {
-    #[default]
-    Python,
-    Native,
-    Spark,
-}
-
-/// Detection configuration with experimental toggle
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DetectionConfig {
-    #[serde(default)]
-    pub mode: DetectionMode,
-    #[serde(default = "default_python_fallback")]
-    pub python_fallback: bool,
-    #[serde(default = "default_scan_interval")]
-    pub scan_interval_secs: u64,
-    #[serde(default)]
-    pub dev_tools_enabled: bool,
-    #[serde(default)]
-    pub closed_beta_channel: bool,
-}
-
-impl Default for DetectionConfig {
-    fn default() -> Self {
-        Self {
-            mode: DetectionMode::default(),
-            python_fallback: default_python_fallback(),
-            scan_interval_secs: default_scan_interval(),
-            dev_tools_enabled: false,
-            closed_beta_channel: false,
-        }
-    }
-}
+// Detection is always native (Rust) — the legacy Python/Spark detection-mode
+// selector was removed. Old configs containing a `detection` section or an
+// `engine_settings.detection_mode` field still parse: unknown keys are ignored.
 
 /// Broadcaster/platform configuration
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(default)]
 pub struct BroadcasterConfig {
     #[serde(default = "default_routing_mode")]
     pub routing_mode: RoutingMode,
@@ -200,7 +165,7 @@ pub enum RoutingMode {
 
 /// Forge database entry
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(default)]
 pub struct ForgeLibraryEntry {
     #[serde(default)]
     pub title: String,
@@ -242,7 +207,7 @@ pub struct ForgeLibraryEntry {
 
 /// Forge database
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(default)]
 pub struct ForgeDatabase {
     #[serde(default)]
     pub delisted_apps: Vec<String>,
@@ -254,7 +219,7 @@ pub struct ForgeDatabase {
 
 /// Engine status returned to frontend
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[serde(rename_all = "camelCase")]
+
 pub struct EngineStatus {
     pub running: bool,
     pub game_title: String,
@@ -307,9 +272,6 @@ fn default_widget_token() -> String {
         CHARSET[rng.gen_range(0..CHARSET.len())] as char
     }).collect()
 }
-fn default_detection_mode() -> DetectionMode {
-    DetectionMode::Python // Safe default
-}
 fn default_spark_pin() -> String {
     "0000".to_string()
 }
@@ -344,9 +306,6 @@ fn default_score_window_title() -> bool {
     true
 }
 fn default_score_ram() -> bool {
-    true
-}
-fn default_python_fallback() -> bool {
     true
 }
 fn default_routing_mode() -> RoutingMode {

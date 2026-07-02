@@ -180,7 +180,7 @@ function App() {
 
         <button
           className="nav-item cursor-pointer"
-          onClick={() => setSidebarIconOnly((v) => !v)}
+          onClick={() => setSidebarIconOnly((v: boolean) => !v)}
           title={sidebarIconOnly ? "Expand sidebar" : "Collapse sidebar"}
         >
           <span className="nav-item-icon">

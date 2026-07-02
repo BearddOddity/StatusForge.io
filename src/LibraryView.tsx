@@ -22,7 +22,7 @@ type ViewMode = "carousel" | "grid";
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function getDummyLibrary(): ForgeLibraryEntry[] {
-  return [
+  const entries: Partial<ForgeLibraryEntry>[] = [
     {
       title: "Celeste", genre: "PLATFORMER", release_year: "2018",
       developer: "Maddy Makes Games", publisher: "Maddy Makes Games",
@@ -48,6 +48,10 @@ function getDummyLibrary(): ForgeLibraryEntry[] {
       steam_id: "1794680", igdb_id: "", rawg_id: "768205", twitch_id: "", kick_id: "",
     },
   ];
+  return entries.map((e) => ({
+    discord_app_id: "", gog_id: "", itch_id: "", sgdb_id: "", xbox_title_id: "", epic_id: "",
+    executables: "", ...e,
+  }) as ForgeLibraryEntry);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -15,14 +15,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum_server::tls_rustls::RustlsConfig;
-
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     response::Html,
-    routing::get,
-    Router,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use rand::RngCore;
@@ -36,8 +31,6 @@ use crate::config::AppConfig;
 // ═══════════════════════════════════════════════════════════════════════════════
 // Constants
 // ═══════════════════════════════════════════════════════════════════════════════
-
-const OAUTH_CALLBACK_ADDR: &str = "127.0.0.1:53735";
 
 const KICK_AUTH_URL: &str = "https://id.kick.com/oauth/authorize";
 const KICK_TOKEN_URL: &str = "https://id.kick.com/oauth/token";
@@ -64,7 +57,7 @@ pub fn generate_code_verifier() -> String {
 
 pub fn generate_code_challenge(verifier: &str) -> String {
     let hash = Sha256::digest(verifier.as_bytes());
-    URL_SAFE_NO_PAD.encode(&hash)
+    URL_SAFE_NO_PAD.encode(hash)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -175,7 +168,7 @@ fn html_escape(s: &str) -> String {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[derive(Deserialize)]
-struct CallbackQuery {
+pub struct CallbackQuery {
     code: Option<String>,
     state: Option<String>,
     error: Option<String>,
@@ -183,8 +176,8 @@ struct CallbackQuery {
 }
 
 /// Single callback route: /oauth/callback/:platform
-/// Handles both "kick" and "twitch".
-async fn oauth_callback(
+/// Handles both "kick" and "twitch". Mounted by `server::build_router`.
+pub async fn oauth_callback(
     Path(platform): Path<String>,
     Query(params): Query<CallbackQuery>,
     State(oauth_state): State<SharedOAuthState>,
@@ -310,10 +303,6 @@ async fn handle_twitch_callback(
     }
 
     Html(build_popup_response("twitch", true, ""))
-}
-
-async fn auth_health() -> StatusCode {
-    StatusCode::OK
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -574,46 +563,12 @@ pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<
 
 /// Generate a self-signed TLS cert + key (PEM) for local OAuth callback.
 /// Covers both `localhost` and `127.0.0.1` SANs.
-fn generate_self_signed_pem() -> Result<(String, String), String> {
+pub fn generate_self_signed_pem() -> Result<(String, String), String> {
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".into(), "127.0.0.1".into()])
         .map_err(|e| format!("Failed to generate self-signed cert: {}", e))?;
     let cert_pem = cert.cert.pem();
     let key_pem = cert.key_pair.serialize_pem();
     Ok((cert_pem, key_pem))
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// OAuth Callback Server (Axum + rustls via axum-server, binds 127.0.0.1 only)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-pub async fn start_oauth_server(oauth_state: SharedOAuthState) -> Result<(), String> {
-    let app = Router::new()
-        .route("/oauth/callback/{platform}", get(oauth_callback))
-        .route("/health", get(auth_health))
-        .with_state(oauth_state);
-
-    let (cert_pem, key_pem) = generate_self_signed_pem()?;
-
-    let tls_config = RustlsConfig::from_pem(cert_pem.into_bytes(), key_pem.into_bytes())
-        .await
-        .map_err(|e| format!("Failed to build TLS config: {}", e))?;
-
-    let addr: std::net::SocketAddr = OAUTH_CALLBACK_ADDR
-        .parse()
-        .map_err(|e| format!("Invalid callback address {}: {}", OAUTH_CALLBACK_ADDR, e))?;
-
-    log::info!("[AUTH] OAuth callback server listening on {} (TLS)", OAUTH_CALLBACK_ADDR);
-
-    tokio::spawn(async move {
-        if let Err(e) = axum_server::bind_rustls(addr, tls_config)
-            .serve(app.into_make_service())
-            .await
-        {
-            log::error!("[AUTH] OAuth server error: {}", e);
-        }
-    });
-
-    Ok(())
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
