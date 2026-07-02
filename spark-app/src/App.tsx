@@ -9,7 +9,8 @@ import { timeAgo } from "./helpers";
 interface Status {
   hostname: string;
   connected: boolean;
-  current_game: { process: string; is_playing: boolean } | null;
+  current_game: { title: string; process: string; is_playing: boolean } | null;
+  hub_name: string | null;
   pin: string;
   hub_port: number;
   scan_interval: number;
@@ -80,7 +81,7 @@ export default function App() {
                 {hasGame ? "Playing" : status?.connected ? "Idling" : "Offline"}
               </span>
               <span className="spark-now-title">
-                {hasGame ? status!.current_game!.process : status?.connected ? "Just Chatting" : "Offline"}
+                {hasGame ? status!.current_game!.title : status?.connected ? "Just Chatting" : "Offline"}
               </span>
               <span className="spark-now-process">
                 {status?.current_game?.process || (status?.connected ? "No active process" : "Start the engine to begin")}
@@ -111,7 +112,7 @@ export default function App() {
                 }}
               />
               <span className="spark-status-value">
-                {online ? "Connected" : "Offline"}
+                {online ? `Broadcasting to ${status?.hub_name ?? "Hub"}` : "Offline"}
               </span>
             </div>
           </div>
