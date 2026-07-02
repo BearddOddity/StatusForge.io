@@ -3,7 +3,7 @@ import type { EngineStatus, ToastType } from "@/types";
 import { tauriApi } from "@/hooks/useTauriApi";
 import { Card, Btn, FieldSection } from "@/components/ui";
 
-const dummyCoverImg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 400'%3E%3Crect fill='%230a0a0f' width='300' height='400'/%3E%3Crect x='30' y='30' width='240' height='340' rx='16' fill='%23111118' stroke='%23ffffff15' stroke-width='1'/%3E%3Ctext x='50%25' y='42%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff30' font-size='52'%3E🎮%3C/text%3E%3Ctext x='50%25' y='58%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff20' font-size='14' font-family='system-ui'%3EJust Chatting%3C/text%3E%3C/svg%3E";
+const idleCover = "/just%20chatting.png";
 
 const overlays = [
   { id: "hl", label: "Horizontal Left", file: "Horizontal_Left.html", icon: "◀", preview: "" },
@@ -88,7 +88,7 @@ export default function DashboardView({
             {isPlaying && <div className="absolute inset-0 rounded-2xl border border-purple-500/30 pointer-events-none z-10" />}
             <div className="w-full h-full" style={{ animation: isPlaying ? "var(--user-cover-breathe, cover-breathe 8s ease-in-out infinite)" : "none" }}>
               <img
-                src={engineStatus.cover_url || dummyCoverImg}
+                src={engineStatus.cover_url || idleCover}
                 alt={engineStatus.game_title || "Just Chatting"}
                 className="w-full h-full object-cover"
                 crossOrigin="anonymous"
@@ -96,7 +96,7 @@ export default function DashboardView({
                   const img = e.target as HTMLImageElement;
                   if (!img.dataset.fallback) {
                     img.dataset.fallback = "1";
-                    img.src = dummyCoverImg;
+                    img.src = idleCover;
                   } else if (!img.dataset.placeholder) {
                     img.dataset.placeholder = "1";
                     img.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 400'%3E%3Crect fill='%23111' width='300' height='400'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23333' font-size='48'%3E🎮%3C/text%3E%3C/svg%3E";
@@ -112,7 +112,7 @@ export default function DashboardView({
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-xl leading-tight truncate text-white">
-              {isPlaying ? engineStatus.game_title : engineStatus.running ? "Just Chatting" : "Offline"}
+              {isPlaying ? engineStatus.game_title : "Just Chatting"}
             </h3>
             <div className="flex items-center gap-2 mt-3">
               {engineStatus.running ? (
