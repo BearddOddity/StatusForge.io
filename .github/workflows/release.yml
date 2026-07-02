@@ -1,0 +1,104 @@
+# Release builds — one installer per OS for BOTH apps (StatusForge + SPARK).
+# This is the canonical build path: Tauri bundles are produced on their own
+# OS runner (no local cross-compilation).
+#
+# Triggers: pushing a version tag (git tag v0.5.0 && git push --tags) or
+# manual "Run workflow" in the Actions tab.
+#
+# Releases:
+# - StatusForge → release "v__VERSION__" (regular release, so
+#   /releases/latest/download/latest.json always resolves to StatusForge)
+# - SPARK       → moving tag "spark-latest" (marked prerelease so it never
+#   claims /releases/latest); its updater endpoint is
+#   /releases/download/spark-latest/latest.json
+#
+# Secrets required (updater artifact signing — minisign, independent of
+# Apple code signing):
+# - TAURI_SIGNING_PRIVATE_KEY           (contents of ~/.tauri/statusforge.key)
+# - TAURI_SIGNING_PRIVATE_KEY_PASSWORD  (empty string if key has no password)
+#
+# macOS ships UNSIGNED and un-notarized by design (no Apple account) — the
+# job succeeds and emits an unsigned .dmg/.app. See the commented block at
+# the bottom to enable Apple signing later.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        app:
+          - name: StatusForge
+            path: "."
+            tagName: v__VERSION__
+            releaseName: "StatusForge v__VERSION__"
+            prerelease: false
+          - name: Spark
+            path: spark-app
+            tagName: spark-latest
+            releaseName: "Spark v__VERSION__"
+            prerelease: true
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.app.name }} (${{ matrix.os }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri
+            spark-app/src-tauri
+            forge-detection
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - name: Install frontend dependencies
+        working-directory: ${{ matrix.app.path }}
+        run: npm install
+
+      # Bundles per OS: Windows NSIS + MSI, macOS .app + .dmg (unsigned),
+      # Linux AppImage + .deb — tauri.conf.json "targets": "all" covers these.
+      - name: Build and release ${{ matrix.app.name }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # ── To enable macOS signing + notarization later, add the Apple
+          # secrets and uncomment (no code changes needed): ────────────────
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: ${{ matrix.app.path }}
+          tagName: ${{ matrix.app.tagName }}
+          releaseName: ${{ matrix.app.releaseName }}
+          releaseBody: "See the assets below for this platform's installer."
+          releaseDraft: false
+          prerelease: ${{ matrix.app.prerelease }}
+          includeUpdaterJson: true
