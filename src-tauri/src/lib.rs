@@ -862,6 +862,28 @@ fn dev_get_diagnostics(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Autostart (launch on login) — user-facing toggle, off by default
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[tauri::command]
+fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let autolaunch = app.autolaunch();
+    if enabled {
+        autolaunch.enable().map_err(|e| e.to_string())?;
+    } else {
+        autolaunch.disable().map_err(|e| e.to_string())?;
+    }
+    Ok(enabled)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Entry Point
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -872,11 +894,39 @@ pub fn run() {
     let hub_state = Arc::new(hub::HubState::new());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(oauth_state.clone())
         .manage(engine_state.clone())
         .manage(hub_state.clone())
         .setup(move |app| {
             init_app_base_dir(app.handle());
+
+            // Log to stdout + <app base dir>/debug.log so `dev_get_log_tail`
+            // and cross-platform detection debugging have a findable file.
+            // Registered here (not on the Builder) because the base dir is
+            // only known after init_app_base_dir().
+            let log_dir = app_base_dir().unwrap_or_default();
+            if let Err(e) = app.handle().plugin(
+                tauri_plugin_log::Builder::new()
+                    .targets([
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Folder {
+                            path: log_dir,
+                            file_name: Some("debug".to_string()),
+                        }),
+                    ])
+                    .level(log::LevelFilter::Info)
+                    .build(),
+            ) {
+                eprintln!("Failed to init log plugin: {}", e);
+            }
 
             // LAN Hub: announce on udp/53736, receive SPARK heartbeats on udp/53735
             hub::start_hub(hub_state.clone(), engine_state.clone(), app.handle().clone());
@@ -924,6 +974,8 @@ pub fn run() {
             rotate_widget_token,
             dev_get_log_tail,
             dev_get_diagnostics,
+            get_autostart,
+            set_autostart,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

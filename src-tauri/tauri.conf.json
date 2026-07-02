@@ -32,9 +32,23 @@
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/BeardedOddity/StatusForge.io/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMyMTkwNTJGODREQjM5OApSV1NZczAzNFVwQWhBN0J6Nk1DaUI1aWZPYjY1N0U4bnBXWTQrTUNxaEphOUdtTXFZdEh4T2UxTwo="
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsi"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
