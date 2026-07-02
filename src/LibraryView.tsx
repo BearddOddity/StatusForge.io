@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import type { ForgeLibraryEntry, ToastType } from "@/types";
+import type { ForgeDatabase, ForgeLibraryEntry, ToastType } from "@/types";
 import { fetchWidgetToken } from "@/hooks/useTauriApi";
 import { Card, Btn } from "@/components/ui";
 import CarouselView from "@/components/CarouselView";
@@ -209,6 +209,28 @@ export default function LibraryView({
     } catch { toast("Delete failed", "error"); }
   };
 
+  const handleExile = async (title: string) => {
+    const token = await fetchWidgetToken();
+    try {
+      const metaRes = await fetch("http://127.0.0.1:53735/export-meta", { headers: { "X-Forge-Token": token } });
+      if (metaRes.ok) {
+        const db = (await metaRes.json()) as ForgeDatabase;
+        delete db.library[title];
+        if (!db.delisted_apps.includes(title.toLowerCase())) {
+          db.delisted_apps.push(title.toLowerCase());
+        }
+        await fetch("http://127.0.0.1:53735/import-meta", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Forge-Token": token },
+          body: JSON.stringify(db),
+        });
+        toast(`Exiled "${title}"`, "success");
+        setShowOverlay(false);
+        load();
+      }
+    } catch { toast("Exile failed", "error"); }
+  };
+
   const saveBaseMetadata = async (title: string, year: string, dev: string) => {
     const token = await fetchWidgetToken();
     const payload: Record<string, string> = { title };
@@ -396,7 +418,7 @@ export default function LibraryView({
 
       {/* Overlays */}
       {showOverlay && activeEntry && (
-        <MetadataOverlay entry={activeEntry} onSave={saveEntry} onScan={handleScanMetadata} onClose={() => setShowOverlay(false)} />
+        <MetadataOverlay entry={activeEntry} onSave={saveEntry} onScan={handleScanMetadata} onExile={handleExile} onClose={() => setShowOverlay(false)} />
       )}
       {showExiled && (
         <ExiledPanel exiled={exiled} onReinstate={reinstate} onDelete={deleteExiled} onClose={() => setShowExiled(false)} />

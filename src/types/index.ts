@@ -139,7 +139,7 @@ export type ViewId =
   | "settings"
   | "dev";
 
-export type SettingsSubTab = "engine" | "routing" | "api" | "system" | "theme" | "about";
+export type SettingsSubTab = "engine" | "api-routing" | "system" | "theme" | "about";
 
 export type ToastType = "success" | "error" | "info";
 
