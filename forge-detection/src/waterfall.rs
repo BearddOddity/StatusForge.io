@@ -16,8 +16,8 @@
 use std::collections::HashMap;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
-use super::platform::{self, ActiveWindow};
-use super::{ForgeKnowledge, GameDetection, ScannerConfig};
+use crate::platform::{self, ActiveWindow};
+use crate::{ForgeKnowledge, GameDetection, ScannerConfig};
 
 /// Logging callback used by the engine loop. (message, level, cooldown_secs)
 pub type LogFn = Box<dyn Fn(&str, &str, u64) + Send + Sync>;

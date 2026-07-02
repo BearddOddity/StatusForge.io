@@ -1,6 +1,13 @@
-//! Native game detection engine — Rust port of forge_scanner.py
+//! forge-detection — the ForgeWaterfall native game detection engine.
 //!
-//! Provides the same multi-stage detection pipeline:
+//! Standalone library crate shared by StatusForge (single-PC local detection),
+//! SPARK (the dual-PC gaming-side agent), and StreamerSuite. No Tauri, axum,
+//! keyring, or OAuth dependencies — just `serde`, `sysinfo`, and per-OS crates.
+//! The host app owns all I/O: it loads the game database and feeds it in via
+//! [`waterfall::ForgeWaterfall::update_forge_knowledge`], and it controls
+//! logging through the [`waterfall::LogFn`] callback.
+//!
+//! Multi-stage detection pipeline:
 //! 1. Active window / foreground process identification (OS-specific)
 //! 2. Forge database lookup (listed apps = instant match)
 //! 3. System exiles + banned paths filter
@@ -14,6 +21,8 @@
 
 pub mod platform;
 pub mod waterfall;
+
+pub use waterfall::{ForgeWaterfall, LogFn};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

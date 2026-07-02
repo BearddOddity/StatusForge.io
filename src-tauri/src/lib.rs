@@ -1,6 +1,6 @@
 pub mod config;
 mod auth;
-pub mod scanner;
+pub use forge_detection as scanner;
 pub mod server;
 pub mod hub;
 pub mod spark_protocol;
