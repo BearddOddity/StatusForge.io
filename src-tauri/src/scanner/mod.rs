@@ -8,9 +8,11 @@
 //! 5. Golden tickets (Steam registry, process tree)
 //! 6. Confidence scoring for DRM-free / indie games
 //!
-//! Platform support: Windows and Linux only.
-//! On macOS this module is not compiled — use the Python sidecar instead.
+//! Platform support: Windows, macOS, and Linux — fully native, no sidecar.
+//! On macOS, reading window titles requires the Screen Recording permission;
+//! see `platform::permission_error`.
 
+pub mod platform;
 pub mod waterfall;
 
 use serde::{Deserialize, Serialize};
