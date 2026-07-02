@@ -91,11 +91,6 @@ fn assert_path_in_base(path: &std::path::Path, base: &std::path::Path) -> Result
 
 // --- Input validation structs ---
 
-#[derive(Deserialize)]
-struct EnginePayload {
-    _unused: Option<String>,
-}
-
 /// Export config payload — now a thin wrapper, actual validation in config.rs
 #[derive(Deserialize)]
 struct ConfigExportPayload {
@@ -223,7 +218,6 @@ fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
 /// Python sidecar has been removed.
 #[tauri::command]
 fn start_engine(
-    _payload: EnginePayload,
     state: tauri::State<Arc<NativeEngineState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
@@ -238,7 +232,6 @@ fn get_detection_mode() -> String {
 
 #[tauri::command]
 fn stop_engine(
-    _payload: EnginePayload,
     state: tauri::State<Arc<NativeEngineState>>,
 ) -> Result<String, String> {
     state.running.store(false, Ordering::Relaxed);
@@ -247,7 +240,6 @@ fn stop_engine(
 
 #[tauri::command]
 fn is_engine_running(
-    _payload: EnginePayload,
     state: tauri::State<Arc<NativeEngineState>>,
 ) -> bool {
     state.running.load(Ordering::Relaxed)
