@@ -57,13 +57,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../presence.py": "",
-      "../forge_scanner.py": "",
-      "../spark.py": "",
-      "../presence/": "presence/",
       "../widgets/": "widgets/",
-      "../Config.json": "",
-      "../Forge_Database.json": "",
+      "../Config.json.template": "",
       "../public/": "public/"
     },
     "android": {

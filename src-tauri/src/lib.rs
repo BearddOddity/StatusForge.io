@@ -36,6 +36,19 @@ fn init_app_base_dir(app: &tauri::AppHandle) {
         resource_dir.to_path_buf()
     };
 
+    // First run: bootstrap Config.json from the bundled template.
+    let config_path = base.join("Config.json");
+    if !config_path.exists() {
+        let template = base.join("Config.json.template");
+        if template.exists() {
+            if let Err(e) = std::fs::copy(&template, &config_path) {
+                log::warn!("Failed to bootstrap Config.json from template: {}", e);
+            } else {
+                log::info!("Bootstrapped Config.json from template");
+            }
+        }
+    }
+
     let _ = APP_BASE_DIR.set(base.to_path_buf());
 }
 
@@ -500,31 +513,19 @@ impl Default for NativeEngineState {
 }
 
 fn start_native_engine() -> Result<String, String> {
-    // Native engine is only supported on Windows and Linux.
-    // macOS should use the Python sidecar (detection_mode = "python").
-    #[cfg(target_os = "macos")]
-    {
-        return Err("Native engine is not supported on macOS. Set detection_mode to \"python\" in Config.json and restart.".to_string());
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok("Native engine detection module loaded. Use start_native_engine_loop to begin scanning.".to_string())
-    }
+    // Fully native on Windows, macOS, and Linux.
+    // On macOS, window titles require the Screen Recording permission — the
+    // engine loop surfaces that via `permission_error` in the status payload.
+    Ok("Native engine detection module loaded. Use start_native_engine_loop to begin scanning.".to_string())
 }
 
 /// Start the native engine detection loop in a background thread.
-/// Only available on Windows and Linux.
+/// Runs natively on Windows, macOS, and Linux.
 #[tauri::command]
 fn start_native_engine_loop(
     state: tauri::State<Arc<NativeEngineState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        return Err("Native engine loop is not supported on macOS. Use the Python sidecar.".to_string());
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
     if state.running.load(Ordering::Relaxed) {
         return Ok("Native engine loop already running".to_string());
     }
@@ -540,6 +541,13 @@ fn start_native_engine_loop(
         });
 
         let mut scout = ForgeWaterfall::new(log);
+
+        // macOS: window titles need Screen Recording permission. Surface it
+        // loudly (the status payload also carries `permission_error`).
+        if let Some(err) = scout.permission_error() {
+            log::warn!("[NATIVE] {}", err);
+        }
+
         let mut current_game: Option<String> = None;
         let mut lost_focus_time: Option<f64> = None;
 
@@ -720,43 +728,24 @@ fn start_native_engine_loop(
     });
 
     Ok("Native engine loop started".to_string())
-    } // end #[cfg(not(target_os = "macos"))]
 }
 
 /// Stop the native engine detection loop.
 #[tauri::command]
 fn stop_native_engine_loop(state: tauri::State<Arc<NativeEngineState>>) -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        return Err("Native engine loop is not supported on macOS.".to_string());
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
     state.running.store(false, Ordering::Relaxed);
     Ok("Native engine loop stopped".to_string())
-    }
 }
 
 /// Get current native engine detection status.
 #[tauri::command]
 fn get_native_engine_status(state: tauri::State<Arc<NativeEngineState>>) -> serde_json::Value {
-    #[cfg(target_os = "macos")]
-    {
-        return serde_json::json!({
-            "running": false,
-            "current_game": null,
-            "process": "",
-            "is_playing": false,
-            "start_time": 0,
-            "error": "Native engine not available on macOS",
-        });
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
     let game = state.current_game.lock().unwrap().clone();
     let process = state.current_process.lock().unwrap().clone();
     let is_playing = *state.is_playing.lock().unwrap();
     let start_time = *state.start_time.lock().unwrap();
+    // Some(message) when the OS blocks window inspection (macOS Screen Recording)
+    let permission_error = scanner::platform::permission_error();
 
     serde_json::json!({
         "running": state.running.load(Ordering::Relaxed),
@@ -764,8 +753,8 @@ fn get_native_engine_status(state: tauri::State<Arc<NativeEngineState>>) -> serd
         "process": process,
         "is_playing": is_playing,
         "start_time": start_time,
+        "permission_error": permission_error,
     })
-    }
 }
 
 // --- OS Keychain Token Storage ---
