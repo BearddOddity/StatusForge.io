@@ -247,20 +247,18 @@ fn start_discovery_loop(state: Arc<SparkState>) {
         log::info!("[SPARK] Listening for Hub announcements on udp/{}", DISCOVERY_PORT);
         let mut buf = [0u8; 1024];
         while running.load(Ordering::Relaxed) {
-            match socket.recv_from(&mut buf) {
-                Ok((len, _addr)) => {
-                    if let Ok(announce) = serde_json::from_slice::<HubAnnounce>(&buf[..len]) {
-                        if announce.app == "StatusForge_Hub" && !announce.hub_name.is_empty() {
-                            let mut hub = state.hub.lock().unwrap();
-                            let is_new = hub.as_ref().map(|(n, _)| n != &announce.hub_name).unwrap_or(true);
-                            if is_new {
-                                log::info!("[SPARK] Discovered Hub '{}'", announce.hub_name);
-                            }
-                            *hub = Some((announce.hub_name, now_secs()));
+            // recv errors are read-timeouts — loop to re-check `running`
+            if let Ok((len, _addr)) = socket.recv_from(&mut buf) {
+                if let Ok(announce) = serde_json::from_slice::<HubAnnounce>(&buf[..len]) {
+                    if announce.app == "StatusForge_Hub" && !announce.hub_name.is_empty() {
+                        let mut hub = state.hub.lock().unwrap();
+                        let is_new = hub.as_ref().map(|(n, _)| n != &announce.hub_name).unwrap_or(true);
+                        if is_new {
+                            log::info!("[SPARK] Discovered Hub '{}'", announce.hub_name);
                         }
+                        *hub = Some((announce.hub_name, now_secs()));
                     }
                 }
-                Err(_) => {} // timeout — loop to re-check `running`
             }
         }
     });
