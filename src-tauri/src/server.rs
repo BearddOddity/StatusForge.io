@@ -236,6 +236,11 @@ pub async fn start_server(state: ServerState) -> Result<(), String> {
     // OAuth handlers pull the OAuth state via axum Extension-less crate state;
     // they access ServerState.oauth through the shared router state.
 
+    // rustls 0.23: tauri-plugin-updater links aws-lc-rs while we use ring, so
+    // both providers are compiled in and ServerConfig::builder() can't auto-pick
+    // (it panics). Pin ring explicitly. Idempotent — Err means already installed.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     // Self-signed TLS for the Twitch https:// callback.
     let (cert_pem, key_pem) = crate::auth::generate_self_signed_pem()?;
     let certs = rustls_pemfile::certs(&mut cert_pem.as_bytes())
