@@ -1,6 +1,7 @@
 pub mod config;
 mod auth;
 pub use forge_detection as scanner;
+pub mod metadata;
 pub mod server;
 pub mod hub;
 pub mod spark_protocol;
@@ -824,6 +825,24 @@ fn rotate_widget_token() -> Result<String, String> {
     auth::rotate_widget_token(&base_dir)
 }
 
+/// Exile a game: drop it from the library and delist its lowercase title so
+/// the scanner ignores it. Used by the Status Room "Exile to Apps" button.
+#[tauri::command]
+fn exile_app(game: String) -> Result<String, String> {
+    let game = game.trim().to_string();
+    if game.is_empty() {
+        return Err("No game title provided".to_string());
+    }
+    let mut db = server::load_db()?;
+    db.library.remove(&game);
+    let lower = game.to_lowercase();
+    if !db.delisted_apps.contains(&lower) {
+        db.delisted_apps.push(lower);
+    }
+    server::save_db(&db)?;
+    Ok(format!("Exiled \"{}\"", game))
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // DEV TOOLS — Hidden developer diagnostics (dev mode only)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -972,6 +991,7 @@ pub fn run() {
             twitch_refresh_token,
             sync_kick_db,
             rotate_widget_token,
+            exile_app,
             dev_get_log_tail,
             dev_get_diagnostics,
             get_autostart,

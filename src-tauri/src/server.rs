@@ -18,15 +18,15 @@ use axum::{
         Query, State, WebSocketUpgrade,
     },
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
-    routing::get,
+    response::{IntoResponse, Redirect},
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
 use tokio::sync::watch;
 
 use crate::auth::SharedOAuthState;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, ForgeDatabase};
 use crate::NativeEngineState;
 
 pub const SERVER_ADDR: &str = "127.0.0.1:53735";
@@ -75,6 +75,219 @@ fn check_token(headers: &HeaderMap, query_token: Option<&str>) -> Result<(), Sta
 fn load_config() -> Option<AppConfig> {
     let base = crate::app_base_dir().ok()?;
     crate::auth::load_config_at(&base).ok()
+}
+
+fn internal(e: String) -> StatusCode {
+    log::warn!("[SERVER] {}", e);
+    StatusCode::INTERNAL_SERVER_ERROR
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Forge_Database.json helpers + Library routes
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub fn load_db() -> Result<ForgeDatabase, String> {
+    let path = crate::app_base_dir()?.join("Forge_Database.json");
+    if !path.exists() {
+        return Ok(ForgeDatabase::default());
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read Forge_Database.json: {}", e))?;
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse Forge_Database.json: {}", e))
+}
+
+/// Atomic write (temp + rename), same as the Config.json save path.
+pub fn save_db(db: &ForgeDatabase) -> Result<(), String> {
+    let path = crate::app_base_dir()?.join("Forge_Database.json");
+    let raw = serde_json::to_string_pretty(db)
+        .map_err(|e| format!("Failed to serialize Forge_Database.json: {}", e))?;
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, raw).map_err(|e| format!("Failed to write temp db: {}", e))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("Failed to rename db: {}", e))?;
+    Ok(())
+}
+
+/// Upsert a library entry from an arbitrary `/list` JSON body. Requires `title`.
+/// Maps `custom_release_year`/`custom_developer`/`custom_publisher` onto the
+/// real fields, overlays any ForgeLibraryEntry fields present, preserves the rest.
+pub fn upsert_library_entry(
+    db: &mut ForgeDatabase,
+    body: &serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    let title = body
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "title required".to_string())?
+        .to_string();
+
+    let existing = db.library.get(&title).cloned().unwrap_or_default();
+    // Overlay on the serialized existing entry — serde ignores unknown keys,
+    // so arbitrary extra body fields are dropped and known ones merge in.
+    let mut obj = match serde_json::to_value(&existing) {
+        Ok(serde_json::Value::Object(o)) => o,
+        _ => return Err("entry serialize failed".to_string()),
+    };
+    for (k, v) in body {
+        let key = match k.as_str() {
+            "custom_release_year" => "release_year",
+            "custom_developer" => "developer",
+            "custom_publisher" => "publisher",
+            other => other,
+        };
+        obj.insert(key.to_string(), v.clone());
+    }
+    obj.insert("title".to_string(), serde_json::Value::String(title.clone()));
+    let entry: crate::config::ForgeLibraryEntry =
+        serde_json::from_value(serde_json::Value::Object(obj))
+            .map_err(|e| format!("invalid entry fields: {}", e))?;
+    db.library.insert(title.clone(), entry);
+    Ok(title)
+}
+
+/// Remove a process (case-insensitive) from the delisted list.
+pub fn unexile(db: &mut ForgeDatabase, process: &str) {
+    let p = process.to_lowercase();
+    db.delisted_apps.retain(|x| x != &p);
+}
+
+async fn forge_full_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    check_token(&headers, q.token.as_deref())?;
+    let db = load_db().map_err(internal)?;
+    Ok(Json(serde_json::to_value(db.library).map_err(|e| internal(e.to_string()))?))
+}
+
+async fn exiled_apps_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    check_token(&headers, q.token.as_deref())?;
+    let db = load_db().map_err(internal)?;
+    Ok(Json(serde_json::json!(db.delisted_apps)))
+}
+
+async fn list_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    check_token(&headers, q.token.as_deref())?;
+    let obj = body.as_object().ok_or(StatusCode::BAD_REQUEST)?;
+    let mut db = load_db().map_err(internal)?;
+    let title = upsert_library_entry(&mut db, obj).map_err(|e| {
+        log::warn!("[SERVER] /list rejected: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
+    save_db(&db).map_err(internal)?;
+    Ok(Json(serde_json::json!({ "status": "ok", "title": title })))
+}
+
+#[derive(Deserialize)]
+struct UnexileBody {
+    process: String,
+}
+
+async fn unexile_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+    Json(body): Json<UnexileBody>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    check_token(&headers, q.token.as_deref())?;
+    if body.process.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let mut db = load_db().map_err(internal)?;
+    unexile(&mut db, body.process.trim());
+    save_db(&db).map_err(internal)?;
+    Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
+async fn export_meta_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    check_token(&headers, q.token.as_deref())?;
+    let db = load_db().map_err(internal)?;
+    Ok(Json(serde_json::to_value(db).map_err(|e| internal(e.to_string()))?))
+}
+
+async fn import_meta_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+    Json(db): Json<ForgeDatabase>, // typed: rejects malformed bodies with 4xx
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    check_token(&headers, q.token.as_deref())?;
+    save_db(&db).map_err(internal)?;
+    Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
+#[derive(Deserialize)]
+struct ScanBody {
+    title: String,
+}
+
+/// Full external metadata scan (RAWG / IGDB / SteamGridDB), merged into the
+/// existing entry (user-set fields win) and saved back to the DB.
+async fn scan_metadata_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+    Json(body): Json<ScanBody>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    check_token(&headers, q.token.as_deref())?;
+    let title = body.title.trim().to_string();
+    if title.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let keys = load_config().map(|c| c.api_keys).unwrap_or_default();
+    let mut db = load_db().map_err(internal)?;
+    let mut existing = db.library.get(&title).cloned().unwrap_or_default();
+    existing.title = title.clone();
+    let merged = crate::metadata::scan(&title, &keys, existing).await;
+    db.library.insert(title, merged.clone());
+    save_db(&db).map_err(internal)?;
+    Ok(Json(serde_json::to_value(merged).map_err(|e| internal(e.to_string()))?))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Browser-initiated OAuth logins (mirror the kick_login/twitch_login commands)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async fn kick_login_handler(
+    State(state): State<ServerState>,
+) -> Result<Redirect, StatusCode> {
+    let config = load_config().ok_or_else(|| internal("Config.json unavailable".into()))?;
+    let client_id = config.broadcaster.kick_client;
+    if client_id.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let verifier = crate::auth::generate_code_verifier();
+    let challenge = crate::auth::generate_code_challenge(&verifier);
+    let state_token = crate::auth::generate_code_verifier();
+    state.oauth.pkce.lock().unwrap().insert(
+        "kick".to_string(),
+        crate::auth::PkceState {
+            verifier,
+            state: state_token.clone(),
+        },
+    );
+    Ok(Redirect::temporary(&crate::auth::build_kick_auth_url(
+        &client_id,
+        &state_token,
+        &challenge,
+    )))
+}
+
+async fn twitch_login_handler() -> Result<Redirect, StatusCode> {
+    let config = load_config().ok_or_else(|| internal("Config.json unavailable".into()))?;
+    let client_id = config.broadcaster.twitch_client;
+    if client_id.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    Ok(Redirect::temporary(&crate::auth::build_twitch_auth_url(&client_id)))
 }
 
 /// Build the status payload the overlays consume — game info from the native
@@ -208,6 +421,15 @@ fn build_router(state: ServerState) -> Router {
         .route("/settings", get(settings_handler))
         .route("/ws", get(ws_handler))
         .route("/health", get(health_handler))
+        .route("/api/forge-full", get(forge_full_handler))
+        .route("/api/exiled-apps", get(exiled_apps_handler))
+        .route("/list", post(list_handler))
+        .route("/unexile", post(unexile_handler))
+        .route("/export-meta", get(export_meta_handler))
+        .route("/import-meta", post(import_meta_handler))
+        .route("/api/scan-metadata", post(scan_metadata_handler))
+        .route("/kick/login", get(kick_login_handler))
+        .route("/twitch/login", get(twitch_login_handler))
         .route(
             "/oauth/callback/{platform}",
             get(crate::auth::oauth_callback),
@@ -307,4 +529,51 @@ pub async fn start_server(state: ServerState) -> Result<(), String> {
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::ForgeLibraryEntry;
+
+    #[test]
+    fn list_maps_custom_fields_and_preserves_existing() {
+        let mut db = ForgeDatabase::default();
+        db.library.insert(
+            "Celeste".to_string(),
+            ForgeLibraryEntry {
+                title: "Celeste".to_string(),
+                cover_url: "http://x/cover.jpg".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let body = serde_json::json!({
+            "title": "Celeste",
+            "custom_release_year": "2018",
+            "custom_developer": "Maddy Makes Games",
+            "custom_publisher": "Maddy Makes Games",
+            "genre": "PLATFORMER",
+            "not_a_real_field": "ignored",
+        });
+        let title = upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+        let e = &db.library[&title];
+        assert_eq!(e.release_year, "2018");
+        assert_eq!(e.developer, "Maddy Makes Games");
+        assert_eq!(e.publisher, "Maddy Makes Games");
+        assert_eq!(e.genre, "PLATFORMER");
+        assert_eq!(e.cover_url, "http://x/cover.jpg"); // untouched field preserved
+
+        // title is required
+        let bad = serde_json::json!({ "genre": "X" });
+        assert!(upsert_library_entry(&mut db, bad.as_object().unwrap()).is_err());
+    }
+
+    #[test]
+    fn unexile_removes_case_insensitive() {
+        let mut db = ForgeDatabase::default();
+        db.delisted_apps = vec!["celeste.exe".to_string(), "other.exe".to_string()];
+        unexile(&mut db, "Celeste.EXE");
+        assert_eq!(db.delisted_apps, vec!["other.exe".to_string()]);
+    }
 }
