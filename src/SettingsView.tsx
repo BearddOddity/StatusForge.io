@@ -70,7 +70,22 @@ function EngineSubTab({
     tauriApi("get_platform")
       .then((p) => setPlatform(typeof p === "string" ? p : "windows"))
       .catch(() => setPlatform("windows"));
+    tauriApi("get_autostart")
+      .then((v) => setAutostart(v === true))
+      .catch(() => setAutostart(false));
   }, [loadConfig]);
+
+  const [autostart, setAutostart] = useState(false);
+  const toggleAutostart = async () => {
+    const next = !autostart;
+    try {
+      await tauriApi("set_autostart", { enabled: next });
+      setAutostart(next);
+      toast(next ? "StatusForge will start on login" : "Autostart disabled", "success");
+    } catch (e) {
+      toast(`Autostart failed: ${e}`, "error");
+    }
+  };
 
   useEffect(() => {
     if (!config || skipSave.current) return;
@@ -155,6 +170,15 @@ function EngineSubTab({
           >
             ↻ Regenerate
           </button>
+        </div>
+        <div className="flex items-center justify-between p-3 mt-3 bg-white/[0.02] border border-white/5 rounded-xl">
+          <div>
+            <p className="text-xs text-white/70">Start on login</p>
+            <p className="text-[10px] text-white/30 mt-0.5">
+              Launch StatusForge automatically when you sign in. Off by default.
+            </p>
+          </div>
+          <Toggle on={autostart} onToggle={toggleAutostart} />
         </div>
       </CollapsibleSection>
 

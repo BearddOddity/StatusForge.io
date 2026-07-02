@@ -30,6 +30,11 @@ async function getStatus(): Promise<Status | null> {
 export default function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [pin, setPin] = useState("");
+  const [autostart, setAutostart] = useState(false);
+
+  useEffect(() => {
+    invoke<boolean>("get_autostart").then(setAutostart).catch(() => setAutostart(false));
+  }, []);
 
   const refresh = useCallback(async () => {
     const s = await getStatus();
@@ -178,6 +183,18 @@ export default function App() {
               className={`spark-btn ${autoPush ? "spark-btn-success" : "spark-btn-ghost"}`}
             >
               {autoPush ? "Auto ●" : "Auto ○"}
+            </button>
+            <button
+              title="Start Spark when you log in (off by default)"
+              onClick={async () => {
+                try {
+                  const next = await invoke<boolean>("set_autostart", { enabled: !autostart });
+                  setAutostart(next);
+                } catch { /* leave toggle unchanged */ }
+              }}
+              className={`spark-btn ${autostart ? "spark-btn-success" : "spark-btn-ghost"}`}
+            >
+              {autostart ? "Boot ●" : "Boot ○"}
             </button>
           </div>
         </div>
