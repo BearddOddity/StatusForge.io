@@ -42,16 +42,6 @@ export interface ApiKeys {
   igdb_token: string;
 }
 
-export type DetectionMode = "python" | "native" | "spark";
-
-export interface DetectionConfig {
-  mode: DetectionMode;
-  python_fallback: boolean;
-  scan_interval_secs: number;
-  dev_tools_enabled: boolean;
-  closed_beta_channel: boolean;
-}
-
 export interface EngineSettings {
   idle_category: string;
   sb_port: number;
@@ -103,7 +93,6 @@ export interface AppConfig {
   api_keys: ApiKeys;
   engine_settings: EngineSettings;
   broadcaster: BroadcasterConfig;
-  detection: DetectionConfig;
 }
 
 export interface ForgeLibraryEntry {

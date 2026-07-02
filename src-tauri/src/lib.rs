@@ -1,19 +1,16 @@
-use std::process::Command;
-mod config;
+pub mod config;
 mod auth;
-mod scanner;
-use config::{AppConfig, DetectionMode, EngineStatus};
+pub mod scanner;
+pub mod server;
+pub mod hub;
+pub mod spark_protocol;
+use config::{AppConfig, EngineStatus};
 
 use std::sync::{Arc, Mutex, OnceLock};
-use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use serde::Deserialize;
+use tauri::{Emitter, Manager};
 
-static ENGINE_PROCESS: OnceLock<Mutex<Option<std::process::Child>>> = OnceLock::new();
 static APP_BASE_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
-
-fn engine_process() -> &'static Mutex<Option<std::process::Child>> {
-    ENGINE_PROCESS.get_or_init(|| Mutex::new(None))
-}
 
 /// Initialize the app base directory from the Tauri resource dir.
 /// Must be called from `setup()` so we have an AppHandle.
@@ -26,11 +23,11 @@ fn init_app_base_dir(app: &tauri::AppHandle) {
         .expect("Failed to resolve resource dir");
 
     // In dev mode, resource_dir is src-tauri/ but our data files (Config.json,
-    // presence.py, etc.) live in the workspace root (parent of src-tauri/).
+    // widgets/, etc.) live in the workspace root (parent of src-tauri/).
     // In production, resources are bundled directly into resource_dir.
     let base = if resource_dir.join("Config.json").exists() {
         resource_dir.to_path_buf()
-    } else if resource_dir.parent().map_or(false, |p| p.join("Config.json").exists()) {
+    } else if resource_dir.parent().is_some_and(|p| p.join("Config.json").exists()) {
         resource_dir.parent().unwrap().to_path_buf()
     } else {
         resource_dir.to_path_buf()
@@ -130,54 +127,24 @@ fn get_platform() -> String {
     { "macos".to_string() }
 }
 
-/// Read the widget token from Config.json to authenticate with the Python sidecar.
-fn read_widget_token() -> Option<String> {
-    let base = app_base_dir().ok()?;
-    let config_path = base.join("Config.json");
-    if !config_path.exists() { return None; }
-    let content = std::fs::read_to_string(&config_path).ok()?;
-    let config: serde_json::Value = serde_json::from_str(&content).ok()?;
-    config.get("engine_settings")?.get("widget_token")?.as_str().map(|s| s.to_string())
-}
-
+/// Engine status for the frontend — built directly from the in-process native
+/// engine state (no HTTP round-trip; the Python sidecar is gone).
 #[tauri::command]
-async fn get_engine_status() -> Result<EngineStatus, String> {
-    let token = read_widget_token();
-    // Use a shared client to avoid re-creating connection pool on every call
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    let client = CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(2))
-            .build()
-            .expect("Failed to build HTTP client")
-    });
-
-    let mut request = client.get("http://127.0.0.1:53735/status");
-    if let Some(t) = token {
-        request = request.header("X-Forge-Token", t);
-    }
-
-    match request.send().await {
-        Ok(response) => {
-            if response.status().is_success() {
-                let data: serde_json::Value = response.json()
-                    .await
-                    .map_err(|e| format!("Failed to parse status: {}", e))?;
-                Ok(EngineStatus {
-                    running: true,
-                    game_title: data.get("game_title").and_then(|v| v.as_str()).unwrap_or("Unknown").to_string(),
-                    process_name: data.get("process_name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    is_playing: data.get("is_playing").and_then(|v| v.as_bool()).unwrap_or(false),
-                    ..Default::default()
-                })
-            } else if response.status().as_u16() == 401 {
-                Ok(EngineStatus { running: true, game_title: "Auth Error".to_string(), process_name: String::new(), is_playing: false, ..Default::default() })
-            } else {
-                Ok(EngineStatus { running: false, game_title: String::new(), process_name: String::new(), is_playing: false, ..Default::default() })
-            }
-        }
-        Err(_) => Ok(EngineStatus { running: false, game_title: String::new(), process_name: String::new(), is_playing: false, ..Default::default() }),
-    }
+fn get_engine_status(state: tauri::State<Arc<NativeEngineState>>) -> Result<EngineStatus, String> {
+    let status = server::build_status(&state);
+    let s = |k: &str| status.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    Ok(EngineStatus {
+        running: state.running.load(Ordering::Relaxed),
+        game_title: s("game_title"),
+        process_name: s("process_name"),
+        is_playing: status.get("is_playing").and_then(|v| v.as_bool()).unwrap_or(false),
+        genre: s("genre"),
+        developer: s("developer"),
+        publisher: s("publisher"),
+        release_date: s("release_date"),
+        cover_url: s("cover_url"),
+        ..Default::default()
+    })
 }
 
 #[tauri::command]
@@ -251,227 +218,38 @@ fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
     Ok("Config saved successfully".to_string())
 }
 
-/// Read detection mode from Config.json
-fn read_detection_mode() -> DetectionMode {
-    let base = match app_base_dir() { Ok(b) => b, Err(_) => return DetectionMode::Python };
-    let config_path = base.join("Config.json");
-    if !config_path.exists() { return DetectionMode::Python; }
-    let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-    if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
-        config.detection.mode
-    } else {
-        // Legacy: check for old detection_mode field in engine_settings
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(mode) = v.get("engine_settings").and_then(|e| e.get("detection_mode")).and_then(|m| m.as_str()) {
-                match mode {
-                    "spark" => return DetectionMode::Spark,
-                    "native" => return DetectionMode::Native,
-                    _ => return DetectionMode::Python,
-                }
-            }
-        }
-        DetectionMode::Python
-    }
-}
-
+/// Start the detection engine. Detection is always native (Rust) — the
+/// Python sidecar has been removed.
 #[tauri::command]
-fn start_engine(_payload: EnginePayload) -> Result<String, String> {
-    let mode = read_detection_mode();
-
-    // Native engine requires both dev_tools_enabled and closed_beta_channel
-    if mode == DetectionMode::Native {
-        let base = app_base_dir().map_err(|e| e)?;
-        let config_path = base.join("Config.json");
-        if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-            if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
-                if !config.detection.dev_tools_enabled || !config.detection.closed_beta_channel {
-                    return Err("Native engine requires Dev Tools mode and Closed Beta Channel to be enabled. Set detection.dev_tools_enabled and detection.closed_beta_channel to true in Config.json and restart.".to_string());
-                }
-            }
-        }
-    }
-
-    match mode {
-        DetectionMode::Python => start_python_engine(),
-        DetectionMode::Native => start_native_engine(),
-        DetectionMode::Spark => {
-            // Spark mode doesn't start a local engine — it receives UDP heartbeats
-            Ok("Spark mode active — listening for UDP heartbeats. No local engine needed.".to_string())
-        }
-    }
+fn start_engine(
+    _payload: EnginePayload,
+    state: tauri::State<Arc<NativeEngineState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    spawn_engine_loop(Arc::clone(&state), app_handle)
 }
 
-
-
-/// Check if a Python path should be skipped (known bad sources).
-fn is_bad_python(path: &std::path::Path) -> bool {
-    let s = path.to_string_lossy().to_lowercase();
-    s.contains("hermes")
-        || s.contains("appdata\\local\\microsoft\\windowsapps")
-        || s.contains("\\windowsapps\\")
-}
-
-/// Find a working Python interpreter by checking candidates in order.
-/// Iterates ALL matches on PATH for each candidate (not just the first),
-/// so that filtered entries (Windows Store stub, hermes venv) don't block
-/// the real interpreter later in PATH.
-fn find_python() -> Result<std::path::PathBuf, String> {
-    let candidates = ["python3", "python"];
-
-    // Collect every match on PATH for each candidate, then filter.
-    for name in &candidates {
-        if let Ok(paths) = which::which_all(name) {
-        for path in paths {
-            if is_bad_python(&path) {
-                continue;
-            }
-            if let Ok(output) = std::process::Command::new(&path).arg("--version").output() {
-                if output.status.success() {
-                    return Ok(path);
-                }
-            }
-        }
-        }
-    }
-
-    // Fallback: return first match even if filtered.
-    for name in &candidates {
-        if let Ok(path) = which::which(name) {
-            return Ok(path);
-        }
-    }
-
-    Err("No Python interpreter found. Install Python from python.org and ensure it is on PATH.".to_string())
-}
-fn engine_port_is_up() -> bool {
-    use std::net::TcpStream;
-    TcpStream::connect_timeout(
-        &"127.0.0.1:53735".parse().unwrap(),
-        std::time::Duration::from_millis(500),
-    )
-    .is_ok()
-}
-
-fn start_python_engine() -> Result<String, String> {
-    let mut process_guard = engine_process().lock().unwrap();
-    if process_guard.is_some() {
-        return Ok("Engine already running".to_string());
-    }
-    let app_dir = app_base_dir()?;
-
-    let python_path = find_python()?;
-    let presence_py = app_dir.join("presence.py");
-    if !presence_py.exists() {
-        return Err(format!("presence.py not found at {:?}", presence_py));
-    }
-
-    let mut cmd = Command::new(python_path);
-    cmd.arg(&presence_py).current_dir(&app_dir);
-
-    // Pass keychain tokens to Python via environment variables so it never
-    // reads secrets from Config.json.
-    let token_entries = [
-        ("twitch_token", "SF_TWITCH_TOKEN"),
-        ("twitch_refresh", "SF_TWITCH_REFRESH"),
-        ("twitch_secret", "SF_TWITCH_SECRET"),
-        ("twitch_client_id", "SF_TWITCH_CLIENT_ID"),
-        ("kick_token", "SF_KICK_TOKEN"),
-        ("kick_refresh", "SF_KICK_REFRESH"),
-        ("kick_secret", "SF_KICK_SECRET"),
-        ("kick_client_id", "SF_KICK_CLIENT_ID"),
-        ("igdb_token", "SF_IGDB_TOKEN"),
-        ("igdb_secret", "SF_IGDB_SECRET"),
-        ("rawg", "SF_RAWG_KEY"),
-        ("steamgrid", "SF_STEAMGRID_KEY"),
-    ];
-    for (keychain_name, env_var) in &token_entries {
-        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, *keychain_name) {
-            if let Ok(val) = entry.get_password() {
-                if !val.is_empty() {
-                    cmd.env(env_var, val);
-                }
-            }
-        }
-    }
-
-    let mut child = cmd.spawn()
-        .map_err(|e| format!("Failed to start engine: {}", e))?;
-    let pid = child.id();
-
-    // Give the process a moment to either fail or execv into the real engine.
-    std::thread::sleep(std::time::Duration::from_secs(3));
-    match child.try_wait() {
-        Ok(Some(_)) => {
-            if engine_port_is_up() {
-                return Ok(format!("Engine started (PID {} replaced via execv)", pid));
-            }
-            return Err("Engine process exited immediately. Check debug.log for errors.".to_string());
-        }
-        Ok(None) => {}
-        Err(e) => {
-            return Err(format!("Failed to check engine status: {}", e));
-        }
-    }
-    *process_guard = Some(child);
-    Ok(format!("Engine started with PID {}", pid))
-}
-
-/// Get current detection mode from config
+/// Detection mode is always "native" now. Kept for frontend compatibility.
 #[tauri::command]
 fn get_detection_mode() -> String {
-    match read_detection_mode() {
-        DetectionMode::Python => "python".to_string(),
-        DetectionMode::Native => "native".to_string(),
-        DetectionMode::Spark => "spark".to_string(),
-    }
+    "native".to_string()
 }
 
 #[tauri::command]
-fn stop_engine(_payload: EnginePayload) -> Result<String, String> {
-    let mut process_guard = engine_process().lock().unwrap();
-
-    if let Some(mut child) = process_guard.take() {
-        let pid = child.id();
-        let _ = child.kill();
-        let _ = child.wait();
-        return Ok(format!("Engine stopped (PID {})", pid));
-    }
-
-    // Child handle is stale but engine might be running (execv case).
-    // Kill any process listening on the engine port.
-    if engine_port_is_up() {
-        if let Ok(output) = std::process::Command::new("netstat").args(&["-ano"]).output() {
-            let text = String::from_utf8_lossy(&output.stdout);
-            let mut killed_pids = Vec::new();
-            for line in text.lines() {
-                let trimmed = line.trim();
-                if trimmed.contains("127.0.0.1:53735") && trimmed.contains("LISTENING") {
-                    if let Some(pid_str) = trimmed.split_whitespace().last() {
-                        if let Ok(pid) = pid_str.parse::<u32>() {
-                            if !killed_pids.contains(&pid) {
-                                killed_pids.push(pid);
-                                let _ = std::process::Command::new("taskkill")
-                                    .args(&["/PID", pid_str, "/F"])
-                                    .output();
-                            }
-                        }
-                    }
-                }
-            }
-            if !killed_pids.is_empty() {
-                return Ok(format!("Engine stopped (PIDs: {})", killed_pids.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ")));
-            }
-        }
-    }
-
-    Ok("Engine not running".to_string())
+fn stop_engine(
+    _payload: EnginePayload,
+    state: tauri::State<Arc<NativeEngineState>>,
+) -> Result<String, String> {
+    state.running.store(false, Ordering::Relaxed);
+    Ok("Engine stopped".to_string())
 }
 
 #[tauri::command]
-fn is_engine_running(_payload: EnginePayload) -> bool {
-    let child_alive = engine_process().lock().unwrap().is_some();
-    child_alive || engine_port_is_up()
+fn is_engine_running(
+    _payload: EnginePayload,
+    state: tauri::State<Arc<NativeEngineState>>,
+) -> bool {
+    state.running.load(Ordering::Relaxed)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -497,10 +275,17 @@ pub struct NativeEngineState {
     pub start_time: Mutex<f64>,
     /// Grace period tracker
     pub lost_focus_time: Mutex<Option<f64>>,
+    /// Live status feed for WebSocket widget subscribers
+    pub status_tx: tokio::sync::watch::Sender<serde_json::Value>,
 }
 
 impl Default for NativeEngineState {
     fn default() -> Self {
+        let (status_tx, _rx) = tokio::sync::watch::channel(serde_json::json!({
+            "running": false,
+            "game_title": "",
+            "is_playing": false,
+        }));
         Self {
             running: Arc::new(AtomicBool::new(false)),
             current_game: Mutex::new(None),
@@ -508,15 +293,16 @@ impl Default for NativeEngineState {
             is_playing: Mutex::new(false),
             start_time: Mutex::new(0.0),
             lost_focus_time: Mutex::new(None),
+            status_tx,
         }
     }
 }
 
-fn start_native_engine() -> Result<String, String> {
-    // Fully native on Windows, macOS, and Linux.
-    // On macOS, window titles require the Screen Recording permission — the
-    // engine loop surfaces that via `permission_error` in the status payload.
-    Ok("Native engine detection module loaded. Use start_native_engine_loop to begin scanning.".to_string())
+impl NativeEngineState {
+    /// Recompute the widget status payload and push it to WS subscribers.
+    pub fn push_status(&self) {
+        let _ = self.status_tx.send(server::build_status(self));
+    }
 }
 
 /// Start the native engine detection loop in a background thread.
@@ -526,14 +312,20 @@ fn start_native_engine_loop(
     state: tauri::State<Arc<NativeEngineState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
-    if state.running.load(Ordering::Relaxed) {
+    spawn_engine_loop(Arc::clone(&state), app_handle)
+}
+
+/// Shared implementation for `start_engine` / `start_native_engine_loop`.
+fn spawn_engine_loop(
+    state_arc: Arc<NativeEngineState>,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    if state_arc.running.load(Ordering::Relaxed) {
         return Ok("Native engine loop already running".to_string());
     }
 
-    state.running.store(true, Ordering::Relaxed);
-    let running = state.running.clone();
-    // Clone the Arc so the thread owns its own reference
-    let state_arc: Arc<NativeEngineState> = Arc::clone(&state);
+    state_arc.running.store(true, Ordering::Relaxed);
+    let running = state_arc.running.clone();
 
     std::thread::spawn(move || {
         let log: LogFn = Box::new(|msg: &str, level: &str, _cd: u64| {
@@ -684,8 +476,9 @@ fn start_native_engine_loop(
                         .unwrap_or_default()
                         .as_secs_f64();
 
-                    // Emit event to frontend
+                    // Emit event to frontend + push to WS widgets
                     let _ = app_handle.emit("game-detected", &game);
+                    state_arc.push_status();
                 }
             } else {
                 if current_game.is_some() {
@@ -717,6 +510,7 @@ fn start_native_engine_loop(
                         *st = 0.0;
 
                         let _ = app_handle.emit("game-cleared", &idle_category);
+                        state_arc.push_status();
                     }
                 }
             }
@@ -866,9 +660,7 @@ fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
 }
 
 /// Retrieve all keychain-stored tokens as a JSON object.
-/// This is called by the Tauri frontend (before starting the engine) to pass
-/// tokens to the Python sidecar via environment variables, so the Python sidecar
-/// never needs to read tokens from Config.json.
+/// Called by the frontend so API keys never need to live in Config.json.
 #[tauri::command]
 fn get_all_keychain_tokens() -> Result<serde_json::Value, String> {
     let broadcaster_keys = [
@@ -880,7 +672,7 @@ fn get_all_keychain_tokens() -> Result<serde_json::Value, String> {
 
     let mut map = serde_json::Map::new();
     for key in &broadcaster_keys {
-        let entry = keyring::Entry::new(KEYRING_SERVICE, *key);
+        let entry = keyring::Entry::new(KEYRING_SERVICE, key);
         if let Ok(e) = entry {
             if let Ok(val) = e.get_password() {
                 if !val.is_empty() {
@@ -890,7 +682,7 @@ fn get_all_keychain_tokens() -> Result<serde_json::Value, String> {
         }
     }
     for key in &api_keys {
-        let entry = keyring::Entry::new(KEYRING_SERVICE, *key);
+        let entry = keyring::Entry::new(KEYRING_SERVICE, key);
         if let Ok(e) = entry {
             if let Ok(val) = e.get_password() {
                 if !val.is_empty() {
@@ -900,267 +692,6 @@ fn get_all_keychain_tokens() -> Result<serde_json::Value, String> {
         }
     }
     Ok(serde_json::Value::Object(map))
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SPARK — Dual-PC Game Detection Agent
-// ═══════════════════════════════════════════════════════════════════════════════
-
-use std::net::UdpSocket;
-use tauri::Emitter;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SparkConfig {
-    pub pin: String,
-    pub hub_port: u16,
-    pub scan_interval_secs: u64,
-    pub auto_push: bool,
-}
-
-impl Default for SparkConfig {
-    fn default() -> Self {
-        Self {
-            pin: "0000".to_string(),
-            hub_port: 53735,
-            scan_interval_secs: 5,
-            auto_push: true,
-        }
-    }
-}
-
-pub struct SparkState {
-    pub config: Mutex<SparkConfig>,
-    pub current_game: Mutex<Option<SparkGameInfo>>,
-    pub connected: Mutex<bool>,
-    pub hostname: String,
-    pub running: Arc<AtomicBool>,
-}
-
-pub fn init_spark_state() -> SparkState {
-    let hostname = hostname::get()
-        .ok()
-        .and_then(|h| h.into_string().ok())
-        .unwrap_or_else(|| "Unknown-PC".to_string());
-
-    SparkState {
-        config: Mutex::new(SparkConfig::default()),
-        current_game: Mutex::new(None),
-        connected: Mutex::new(false),
-        hostname,
-        running: Arc::new(AtomicBool::new(true)),
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SparkGameInfo {
-    pub process: String,
-}
-
-fn spark_detect_game() -> Option<SparkGameInfo> {
-    use sysinfo::ProcessesToUpdate;
-    use sysinfo::System;
-
-    let mut sys = System::new();
-    sys.refresh_processes(ProcessesToUpdate::All, true);
-
-    let known_games: &[&str] = &[
-        "eldenring.exe", "witcher3.exe", "cyberpunk2077.exe", "gta5.exe",
-        "rdr2.exe", "minecraft.exe", "valorant.exe", "cs2.exe",
-        "dota2.exe", "lol.exe", "fortnite.exe", "apex.exe",
-        "overwatch.exe", "destiny2.exe", "warzone.exe", "cod.exe",
-        "battlefield.exe", "starfield.exe", "baldursgate3.exe",
-        "hogwarts.exe", "palworld.exe", "helldivers2.exe", "satisfactory.exe",
-        "rust.exe", "ark.exe", "terraria.exe", "stardewvalley.exe",
-        "hollow_knight.exe", "celeste.exe", "hades.exe", "riskofrain2.exe",
-        "deeprockgalactic.exe", "left4dead2.exe", "portal2.exe",
-        "half-life.exe", "skyrim.exe", "fallout4.exe", "oblivion.exe",
-        "morrowind.exe", "eso.exe", "ffxiv.exe", "wow.exe",
-        "diablo.exe", "diablo4.exe", "pathofexile.exe", "grimdawn.exe",
-        "torchlight.exe", "borderlands.exe", "borderlands3.exe",
-        "division.exe", "division2.exe", "far cry.exe", "farcry5.exe",
-        "assassinscreed.exe", "watch_dogs.exe", "ghostrecon.exe",
-        "splintercell.exe", "justcause.exe", "madmax.exe",
-        "metalgear.exe", "deathstranding.exe", "silenthill.exe",
-        "residentevil.exe", "re4.exe", "deadspace.exe",
-        "bioshock.exe", "prey.exe", "dishonored.exe",
-        "doom.exe", "eternal.exe", "quake.exe", "unreal.exe",
-        "rocketleague.exe", "fallguys.exe", "amongus.exe",
-        "phasmophobia.exe", "gtav.exe", "fivem.exe",
-        "spotify.exe", "discord.exe", "obs.exe", "streamlabs.exe",
-    ];
-
-    for process in sys.processes().values() {
-        let exe_name = process.name().to_str().unwrap_or("").to_lowercase();
-        let exe_key = exe_name.trim_end_matches(".exe");
-        if known_games.iter().any(|g| g.trim_end_matches(".exe") == exe_key) {
-            return Some(SparkGameInfo { process: exe_name });
-        }
-    }
-    None
-}
-
-#[derive(Serialize, Deserialize)]
-struct SparkHeartbeat {
-    app: String,
-    version: String,
-    hostname: String,
-    pin: String,
-    timestamp: f64,
-    game: SparkHeartbeatGame,
-    command: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct SparkHeartbeatGame {
-    process: Option<String>,
-    is_playing: bool,
-}
-
-fn spark_send_heartbeat(state: &SparkState, game: Option<&SparkGameInfo>) -> Result<(), Box<dyn std::error::Error>> {
-    let config = state.config.lock().unwrap();
-    let msg = SparkHeartbeat {
-        app: "StatusForge_Spark".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        hostname: state.hostname.clone(),
-        pin: config.pin.clone(),
-        timestamp: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64(),
-        game: SparkHeartbeatGame {
-            process: game.map(|g| g.process.clone()),
-            is_playing: game.is_some(),
-        },
-        command: "heartbeat".to_string(),
-    };
-    let payload = serde_json::to_string(&msg)?;
-    let socket = UdpSocket::bind("0.0.0.0:0")?;
-    socket.set_broadcast(true)?;
-    socket.set_nonblocking(false)?;
-    socket.set_write_timeout(Some(Duration::from_millis(500)))?;
-    socket.send_to(payload.as_bytes(), format!("255.255.255.255:{}", config.hub_port))?;
-    Ok(())
-}
-
-fn start_spark_scanner(state: Arc<SparkState>, app_handle: tauri::AppHandle) {
-    let running = state.running.clone();
-    std::thread::spawn(move || {
-        loop {
-            if !running.load(Ordering::Relaxed) { break; }
-            let (scan_interval, auto_push) = {
-                let c = state.config.lock().unwrap();
-                (c.scan_interval_secs, c.auto_push)
-            };
-            if auto_push {
-                let game = spark_detect_game();
-                { *state.current_game.lock().unwrap() = game.clone(); }
-                let connected = spark_send_heartbeat(&state, game.as_ref()).is_ok();
-                { *state.connected.lock().unwrap() = connected; }
-                let config = state.config.lock().unwrap();
-                let status = serde_json::json!({
-                    "hostname": &state.hostname,
-                    "connected": connected,
-                    "current_game": game,
-                    "pin": config.pin,
-                    "hub_port": config.hub_port,
-                    "scan_interval": config.scan_interval_secs,
-                    "auto_push": config.auto_push,
-                    "last_scan": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
-                });
-                let _ = app_handle.emit("spark-status-update", status);
-            }
-            std::thread::sleep(Duration::from_secs(scan_interval));
-        }
-    });
-}
-
-#[tauri::command]
-fn spark_get_status(state: tauri::State<Arc<SparkState>>) -> serde_json::Value {
-    let game = state.current_game.lock().unwrap().clone();
-    let connected = *state.connected.lock().unwrap();
-    let config = state.config.lock().unwrap();
-    serde_json::json!({
-        "hostname": state.hostname.clone(),
-        "connected": connected,
-        "current_game": game,
-        "pin": config.pin,
-        "hub_port": config.hub_port,
-        "scan_interval": config.scan_interval_secs,
-        "auto_push": config.auto_push,
-        "last_scan": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
-    })
-}
-
-#[tauri::command]
-fn spark_set_pin(state: tauri::State<Arc<SparkState>>, pin: String) -> Result<String, String> {
-    state.config.lock().map_err(|e| e.to_string())?.pin = pin;
-    Ok("PIN updated".to_string())
-}
-
-#[tauri::command]
-fn spark_set_hub_port(state: tauri::State<Arc<SparkState>>, port: u16) -> Result<String, String> {
-    state.config.lock().map_err(|e| e.to_string())?.hub_port = port;
-    Ok(format!("Hub port set to {}", port))
-}
-
-#[tauri::command]
-fn spark_set_scan_interval(state: tauri::State<Arc<SparkState>>, secs: u64) -> Result<String, String> {
-    state.config.lock().map_err(|e| e.to_string())?.scan_interval_secs = secs;
-    Ok(format!("Scan interval set to {}s", secs))
-}
-
-#[tauri::command]
-fn spark_toggle_auto_push(state: tauri::State<Arc<SparkState>>) -> Result<bool, String> {
-    let mut config = state.config.lock().map_err(|e| e.to_string())?;
-    config.auto_push = !config.auto_push;
-    Ok(config.auto_push)
-}
-
-#[tauri::command]
-fn spark_manual_push(state: tauri::State<Arc<SparkState>>) -> Result<String, String> {
-    let game = spark_detect_game();
-    { *state.current_game.lock().map_err(|e| e.to_string())? = game.clone(); }
-    match spark_send_heartbeat(&state, game.as_ref()) {
-        Ok(_) => Ok("Pushed to StatusForge".to_string()),
-        Err(e) => Err(format!("Push failed: {}", e)),
-    }
-}
-
-#[tauri::command]
-fn spark_shutdown(state: tauri::State<Arc<SparkState>>) -> Result<String, String> {
-    state.running.store(false, Ordering::Relaxed);
-    Ok("Scanner stopped".to_string())
-}
-
-#[tauri::command]
-async fn spark_show_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("spark") {
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn spark_hide_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("spark") {
-        window.hide().map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn spark_toggle_window(app: tauri::AppHandle) -> Result<bool, String> {
-    if let Some(window) = app.get_webview_window("spark") {
-        let visible = window.is_visible().map_err(|e| e.to_string())?;
-        if visible {
-            window.hide().map_err(|e| e.to_string())?;
-            Ok(false)
-        } else {
-            window.show().map_err(|e| e.to_string())?;
-            window.set_focus().map_err(|e| e.to_string())?;
-            Ok(true)
-        }
-    } else {
-        Ok(false)
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1312,53 +843,52 @@ fn dev_get_log_tail(lines: usize) -> Result<Vec<String>, String> {
     Ok(all_lines[start..].iter().map(|l| l.to_string()).collect())
 }
 
-/// Get dev diagnostics: platform, engine pid, detection mode, native engine status.
+/// Get dev diagnostics: platform, detection mode, native engine status.
 #[tauri::command]
 fn dev_get_diagnostics(
     state: tauri::State<Arc<NativeEngineState>>,
+    hub: tauri::State<Arc<hub::HubState>>,
 ) -> serde_json::Value {
-    let engine_pid = engine_process()
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|c| c.id())
-        .unwrap_or(0);
-
     serde_json::json!({
         "platform": get_platform(),
-        "engine_pid": engine_pid,
         "detection_mode": get_detection_mode(),
         "native_engine_running": state.running.load(Ordering::Relaxed),
         "native_current_game": state.current_game.lock().unwrap().clone(),
         "native_process": state.current_process.lock().unwrap().clone(),
         "native_is_playing": *state.is_playing.lock().unwrap(),
+        "hub_paired_spark": hub.paired.lock().unwrap().clone(),
+        "permission_error": scanner::platform::permission_error(),
     })
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Entry Point — both windows share this process
+// Entry Point
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let spark_state = Arc::new(init_spark_state());
-
     let oauth_state = Arc::new(auth::OAuthState::new());
+    let engine_state = Arc::new(NativeEngineState::default());
+    let hub_state = Arc::new(hub::HubState::new());
 
     tauri::Builder::default()
-        .manage(spark_state.clone())
         .manage(oauth_state.clone())
-        .manage(Arc::new(NativeEngineState::default()))
+        .manage(engine_state.clone())
+        .manage(hub_state.clone())
         .setup(move |app| {
             init_app_base_dir(app.handle());
-            let handle = app.handle().clone();
-            start_spark_scanner(spark_state.clone(), handle);
 
-            // Start OAuth callback server (127.0.0.1:53735)
-            let oauth = oauth_state.clone();
+            // LAN Hub: announce on udp/53736, receive SPARK heartbeats on udp/53735
+            hub::start_hub(hub_state.clone(), engine_state.clone(), app.handle().clone());
+
+            // Widget/status + OAuth server (tcp/127.0.0.1:53735, HTTP + TLS)
+            let server_state = server::ServerState {
+                engine: engine_state.clone(),
+                oauth: oauth_state.clone(),
+            };
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = auth::start_oauth_server(oauth).await {
-                    log::error!("[AUTH] Failed to start OAuth server: {}", e);
+                if let Err(e) = server::start_server(server_state).await {
+                    log::error!("[SERVER] Failed to start widget/OAuth server: {}", e);
                 }
             });
 
@@ -1379,16 +909,9 @@ pub fn run() {
             delete_secret_token,
             migrate_tokens_to_keychain,
             get_all_keychain_tokens,
-            spark_get_status,
-            spark_set_pin,
-            spark_set_hub_port,
-            spark_set_scan_interval,
-            spark_toggle_auto_push,
-            spark_manual_push,
-            spark_shutdown,
-            spark_show_window,
-            spark_hide_window,
-            spark_toggle_window,
+            hub::hub_get_status,
+            hub::hub_set_pin,
+            hub::hub_set_pairing_key,
             get_detection_mode,
             start_native_engine_loop,
             stop_native_engine_loop,

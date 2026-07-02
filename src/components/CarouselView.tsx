@@ -133,7 +133,7 @@ function CarouselCard({
     tiltRef.current = { x: 0, y: 0 };
     const el = cardRef.current?.firstElementChild as HTMLElement | null;
     if (el) {
-      el.style.transform = isActive ? "scale(1.07)" : undefined;
+      el.style.transform = isActive ? "scale(1.07)" : "";
     }
   }, [isActive]);
 

@@ -11,7 +11,8 @@ export default function RoutingView({
   toast: (msg: string, type?: ToastType) => void;
 }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(null);
 
   const loadConfig = useCallback(async () => {
@@ -36,7 +37,7 @@ export default function RoutingView({
   const set = (section: string, key: string, value: string | number) => {
     setConfig((prev) => ({
       ...prev!,
-      [section]: { ...(prev as Record<string, Record<string, string | number>>)[section], [key]: value },
+      [section]: { ...(prev as unknown as Record<string, Record<string, string | number>>)[section], [key]: value },
     }));
   };
 

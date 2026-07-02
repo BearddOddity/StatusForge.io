@@ -22,20 +22,6 @@
         "hiddenTitle": false,
         "visible": true,
         "url": "index.html"
-      },
-      {
-        "label": "spark",
-        "title": "Spark",
-        "width": 380,
-        "height": 260,
-        "resizable": false,
-        "fullscreen": false,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "visible": false,
-        "skipTaskbar": true,
-        "transparent": true,
-        "url": "spark.html"
       }
     ],
     "security": {

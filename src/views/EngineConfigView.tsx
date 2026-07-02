@@ -48,9 +48,7 @@ export default function EngineConfigView({
       <Card>
         <h3 className="text-white font-semibold mb-4">Control Panel</h3>
         <p className="text-white/60 mb-5">
-          The Python engine runs as a Flask server on port 53735.
-          <br />
-          Tauri spawns it as a sidecar process.
+          The native Rust detection engine broadcasts status on port 53735.
         </p>
         <div className="flex gap-3 mb-5">
           <Btn onClick={startEngine} disabled={starting || engineStatus.running}>

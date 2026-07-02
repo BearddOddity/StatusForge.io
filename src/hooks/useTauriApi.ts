@@ -52,7 +52,7 @@ export async function saveConfig(config: AppConfig): Promise<string> {
 
 export async function getDetectionMode(): Promise<string> {
   const res = await tauriApi("get_detection_mode");
-  return typeof res === "string" ? res : "python";
+  return typeof res === "string" ? res : "native";
 }
 
 export async function getKeychainStatus(): Promise<KeychainStatus> {

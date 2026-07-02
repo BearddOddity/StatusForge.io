@@ -604,7 +604,7 @@ export function AddGamePanel({
   ) => Promise<ForgeLibraryEntry | null>;
   onSaveBase: (title: string, year: string, dev: string) => void;
   onClose: () => void;
-  toast: (msg: string, type?: string) => void;
+  toast: (msg: string, type?: "success" | "error" | "info") => void;
 }) {
   return (
     <AddGameOverlayPanel

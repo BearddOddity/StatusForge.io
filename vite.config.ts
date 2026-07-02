@@ -24,7 +24,6 @@ export default defineConfig(async () => ({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, "index.html"),
-        spark: path.resolve(__dirname, "src/spark/index.html"),
       },
     },
   },

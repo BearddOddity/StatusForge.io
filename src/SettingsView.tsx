@@ -136,11 +136,10 @@ function EngineSubTab({
         }
       >
         <p className="text-xs text-white/50 mb-5 leading-relaxed">
-          The detection engine runs on port 53735. Mode: <strong className="text-white/70">
-          {config?.detection?.mode === "native" ? "Native (Rust)" : config?.detection?.mode === "spark" ? "Spark (Dual-PC)" : "Python (Legacy)"}
-          </strong>. Platform: <strong className="text-white/70">{platform}</strong>.
-          {platform === "macos" && config?.detection?.mode !== "python" && (
-            <span className="text-yellow-400/70"> macOS requires Python (Legacy) or Spark.</span>
+          The detection engine runs on port 53735. Mode: <strong className="text-white/70">Native (Rust)</strong>.
+          Platform: <strong className="text-white/70">{platform}</strong>.
+          {platform === "macos" && (
+            <span className="text-yellow-400/70"> macOS requires the Screen Recording permission to read window titles.</span>
           )}
         </p>
         <div className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/5 rounded-xl">
@@ -159,205 +158,56 @@ function EngineSubTab({
         </div>
       </CollapsibleSection>
 
-      {/* Detection Mode & Pipeline */}
+      {/* Detection Engine & Pipeline */}
       {config && (() => {
         const isMacOS = platform === "macos";
-        const isNativeDisabled = isMacOS;
         return (
         <CollapsibleSection
-          title="Detection Mode & Pipeline"
-          description="Choose backend engine and configure the ForgeWaterfall process pipeline."
+          title="Detection Engine & Pipeline"
+          description="Native Rust detection engine and the ForgeWaterfall process pipeline."
           icon="🔄"
           badge={
-            <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 border transition-all duration-300 ${
-              config.detection?.mode === "native"
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                : config.detection?.mode === "spark"
-                ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
-                : "bg-purple-500/10 border-purple-500/20 text-purple-400"
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                config.detection?.mode === "native"
-                  ? "bg-emerald-400"
-                  : config.detection?.mode === "spark"
-                  ? "bg-blue-400"
-                  : "bg-purple-400"
-              }`} />
-              {config.detection?.mode === "native" ? "NATIVE" : config.detection?.mode === "spark" ? "SPARK" : "PYTHON"}
+            <span className="text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 border transition-all duration-300 bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              NATIVE
             </span>
           }
         >
           <p className="text-xs text-white/40 mb-4 leading-relaxed">
-            {isMacOS ? (
-              <>Native engine is <strong className="text-yellow-300/80">not available on macOS</strong>. Python (Legacy) is the recommended and fully supported option.</>
-            ) : (
-              <>Select the detection backend. <strong className="text-emerald-300/80">Native</strong> runs the engine in pure Rust — no Python required.
-              <strong className="text-purple-300/80"> Python</strong> is the legacy Flask sidecar (still fully supported).</>
+            Detection runs <strong className="text-emerald-300/80">natively in Rust</strong> on Windows, macOS, and Linux — no Python required.
+            {isMacOS && (
+              <> On macOS, grant <strong className="text-yellow-300/80">Screen Recording</strong> permission
+              (System Settings → Privacy &amp; Security) so the engine can read window titles.</>
             )}
           </p>
 
-          <div className="flex flex-col gap-2">
-            {/* Python — Legacy on Win/Linux, Recommended on macOS */}
-            <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
-              config.detection?.mode === "python"
-                ? "bg-purple-500/8 border-purple-500/25"
-                : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]"
-            }`}>
-              <input
-                type="radio"
-                name="detection_mode"
-                checked={config.detection?.mode === "python"}
-                onChange={() => setConfig((prev) => ({ ...prev!, detection: { ...prev!.detection!, mode: "python" } }))}
-                className="accent-purple-500"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-white/80 font-medium">Python</span>
-                  {isMacOS ? (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 border border-green-500/20 text-green-400 font-semibold">RECOMMENDED</span>
-                  ) : (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 font-semibold">LEGACY</span>
-                  )}
-                </div>
-                <p className="text-[10px] text-white/30 mt-0.5">Flask sidecar on port 53735. Battle-tested, full feature parity. {isMacOS && "Fully supported on macOS."}</p>
-              </div>
+          {/* SPARK dual-PC pairing (Hub side) */}
+          <div className="mt-2 p-3 bg-blue-500/[0.04] border border-blue-500/15 rounded-xl">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-xs text-white/80 font-medium">SPARK Dual-PC Link</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 font-semibold">OPTIONAL</span>
+            </div>
+            <p className="text-[10px] text-white/30 mb-2">
+              Streaming from two PCs? Run the SPARK agent on the gaming PC — this hub receives its
+              detections over the LAN and updates overlays exactly like local detection.
+            </p>
+            <label className="block text-[11px] uppercase tracking-wider text-white/50 mb-1.5">
+              Network PIN
             </label>
-
-            {/* Native (Experimental) — locked behind Dev Tools + Closed Beta Channel */}
-            {(() => {
-              const nativeLocked = !devUnlocked || !config.detection?.closed_beta_channel;
-              const nativeDisabled = isMacOS || nativeLocked;
-              return (
-                <div className="relative">
-                  {/* Lock overlay when gated */}
-                  {nativeLocked && !isMacOS && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-end pr-4 pointer-events-none">
-                      <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-lg border border-white/[0.06]">
-                        <svg className="w-3 h-3 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                        <span className="text-[9px] text-white/40 font-medium">
-                          {!devUnlocked ? "Dev Tools required" : "Closed Beta required"}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <label
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 ${
-                      nativeDisabled
-                        ? "bg-white/[0.01] border-white/[0.03] opacity-50 cursor-not-allowed"
-                        : config.detection?.mode === "native"
-                          ? "bg-emerald-500/8 border-emerald-500/25 cursor-pointer"
-                          : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04] cursor-pointer"
-                    }`}
-                    title={isMacOS ? "Native engine is not available on macOS. Use Python (Legacy) or Spark." : nativeLocked ? "Enable Dev Tools and Closed Beta Channel to unlock Native engine" : ""}
-                  >
-                    <input
-                      type="radio"
-                      name="detection_mode"
-                      checked={config.detection?.mode === "native"}
-                      disabled={nativeDisabled}
-                      onChange={() => {
-                        if (!nativeDisabled) setConfig((prev) => ({ ...prev!, detection: { ...prev!.detection!, mode: "native" } }))
-                      }}
-                      className="accent-emerald-500"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-medium ${nativeDisabled ? "text-white/30" : "text-white/80"}`}>Native (Experimental)</span>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 font-semibold">EXPERIMENTAL</span>
-                        {nativeLocked && !isMacOS && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-white/40 font-semibold flex items-center gap-1">
-                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                            LOCKED
-                          </span>
-                        )}
-                        {isMacOS && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400 font-semibold">macOS UNSUPPORTED</span>
-                        )}
-                      </div>
-                      <p className={`text-[10px] mt-0.5 ${nativeDisabled ? "text-white/20" : "text-white/30"}`}>
-                        {isMacOS
-                          ? "Native engine is not compiled for macOS. Use Python (Legacy) for full support."
-                          : nativeLocked
-                            ? "Enable Dev Tools mode and Closed Beta release track to unlock."
-                            : "Pure Rust engine loop. No Python dependency. Faster, smaller, Windows + Linux only."
-                        }
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              );
-            })()}
-
-            {/* Spark (Dual-PC) */}
-            <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
-              config.detection?.mode === "spark"
-                ? "bg-blue-500/8 border-blue-500/25"
-                : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]"
-            }`}>
-              <input
-                type="radio"
-                name="detection_mode"
-                checked={config.detection?.mode === "spark"}
-                onChange={() => setConfig((prev) => ({ ...prev!, detection: { ...prev!.detection!, mode: "spark" } }))}
-                className="accent-blue-500"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-white/80 font-medium">Spark (Dual-PC)</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 font-semibold">REMOTE</span>
-                </div>
-                <p className="text-[10px] text-white/30 mt-0.5">Stream gameplay metadata from a second PC via UDP. Requires Spark host agent on remote machine.</p>
-              </div>
-            </label>
-
+            <input
+              type="text"
+              maxLength={4}
+              value={config.engine_settings.spark_pin}
+              onChange={(e) =>
+                setEngine("spark_pin", e.target.value.replace(/\D/g, "").slice(0, 4))
+              }
+              placeholder="0000"
+              className="input-glass !w-24 tracking-[0.5em] text-center placeholder:tracking-normal font-mono"
+            />
+            <p className="text-[10px] text-white/25 mt-1.5">
+              4-digit PIN — must match the PIN shown in the SPARK agent on your gaming PC.
+            </p>
           </div>
-
-          {/* Auto-fallback toggle — only when native is selected and available */}
-          {config.detection?.mode === "native" && !isMacOS && (
-            <div className="mt-4 p-3 bg-yellow-500/[0.04] border border-yellow-500/15 rounded-xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-yellow-300/80 font-medium">Auto-fallback to Python</span>
-                  <p className="text-[10px] text-white/30 mt-0.5">
-                    If the native engine fails to start, automatically fall back to the Python sidecar.
-                  </p>
-                </div>
-                <Toggle
-                  on={config.detection?.python_fallback ?? true}
-                  onToggle={() => setConfig((prev) => ({
-                    ...prev!,
-                    detection: { ...prev!.detection!, python_fallback: !prev!.detection!.python_fallback },
-                  }))}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Spark PIN — only when Spark is selected */}
-          {config.detection?.mode === "spark" && (
-            <div className="mt-4 p-3 bg-blue-500/[0.04] border border-blue-500/15 rounded-xl">
-              <label className="block text-[11px] uppercase tracking-wider text-white/50 mb-1.5">
-                Spark Receiver PIN
-              </label>
-              <input
-                type="text"
-                maxLength={4}
-                value={config.engine_settings.spark_pin}
-                onChange={(e) =>
-                  setEngine("spark_pin", e.target.value.replace(/\D/g, "").slice(0, 4))
-                }
-                placeholder="0000"
-                className="input-glass !w-24 tracking-[0.5em] text-center placeholder:tracking-normal font-mono"
-              />
-              <p className="text-[10px] text-white/25 mt-1.5">
-                Secure 4-digit PIN — must match the passcode on your Spark host.
-              </p>
-            </div>
-          )}
 
           {/* Pipeline section */}
           <div className="mt-6 pt-6 border-t border-white/[0.06]">
@@ -1018,7 +868,7 @@ function EngineSubTab({
   );
 }
 
-// ─── Default config fallback for dev mode (when Tauri sidecar is not running) ──
+// ─── Default config fallback for dev mode (when the Tauri backend is not running) ──
 const defaultConfig: AppConfig = {
   api_keys: {
     steamgrid: "7bbccc9fc8a24808bbf291e09680a287",
@@ -1065,13 +915,6 @@ const defaultConfig: AppConfig = {
     score_fullscreen: true,
     score_window_title: true,
     score_ram: true,
-  },
-  detection: {
-    mode: "python" as const,
-    python_fallback: true,
-    scan_interval_secs: 5,
-    dev_tools_enabled: false,
-    closed_beta_channel: false,
   },
 };
 
@@ -1869,11 +1712,11 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         <div className="grid grid-cols-2 gap-4">
           {[
             { label: "App Version", value: "0.5.0", icon: "🚀" },
-            { label: "Tauri Version", value: "2.x Sidecar", icon: "🦀" },
+            { label: "Tauri Version", value: "2.x Native", icon: "🦀" },
             { label: "Runtime Host", value: navigator.platform, icon: "💻" },
             { label: "Local Database", value: "Forge_Database.json", icon: "📂" },
             { label: "Keychain Service", value: "Active (Encrypted)", icon: "🛡️" },
-            { label: "Environment Mode", value: "Tauri sidecar host", icon: "🌐" },
+            { label: "Environment Mode", value: "Tauri native host", icon: "🌐" },
           ].map((item) => (
             <div
               key={item.label}
@@ -1953,8 +1796,8 @@ function AdvancedAnimations({
   prefs,
   set,
 }: {
-  prefs: SystemPrefs;
-  set: (key: keyof SystemPrefs, value: string | boolean) => void;
+  prefs: ThemePrefs;
+  set: (key: keyof ThemePrefs, value: string | boolean) => void;
 }) {
   return (
     <>
@@ -2142,11 +1985,6 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
     const timer = setTimeout(() => {
       try {
         localStorage.setItem("statusforge_system_prefs", JSON.stringify(prefs));
-        if (config && setConfig && onSaveConfig) {
-          const isClosedBeta = prefs.updateChannel === "closed-beta";
-          setConfig((prev) => prev ? ({ ...prev, detection: { ...prev.detection!, closed_beta_channel: isClosedBeta } }) : prev);
-          onSaveConfig("detection").catch(() => {});
-        }
       } catch {}
     }, 300);
     return () => clearTimeout(timer);
@@ -2211,7 +2049,7 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
             <div>
               <span className="text-xs text-white/75 font-medium">Auto-start Engine</span>
               <p className="text-[10px] text-white/35 mt-0.5">
-                Immediately trigger the Python process when the UI app starts
+                Immediately start the native detection engine when the UI app starts
               </p>
             </div>
             <Toggle on={prefs.autoStartEngine} onToggle={() => toggle("autoStartEngine")} />
@@ -2314,7 +2152,7 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
             <div>
               <span className="text-xs text-white/75 font-medium">Steam Rich Presence</span>
               <p className="text-[10px] text-white/35 mt-0.5">
-                Modify friends list status on active Steam account via sidecar API
+                Modify friends list status on active Steam account via the engine API
               </p>
             </div>
             <Toggle on={prefs.steamRichPresence} onToggle={() => toggle("steamRichPresence")} />
@@ -2377,7 +2215,7 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
               Auto-Reconnect WebSocket
             </span>
             <p className="text-[10px] text-white/35 mt-0.5">
-              Instantly retry socket handshakes if link with Python service falls out
+              Instantly retry socket handshakes if the link with the engine falls out
             </p>
           </div>
           <Toggle on={prefs.wsAutoReconnect} onToggle={() => toggle("wsAutoReconnect")} />

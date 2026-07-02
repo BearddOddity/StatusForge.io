@@ -33,7 +33,7 @@ export default function ApiKeysView({
   const set = (section: string, key: string, value: string) => {
     setConfig((prev) => ({
       ...prev!,
-      [section]: { ...(prev as Record<string, Record<string, string>>)[section], [key]: value },
+      [section]: { ...(prev as unknown as Record<string, Record<string, string>>)[section], [key]: value },
     }));
   };
 
