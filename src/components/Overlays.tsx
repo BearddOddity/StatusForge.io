@@ -27,6 +27,7 @@ interface OverlayMetadataPanelProps {
   onClose: () => void;
   onSave: (entry: Record<string, string>) => void;
   onSearchApis: (field: string, query: string) => void;
+  onExile?: (title: string) => void;
   saving: boolean;
 }
 
@@ -66,6 +67,7 @@ export function OverlayMetadataPanel({
   onClose,
   onSave,
   onSearchApis,
+  onExile,
   saving,
 }: OverlayMetadataPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -140,6 +142,19 @@ export function OverlayMetadataPanel({
           >
             🔍 Refresh All IDs
           </Btn>
+          {onExile && (
+            <Btn
+              variant="danger"
+              onClick={() => {
+                if (entry.title && confirm(`Exile "${entry.title}"? This will remove it from the library and prevent it from being re-detected by the scanner.`)) {
+                  onExile(entry.title);
+                }
+              }}
+              className="w-full justify-center mt-2"
+            >
+              🚫 Exile
+            </Btn>
+          )}
         </div>
 
         {/* Right panel — header + scrollable sections */}
@@ -530,11 +545,13 @@ export function MetadataOverlay({
   entry,
   onSave,
   onScan,
+  onExile,
   onClose,
 }: {
   entry: ForgeLibraryEntry;
   onSave: (updated: Partial<ForgeLibraryEntry>) => void;
   onScan: (title: string) => Promise<ForgeLibraryEntry | null>;
+  onExile?: (title: string) => void;
   onClose: () => void;
 }) {
   return (
@@ -547,6 +564,7 @@ export function MetadataOverlay({
         const res = await onScan(entry.title);
         return res as any;
       }}
+      onExile={onExile}
       saving={false}
     />
   );
