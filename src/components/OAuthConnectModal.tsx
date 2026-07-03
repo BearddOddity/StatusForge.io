@@ -52,8 +52,18 @@ export default function OAuthConnectModal({
   const meta = PLATFORM_META[platform];
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const slowHintRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bumped by stopPolling() and read by in-flight attempts to notice they've
+  // been superseded. Needed because launchAndPoll is async but called
+  // without awaiting it from an effect — React StrictMode's dev-mode
+  // mount/cleanup/remount double-invoke then races ahead of the async setup,
+  // so a plain "clear whatever pollRef currently holds" cleanup can run
+  // before pollRef is even set, leaving the first interval's ID never
+  // captured and thus never cancellable once a second attempt overwrites
+  // the ref — it just runs forever, firing onSuccess every tick.
+  const generationRef = useRef(0);
 
   const stopPolling = useCallback(() => {
+    generationRef.current++;
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
@@ -88,14 +98,17 @@ export default function OAuthConnectModal({
   // (the local /oauth/callback/:platform route already writes it to
   // Config.json as soon as the browser completes the redirect).
   const launchAndPoll = useCallback(async () => {
+    stopPolling(); // invalidate + synchronously clear any prior attempt
+    const myGeneration = generationRef.current;
     setStatus("connecting");
     setShowSlowHint(false);
-    stopPolling();
 
     // No postMessage channel means we can't distinguish "still working" from
     // "actually failed" — surface a hint + manual retry after a while rather
     // than spinning forever with no feedback.
-    slowHintRef.current = setTimeout(() => setShowSlowHint(true), 45_000);
+    slowHintRef.current = setTimeout(() => {
+      if (generationRef.current === myGeneration) setShowSlowHint(true);
+    }, 45_000);
 
     const tokenKey = `${platform}_token` as const;
     let hadTokenBefore = false;
@@ -108,21 +121,38 @@ export default function OAuthConnectModal({
       // export_config failing shouldn't block trying to connect
     }
 
+    // Superseded (a newer attempt started, or the modal closed) while we
+    // were awaiting above — bail out before opening a second browser tab.
+    if (generationRef.current !== myGeneration) return;
+
     try {
       await openUrl(connectUrl);
     } catch (e) {
-      setStatus("error");
+      if (generationRef.current === myGeneration) setStatus("error");
       console.error("Failed to open browser for OAuth:", e);
       return;
     }
 
-    pollRef.current = setInterval(async () => {
+    if (generationRef.current !== myGeneration) return;
+
+    const intervalId = setInterval(async () => {
+      // A stale interval whose ID was orphaned by a superseded ref-write
+      // notices it here and cancels itself instead of running forever.
+      if (generationRef.current !== myGeneration) {
+        clearInterval(intervalId);
+        return;
+      }
       try {
         const res = await tauriApi("export_config");
+        if (generationRef.current !== myGeneration) {
+          clearInterval(intervalId);
+          return;
+        }
         if (res && typeof res === "object" && "broadcaster" in res) {
           const hasTokenNow = !!(res as AppConfig).broadcaster[tokenKey];
           if (hasTokenNow && !hadTokenBefore) {
-            stopPolling();
+            clearInterval(intervalId);
+            if (pollRef.current === intervalId) pollRef.current = null;
             setStatus("success");
             onSuccess?.();
           }
@@ -131,7 +161,8 @@ export default function OAuthConnectModal({
         // transient failure — keep polling
       }
     }, 1500);
-  }, [platform, connectUrl, stopPolling, onSuccess]);
+    pollRef.current = intervalId;
+  }, [platform, connectUrl, onSuccess, stopPolling]);
 
   useEffect(() => {
     if (!open) return;
