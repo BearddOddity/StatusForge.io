@@ -54,13 +54,7 @@ export function Btn({
 
 // ─── Field ────────────────────────────────────────────────────────────────────
 
-export function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-4">
       <label className="block text-[11px] uppercase tracking-wider text-white/50 mb-1.5">

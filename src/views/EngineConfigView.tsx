@@ -59,19 +59,16 @@ export default function EngineConfigView({
           </Btn>
         </div>
         <p className="text-white/60 text-xs">
-          Widget Token:{" "}
-          <code className="bg-black/30 px-1.5 py-0.5 rounded">
-            {widgetToken}
-          </code>
+          Widget Token: <code className="bg-black/30 px-1.5 py-0.5 rounded">{widgetToken}</code>
         </p>
       </Card>
 
       <Card>
         <h3 className="text-white font-semibold mb-4">Token Security</h3>
         <p className="text-white/60 mb-4 text-sm">
-          Migrate OAuth tokens from Config.json to the OS keychain (Windows
-          Credential Manager / macOS Keychain / Linux Secret Service). This
-          removes plaintext tokens from the config file.
+          Migrate OAuth tokens from Config.json to the OS keychain (Windows Credential Manager /
+          macOS Keychain / Linux Secret Service). This removes plaintext tokens from the config
+          file.
         </p>
         <Btn
           onClick={async () => {
@@ -95,14 +92,19 @@ export default function EngineConfigView({
             <span className="text-sm font-semibold text-[#FFD700]">
               Keychain: {keychainInfo.count} token{keychainInfo.count !== 1 ? "s" : ""} stored
             </span>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${keychainInfo.count > 0 ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"}`}>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full ${keychainInfo.count > 0 ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"}`}
+            >
               {keychainInfo.count > 0 ? "Active" : "Empty"}
             </span>
           </div>
           {keychainInfo.stored.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
               {keychainInfo.stored.map((k) => (
-                <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-[#2A2A32] text-gray-400 font-mono">
+                <span
+                  key={k}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-[#2A2A32] text-gray-400 font-mono"
+                >
                   {k}
                 </span>
               ))}

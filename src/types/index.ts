@@ -123,11 +123,7 @@ export interface ForgeDatabase {
   library: Record<string, ForgeLibraryEntry>;
 }
 
-export type ViewId =
-  | "dashboard"
-  | "library"
-  | "settings"
-  | "dev";
+export type ViewId = "dashboard" | "library" | "settings" | "dev";
 
 export type SettingsSubTab = "engine" | "api-routing" | "system" | "theme" | "about";
 
@@ -153,4 +149,3 @@ export interface ExiledApp {
   process: string;
   exiled_at?: string;
 }
-

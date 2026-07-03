@@ -14,12 +14,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToasts, ToastContainer } from "@/components/Toast";
 import DashboardView from "@/views/DashboardView";
 import LibraryView from "@/LibraryView";
-import {
-  THEME_PREFS_EVENT,
-  loadThemePrefs,
-  saveThemePrefs,
-  applyThemePrefs,
-} from "@/theme";
+import { THEME_PREFS_EVENT, loadThemePrefs, saveThemePrefs, applyThemePrefs } from "@/theme";
 import SettingsView from "@/SettingsView";
 import DevView from "@/dev/DevView";
 
@@ -30,9 +25,7 @@ function App() {
 
   // Dev Tools sidebar tab visibility is a persisted System setting (Settings >
   // System > Developer Tools > "Dev Tools Tab"), not a hidden unlock gesture.
-  const [showDevTools, setShowDevTools] = useState(
-    () => loadSystemPrefs().showDevTools
-  );
+  const [showDevTools, setShowDevTools] = useState(() => loadSystemPrefs().showDevTools);
 
   useEffect(() => {
     const handler = () => setShowDevTools(loadSystemPrefs().showDevTools);
@@ -58,9 +51,7 @@ function App() {
     widgetToken: "",
   });
 
-  const { connected: wsConnected, data: wsData } = useWebSocket(
-    engineStatus.widgetToken
-  );
+  const { connected: wsConnected, data: wsData } = useWebSocket(engineStatus.widgetToken);
 
   useEffect(() => {
     if (wsData) {
@@ -80,10 +71,7 @@ function App() {
   }, [wsData]);
 
   const fetchStatus = useCallback(async () => {
-    const [data, token] = await Promise.all([
-      fetchEngineStatus(),
-      fetchWidgetToken(),
-    ]);
+    const [data, token] = await Promise.all([fetchEngineStatus(), fetchWidgetToken()]);
     setEngineStatus((prev) => ({
       ...prev,
       running: data.running,
@@ -100,49 +88,35 @@ function App() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  const NavButton = useCallback(({
-    id,
-    label,
-    icon,
-  }: {
-    id: ViewId;
-    label: string;
-    icon: string;
-  }) => (
-    <button
-      className={`nav-item ${currentView === id ? "nav-item-active" : ""}`}
-      onClick={() => setCurrentView(id as ViewId)}
-    >
-      <span className="nav-item-icon">{icon}</span>
-      <span className="nav-item-label">{label}</span>
-    </button>
-  ), [currentView]);
+  const NavButton = useCallback(
+    ({ id, label, icon }: { id: ViewId; label: string; icon: string }) => (
+      <button
+        className={`nav-item ${currentView === id ? "nav-item-active" : ""}`}
+        onClick={() => setCurrentView(id as ViewId)}
+      >
+        <span className="nav-item-icon">{icon}</span>
+        <span className="nav-item-label">{label}</span>
+      </button>
+    ),
+    [currentView]
+  );
 
-  const views = useMemo(() => ({
-    dashboard: (
-      <DashboardView
-        engineStatus={engineStatus}
-        wsConnected={wsConnected}
-        toast={toast}
-      />
-    ),
-    settings: (
-      <SettingsView
-        engineStatus={engineStatus}
-        onRefresh={fetchStatus}
-        toast={toast}
-      />
-    ),
-    library: <LibraryView toast={toast} />,
-    dev: <DevView />,
-  }), [engineStatus, wsConnected, toast, fetchStatus]);
+  const views = useMemo(
+    () => ({
+      dashboard: (
+        <DashboardView engineStatus={engineStatus} wsConnected={wsConnected} toast={toast} />
+      ),
+      settings: <SettingsView engineStatus={engineStatus} onRefresh={fetchStatus} toast={toast} />,
+      library: <LibraryView toast={toast} />,
+      dev: <DevView />,
+    }),
+    [engineStatus, wsConnected, toast, fetchStatus]
+  );
 
   // Sidebar collapse state lives in the theme prefs ("Sidebar Icons Only" in
   // Settings > Theme). Sync both ways: the Theme tab fires THEME_PREFS_EVENT
   // after saving, and the sidebar collapse button writes back to the prefs.
-  const [sidebarIconOnly, setSidebarIconOnly] = useState(
-    () => loadThemePrefs().sidebarIconOnly
-  );
+  const [sidebarIconOnly, setSidebarIconOnly] = useState(() => loadThemePrefs().sidebarIconOnly);
 
   useEffect(() => {
     const handler = () => setSidebarIconOnly(loadThemePrefs().sidebarIconOnly);
@@ -153,7 +127,9 @@ function App() {
   const toggleSidebar = useCallback(() => {
     setSidebarIconOnly((v: boolean) => {
       const next = !v;
-      try { saveThemePrefs({ ...loadThemePrefs(), sidebarIconOnly: next }); } catch {}
+      try {
+        saveThemePrefs({ ...loadThemePrefs(), sidebarIconOnly: next });
+      } catch {}
       return next;
     });
   }, []);
@@ -161,7 +137,9 @@ function App() {
   // Apply the full saved theme (colors, background, animations, effects) on
   // mount so it works even before the user visits the Settings > Theme tab.
   useEffect(() => {
-    try { applyThemePrefs(loadThemePrefs()); } catch {}
+    try {
+      applyThemePrefs(loadThemePrefs());
+    } catch {}
   }, []);
 
   // System prefs boot wiring: hardware-accel class, log level, engine autostart.
@@ -185,7 +163,9 @@ function App() {
           getCurrentWindow().hide();
         }
       })
-      .then((u) => { unlisten = u; })
+      .then((u) => {
+        unlisten = u;
+      })
       .catch(() => {});
     return () => unlisten?.();
   }, []);
@@ -222,20 +202,23 @@ function App() {
         webhook("game-cleared", e.payload);
       }),
     ];
-    return () => { subs.forEach((s) => s.then((u) => u()).catch(() => {})); };
+    return () => {
+      subs.forEach((s) => s.then((u) => u()).catch(() => {}));
+    };
   }, []);
 
   return (
     <div className="flex h-screen w-full bg-transparent text-white/80 font-sans">
       {/* Sidebar */}
-      <nav className={`sidebar-glass flex flex-col px-3 pb-5 z-10 shrink-0 ${sidebarIconOnly ? "pt-8 w-[68px] sidebar-icon-only" : "pt-1 w-[240px]"}`}>
+      <nav
+        className={`sidebar-glass flex flex-col px-3 pb-5 z-10 shrink-0 ${sidebarIconOnly ? "pt-8 w-[68px] sidebar-icon-only" : "pt-1 w-[240px]"}`}
+      >
         <div className={`text-center ${sidebarIconOnly ? "hidden" : ""}`}>
           <img
             src={appIcon}
             alt="StatusForge"
             className="w-full max-w-[220px] h-auto object-contain"
           />
-
         </div>
 
         <button
@@ -244,30 +227,38 @@ function App() {
           title={sidebarIconOnly ? "Expand sidebar" : "Collapse sidebar"}
         >
           <span className="nav-item-icon">
-            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-4 h-4"
+            >
               <rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor" opacity="0.7" />
               <rect x="1" y="7" width="14" height="2" rx="1" fill="currentColor" opacity="0.7" />
               <rect x="1" y="11" width="14" height="2" rx="1" fill="currentColor" opacity="0.7" />
             </svg>
           </span>
-
         </button>
 
         <NavButton id="dashboard" label="Status Room" icon="⏳" />
         <NavButton id="library" label="Library" icon="📚" />
         <NavButton id="settings" label="Settings" icon="⚙️" />
 
-        {showDevTools && (
-          <NavButton id="dev" label="Dev Tools" icon="🛠" />
-        )}
+        {showDevTools && <NavButton id="dev" label="Dev Tools" icon="🛠" />}
 
         <div className="flex-grow" />
 
         <div className="divider mb-3" />
-        <div className={`flex items-center gap-2.5 px-3 py-2 rounded-xl ${sidebarIconOnly ? "justify-center" : ""}`}>
+        <div
+          className={`flex items-center gap-2.5 px-3 py-2 rounded-xl ${sidebarIconOnly ? "justify-center" : ""}`}
+        >
           <span
             className={`status-dot ${engineStatus.running ? "on" : "off"}`}
-            style={{ animation: engineStatus.running ? "var(--user-status-pulse, pulse 2s ease-in-out infinite)" : "none" }}
+            style={{
+              animation: engineStatus.running
+                ? "var(--user-status-pulse, pulse 2s ease-in-out infinite)"
+                : "none",
+            }}
           />
           {!sidebarIconOnly && (
             <span className="text-[11px] text-white/40 font-medium truncate">

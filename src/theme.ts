@@ -125,11 +125,19 @@ export function applyThemePrefs(prefs: ThemePrefs) {
   root.style.setProperty("--user-font-family", `"${(prefs.fontFamily || "Montserrat").trim()}"`);
   root.style.setProperty("--user-font-weight", String(prefs.fontWeight || 400));
   loadGoogleFont(prefs.fontFamily || "Montserrat");
-  root.style.setProperty("--user-radius", prefs.borderRadius === "sharp" ? "2px" : prefs.borderRadius === "soft" ? "8px" : "16px");
+  root.style.setProperty(
+    "--user-radius",
+    prefs.borderRadius === "sharp" ? "2px" : prefs.borderRadius === "soft" ? "8px" : "16px"
+  );
   const animOff = !prefs.animationsEnabled || prefs.reducedMotion;
   root.style.setProperty("--user-anim-duration", animOff ? "0s" : "unset");
   root.style.setProperty("--user-reduced-motion", prefs.reducedMotion ? "true" : "false");
-  root.style.setProperty("--user-transition-speed", animOff ? "0s" : { instant: "0s", fast: "0.1s", normal: "0.2s", slow: "0.4s" }[prefs.transitionSpeed]);
+  root.style.setProperty(
+    "--user-transition-speed",
+    animOff
+      ? "0s"
+      : { instant: "0s", fast: "0.1s", normal: "0.2s", slow: "0.4s" }[prefs.transitionSpeed]
+  );
   root.style.setProperty("--user-cover-breathe", prefs.coverBreathe && !animOff ? "unset" : "none");
   root.style.setProperty("--user-cover-glint", prefs.coverGlint && !animOff ? "unset" : "none");
   root.style.setProperty("--user-card-lift", prefs.cardHoverLift && !animOff ? "unset" : "none");
@@ -138,6 +146,12 @@ export function applyThemePrefs(prefs: ThemePrefs) {
   root.style.setProperty("--user-status-pulse", prefs.statusPulse && !animOff ? "unset" : "none");
   root.style.setProperty("--user-toast-anim", prefs.toastAnimations && !animOff ? "unset" : "none");
   root.style.setProperty("--user-modal-anim", prefs.modalAnimations && !animOff ? "unset" : "none");
-  root.style.setProperty("--user-progress-anim", prefs.progressBarAnimation && !animOff ? "unset" : "none");
-  root.style.setProperty("--user-btn-hover", prefs.buttonHoverEffects && !animOff ? "unset" : "none");
+  root.style.setProperty(
+    "--user-progress-anim",
+    prefs.progressBarAnimation && !animOff ? "unset" : "none"
+  );
+  root.style.setProperty(
+    "--user-btn-hover",
+    prefs.buttonHoverEffects && !animOff ? "unset" : "none"
+  );
 }

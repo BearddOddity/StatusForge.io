@@ -99,30 +99,86 @@ const HUMANIZE: { re: RegExp; msg: (m: RegExpMatchArray) => string }[] = [
   { re: /\[TOAST\]\s*(.+)/, msg: (m) => m[1].trim() },
   // Detection lifecycle
   { re: /NEW GAME:\s*(.+?)\s*\((.+?)\)/, msg: (m) => `🎮 Detected game: ${m[1]} — via ${m[2]}.` },
-  { re: /Grace period expired\. Dropping:\s*(.+)/, msg: (m) => `⏹ Stopped showing "${m[1].trim()}" — the game closed or stayed out of focus past the grace period.` },
+  {
+    re: /Grace period expired\. Dropping:\s*(.+)/,
+    msg: (m) =>
+      `⏹ Stopped showing "${m[1].trim()}" — the game closed or stayed out of focus past the grace period.`,
+  },
   // Category push — success
-  { re: /\[PUSH\] Twitch category set to "(.+?)"/, msg: (m) => `✅ Updated your Twitch category to "${m[1]}".` },
+  {
+    re: /\[PUSH\] Twitch category set to "(.+?)"/,
+    msg: (m) => `✅ Updated your Twitch category to "${m[1]}".`,
+  },
   { re: /\[PUSH\] Kick category set/, msg: () => `✅ Updated your Kick category.` },
-  { re: /\[PUSH\] (Twitch|Kick) token expired — refreshing/, msg: (m) => `🔄 Your ${m[1]} login expired — refreshing it automatically.` },
+  {
+    re: /\[PUSH\] (Twitch|Kick) token expired — refreshing/,
+    msg: (m) => `🔄 Your ${m[1]} login expired — refreshing it automatically.`,
+  },
   // Category push — problems
-  { re: /\[PUSH\] Twitch:? no game id for "(.+?)"/, msg: (m) => `⚠ No matching Twitch category found for "${m[1]}", so your Twitch category was left unchanged.` },
-  { re: /\[PUSH\] Kick:? no category id for "(.+?)"/, msg: (m) => `⚠ No matching Kick category found for "${m[1]}", so your Kick category was left unchanged.` },
-  { re: /\[PUSH\] (Twitch|Kick) retry still unauthorized/, msg: (m) => `❌ Couldn't update your ${m[1]} channel — your login was rejected even after refreshing. Reconnect ${m[1]} in Settings → API & Routing.` },
-  { re: /\[PUSH\] (Twitch|Kick) token refresh failed/, msg: (m) => `❌ Couldn't refresh your ${m[1]} login. Reconnect ${m[1]} in Settings → API & Routing.` },
-  { re: /\[PUSH\] Failed to save refreshed (Twitch|Kick) token/, msg: (m) => `⚠ Refreshed your ${m[1]} login but couldn't save it — check that your settings file isn't read-only.` },
+  {
+    re: /\[PUSH\] Twitch:? no game id for "(.+?)"/,
+    msg: (m) =>
+      `⚠ No matching Twitch category found for "${m[1]}", so your Twitch category was left unchanged.`,
+  },
+  {
+    re: /\[PUSH\] Kick:? no category id for "(.+?)"/,
+    msg: (m) =>
+      `⚠ No matching Kick category found for "${m[1]}", so your Kick category was left unchanged.`,
+  },
+  {
+    re: /\[PUSH\] (Twitch|Kick) retry still unauthorized/,
+    msg: (m) =>
+      `❌ Couldn't update your ${m[1]} channel — your login was rejected even after refreshing. Reconnect ${m[1]} in Settings → API & Routing.`,
+  },
+  {
+    re: /\[PUSH\] (Twitch|Kick) token refresh failed/,
+    msg: (m) =>
+      `❌ Couldn't refresh your ${m[1]} login. Reconnect ${m[1]} in Settings → API & Routing.`,
+  },
+  {
+    re: /\[PUSH\] Failed to save refreshed (Twitch|Kick) token/,
+    msg: (m) =>
+      `⚠ Refreshed your ${m[1]} login but couldn't save it — check that your settings file isn't read-only.`,
+  },
   // Startup / system
-  { re: /Widget\/OAuth server listening/, msg: () => `✅ Local server is up (port 53735) — overlays and login can connect.` },
-  { re: /Engine loop started\. Grace:\s*(\d+)s, Interval:\s*(\d+)s/, msg: (m) => `▶ Detection engine started (checks every ${m[2]}s, ${m[1]}s grace before dropping a game).` },
-  { re: /address in use|Address already in use/, msg: () => `❌ Port 53735 is already in use by another program. Close it (or the other copy of StatusForge) and restart.` },
-  { re: /Screen Recording|permission/i, msg: () => `⚠ macOS needs Screen Recording permission to read window titles. Grant it in System Settings → Privacy & Security, then restart.` },
-  { re: /Failed to bootstrap Config\.json/, msg: () => `❌ Couldn't create your settings file on first run — check folder write permissions.` },
-  { re: /Failed to generate initial widget token/, msg: () => `⚠ Couldn't create a widget security token — overlays may not connect until you regenerate it in Settings → Engine.` },
+  {
+    re: /Widget\/OAuth server listening/,
+    msg: () => `✅ Local server is up (port 53735) — overlays and login can connect.`,
+  },
+  {
+    re: /Engine loop started\. Grace:\s*(\d+)s, Interval:\s*(\d+)s/,
+    msg: (m) =>
+      `▶ Detection engine started (checks every ${m[2]}s, ${m[1]}s grace before dropping a game).`,
+  },
+  {
+    re: /address in use|Address already in use/,
+    msg: () =>
+      `❌ Port 53735 is already in use by another program. Close it (or the other copy of StatusForge) and restart.`,
+  },
+  {
+    re: /Screen Recording|permission/i,
+    msg: () =>
+      `⚠ macOS needs Screen Recording permission to read window titles. Grant it in System Settings → Privacy & Security, then restart.`,
+  },
+  {
+    re: /Failed to bootstrap Config\.json/,
+    msg: () =>
+      `❌ Couldn't create your settings file on first run — check folder write permissions.`,
+  },
+  {
+    re: /Failed to generate initial widget token/,
+    msg: () =>
+      `⚠ Couldn't create a widget security token — overlays may not connect until you regenerate it in Settings → Engine.`,
+  },
 ];
 
 // Routine filter lines → short reasons (only shown in Friendly mode, as debug).
 const FILTER_REASONS: { re: RegExp; msg: string }[] = [
   { re: /RAM floor not met/, msg: "Ignored a program using too little memory to be a game." },
-  { re: /Chromium\/Electron shell trapped/, msg: "Ignored an Electron/Chromium app (Discord, Spotify, VS Code, etc.)." },
+  {
+    re: /Chromium\/Electron shell trapped/,
+    msg: "Ignored an Electron/Chromium app (Discord, Spotify, VS Code, etc.).",
+  },
   { re: /Desktop UI framework trapped/, msg: "Ignored a desktop tool (Qt/GTK/MFC window)." },
   { re: /Background\/helper cmdline trapped/, msg: "Ignored a background/helper process." },
   { re: /Window too small/, msg: "Ignored a window too small to be a game." },
@@ -327,10 +383,7 @@ export default function DevView() {
               value={diag.native_is_playing ? "Yes" : "No"}
               color={diag.native_is_playing ? "text-green-400" : "text-white/30"}
             />
-            <DiagCard
-              label="Source"
-              value={diag.native_current_game?.platform || "—"}
-            />
+            <DiagCard label="Source" value={diag.native_current_game?.platform || "—"} />
           </div>
         </div>
       )}
@@ -346,7 +399,10 @@ export default function DevView() {
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
               <button
-                onClick={() => { fetchLogs(); fetchDiag(); }}
+                onClick={() => {
+                  fetchLogs();
+                  fetchDiag();
+                }}
                 className="flex-1 text-[10px] px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
               >
                 ↻ Refresh
@@ -362,7 +418,9 @@ export default function DevView() {
               onClick={exportErrorLogs}
               className="text-[10px] px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all cursor-pointer w-full"
             >
-              {exportedPath ? "✓ Exported" : `⬇ Export Errors${errorCount ? ` (${errorCount})` : ""}`}
+              {exportedPath
+                ? "✓ Exported"
+                : `⬇ Export Errors${errorCount ? ` (${errorCount})` : ""}`}
             </button>
             {exportedPath && (
               <div className="text-[9px] text-white/40 font-mono truncate" title={exportedPath}>
@@ -379,7 +437,12 @@ export default function DevView() {
                 max={5000}
                 step={50}
                 value={settings.logTailLines}
-                onChange={(e) => updateSetting("logTailLines", Math.max(50, Math.min(5000, parseInt(e.target.value) || 200)))}
+                onChange={(e) =>
+                  updateSetting(
+                    "logTailLines",
+                    Math.max(50, Math.min(5000, parseInt(e.target.value) || 200))
+                  )
+                }
                 className="input-glass w-20 text-right"
               />
             </SettingRow>
@@ -399,17 +462,19 @@ export default function DevView() {
                   max={10000}
                   step={500}
                   value={settings.autoRefreshMs}
-                  onChange={(e) => updateSetting("autoRefreshMs", Math.max(500, Math.min(10000, parseInt(e.target.value) || 2000)))}
+                  onChange={(e) =>
+                    updateSetting(
+                      "autoRefreshMs",
+                      Math.max(500, Math.min(10000, parseInt(e.target.value) || 2000))
+                    )
+                  }
                   className="input-glass w-20 text-right"
                 />
               </SettingRow>
             )}
 
             <SettingRow label="Auto Scroll">
-              <Toggle
-                on={autoScroll}
-                onToggle={() => setAutoScroll(!autoScroll)}
-              />
+              <Toggle on={autoScroll} onToggle={() => setAutoScroll(!autoScroll)} />
             </SettingRow>
           </div>
 
@@ -447,9 +512,7 @@ export default function DevView() {
                 <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
               </div>
-              <span className="text-[10px] text-white/30 font-mono ml-2">
-                debug.log
-              </span>
+              <span className="text-[10px] text-white/30 font-mono ml-2">debug.log</span>
             </div>
             <div className="flex items-center gap-1.5">
               <button
@@ -486,9 +549,7 @@ export default function DevView() {
               setAutoScroll(scrollHeight - scrollTop - clientHeight < 40);
             }}
           >
-            {error && (
-              <div className="text-red-400 mb-2">Error: {error}</div>
-            )}
+            {error && <div className="text-red-400 mb-2">Error: {error}</div>}
             {rows.length === 0 && !error && (
               <div className="text-white/20">
                 {errorsOnly ? "No warnings or errors 🎉" : "No log output yet."}
@@ -529,7 +590,9 @@ function DiagCard({
   span?: number;
 }) {
   return (
-    <div className={`bg-white/[0.02] border border-white/[0.04] rounded-lg px-3 py-2 ${span ? `col-span-${span}` : ""}`}>
+    <div
+      className={`bg-white/[0.02] border border-white/[0.04] rounded-lg px-3 py-2 ${span ? `col-span-${span}` : ""}`}
+    >
       <div className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">{label}</div>
       <div className={`text-xs font-medium truncate ${color || "text-white/70"}`}>{value}</div>
     </div>
@@ -550,9 +613,7 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
     <button
       onClick={onToggle}
       className={`w-8 h-5 rounded-full relative shrink-0 transition-all duration-200 cursor-pointer outline-none border ${
-        on
-          ? "bg-purple-500 border-purple-400/40"
-          : "bg-white/[0.07] border-white/10"
+        on ? "bg-purple-500 border-purple-400/40" : "bg-white/[0.07] border-white/10"
       }`}
     >
       <span

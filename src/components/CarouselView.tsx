@@ -48,7 +48,9 @@ export default function CarouselView({
         onClick={() => goTo(activeIndex - 1)}
         className="absolute z-20 w-11 h-11 flex items-center justify-center bg-black/60 border border-white/10 rounded-full text-white/60 hover:text-white hover:bg-black/80 transition-all cursor-pointer backdrop-blur-sm"
         style={{ left: -8, top: "50%", transform: "translateY(-50%)" }}
-      >‹</button>
+      >
+        ‹
+      </button>
 
       <div className="absolute" style={{ top: 0, left: 80, right: 80, bottom: 0 }}>
         <div
@@ -83,7 +85,9 @@ export default function CarouselView({
         onClick={() => goTo(activeIndex + 1)}
         className="absolute z-20 w-11 h-11 flex items-center justify-center bg-black/60 border border-white/10 rounded-full text-white/60 hover:text-white hover:bg-black/80 transition-all cursor-pointer backdrop-blur-sm"
         style={{ right: -8, top: 240, transform: "translateY(-50%)" }}
-      >›</button>
+      >
+        ›
+      </button>
 
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2">
         <span className="text-[10px] text-white/30 font-mono">
@@ -113,21 +117,24 @@ function CarouselCard({
   const baseTiltY = offset * 4;
   const baseTiltX = Math.abs(offset) * -1.5;
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isActive) return;
-    const rect = cardRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    tiltRef.current = {
-      x: (y - 0.5) * -20,
-      y: (x - 0.5) * 20,
-    };
-    const el = cardRef.current?.firstElementChild as HTMLElement | null;
-    if (el) {
-      el.style.transform = `rotateX(${tiltRef.current.x + baseTiltX}deg) rotateY(${tiltRef.current.y + baseTiltY}deg) scale(1.07)`;
-    }
-  }, [isActive, baseTiltX, baseTiltY]);
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isActive) return;
+      const rect = cardRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      tiltRef.current = {
+        x: (y - 0.5) * -20,
+        y: (x - 0.5) * 20,
+      };
+      const el = cardRef.current?.firstElementChild as HTMLElement | null;
+      if (el) {
+        el.style.transform = `rotateX(${tiltRef.current.x + baseTiltX}deg) rotateY(${tiltRef.current.y + baseTiltY}deg) scale(1.07)`;
+      }
+    },
+    [isActive, baseTiltX, baseTiltY]
+  );
 
   const handleMouseLeave = useCallback(() => {
     tiltRef.current = { x: 0, y: 0 };
@@ -158,7 +165,9 @@ function CarouselCard({
           width: CARD_WIDTH,
           height: CARD_HEIGHT,
           perspective: 1200,
-          filter: isActive ? "none" : `brightness(${1 - unfocusAmount * 0.7}) blur(${unfocusAmount * 3}px)`,
+          filter: isActive
+            ? "none"
+            : `brightness(${1 - unfocusAmount * 0.7}) blur(${unfocusAmount * 3}px)`,
           transition: "filter 0.3s ease",
         }}
       >
@@ -180,7 +189,14 @@ function CarouselCard({
             transformStyle: "preserve-3d",
           }}
         >
-          <div className="w-full h-full" style={{ animation: isActive ? "var(--user-cover-breathe, cover-breathe 8s ease-in-out infinite)" : "none" }}>
+          <div
+            className="w-full h-full"
+            style={{
+              animation: isActive
+                ? "var(--user-cover-breathe, cover-breathe 8s ease-in-out infinite)"
+                : "none",
+            }}
+          >
             <CoverImage src={entry.cover_url} alt={entry.title} lazy />
           </div>
 
@@ -212,7 +228,9 @@ function CarouselCard({
               isActive ? "text-white/90" : "text-white/30"
             }`}
             style={{ maxWidth: CARD_WIDTH - 40 }}
-          >{entry.title}</span>
+          >
+            {entry.title}
+          </span>
         </div>
       </div>
     </div>

@@ -3,11 +3,7 @@ import type { AppConfig, ToastType } from "@/types";
 import { tauriApi, saveConfig } from "@/hooks/useTauriApi";
 import { Card, Btn, Field } from "@/components/primitives";
 
-export default function ApiKeysView({
-  toast,
-}: {
-  toast: (msg: string, type?: ToastType) => void;
-}) {
+export default function ApiKeysView({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -33,7 +29,10 @@ export default function ApiKeysView({
   const set = (section: string, key: string, value: string) => {
     setConfig((prev) => ({
       ...prev!,
-      [section]: { ...(prev as unknown as Record<string, Record<string, string>>)[section], [key]: value },
+      [section]: {
+        ...(prev as unknown as Record<string, Record<string, string>>)[section],
+        [key]: value,
+      },
     }));
   };
 
