@@ -98,7 +98,7 @@ fn assert_path_in_base(path: &std::path::Path, base: &std::path::Path) -> Result
 // --- Input validation structs ---
 
 /// Export config payload — now a thin wrapper, actual validation in config.rs
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct ConfigExportPayload {
     path: Option<String>,
 }
@@ -204,7 +204,8 @@ async fn get_widget_token() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn export_config(payload: ConfigExportPayload) -> Result<serde_json::Value, String> {
+fn export_config(payload: Option<ConfigExportPayload>) -> Result<serde_json::Value, String> {
+    let payload = payload.unwrap_or_default();
     let base = app_base_dir()?;
     let config_path = if let Some(ref p) = payload.path {
         let p = std::path::PathBuf::from(p);
@@ -915,6 +916,42 @@ fn exile_app(game: String) -> Result<String, String> {
 // DEV TOOLS — Hidden developer diagnostics (dev mode only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Mirror a frontend toast into the debug log so the Dev Tools terminal shows
+/// exactly what the user saw on screen (same success/info/error text), instead
+/// of toasts vanishing after their 3.5s on-screen lifetime with no record.
+#[tauri::command]
+fn log_frontend_toast(message: String, level: String) -> Result<(), String> {
+    match level.as_str() {
+        "error" => log::error!("[TOAST] {}", message),
+        "success" => log::info!("[TOAST] ✓ {}", message),
+        _ => log::info!("[TOAST] {}", message),
+    }
+    Ok(())
+}
+
+/// Write the Dev Tools "Export Errors" content to a fixed, discoverable
+/// location (`Documents/StatusForge Logs/`) instead of leaving it to whatever
+/// the browser-style download default happens to be. Returns the full path
+/// written so the UI can show the user exactly where it landed.
+#[tauri::command]
+fn dev_export_error_log(app: tauri::AppHandle, content: String) -> Result<String, String> {
+    let docs = app
+        .path()
+        .document_dir()
+        .map_err(|e| format!("Failed to resolve Documents folder: {}", e))?;
+    let dir = docs.join("StatusForge Logs");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create log folder: {}", e))?;
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let path = dir.join(format!("statusforge_errors_{}.log", timestamp));
+    std::fs::write(&path, content).map_err(|e| format!("Failed to write log file: {}", e))?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// Read the last N lines of the debug log file.
 #[tauri::command]
 fn dev_get_log_tail(lines: usize) -> Result<Vec<String>, String> {
@@ -1089,7 +1126,7 @@ mod config_command_tests {
         assert_eq!(msg, "Config saved successfully");
         assert!(base.join("Config.json").exists());
 
-        let out = export_config(ConfigExportPayload { path: None }).unwrap();
+        let out = export_config(Some(ConfigExportPayload { path: None })).unwrap();
         let es = &out["engine_settings"];
         assert_eq!(es["widget_poll_rate"], 4);
         assert_eq!(es["idle_category"], "Art");
@@ -1209,6 +1246,8 @@ pub fn run() {
             set_log_level,
             post_webhook,
             get_system_stats,
+            log_frontend_toast,
+            dev_export_error_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

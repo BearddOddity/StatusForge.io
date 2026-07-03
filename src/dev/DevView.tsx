@@ -86,6 +86,8 @@ function lineLevel(line: string): LogLevel {
 // Ordered pattern → plain-English rewrite. First match wins. `$1` is filled from
 // the capture group when present (e.g. the game/category name).
 const HUMANIZE: { re: RegExp; msg: (m: RegExpMatchArray) => string }[] = [
+  // Toasts mirrored from the UI — already plain English, just drop the tag.
+  { re: /\[TOAST\]\s*(.+)/, msg: (m) => m[1].trim() },
   // Detection lifecycle
   { re: /NEW GAME:\s*(.+?)\s*\((.+?)\)/, msg: (m) => `🎮 Detected game: ${m[1]} — via ${m[2]}.` },
   { re: /Grace period expired\. Dropping:\s*(.+)/, msg: (m) => `⏹ Stopped showing "${m[1].trim()}" — the game closed or stayed out of focus past the grace period.` },
@@ -165,13 +167,52 @@ export default function DevView() {
     return lv === "error" || lv === "warn";
   }).length;
 
+  // Export just the error/warn lines from the currently loaded tail — raw
+  // text (not humanized) so it's useful to paste/attach when reporting a bug.
+  // Written by the Rust side to Documents/StatusForge Logs (a fixed, findable
+  // spot) rather than wherever the browser-style download default lands.
+  const [exportedPath, setExportedPath] = useState<string | null>(null);
+  const exportErrorLogs = async () => {
+    const errorLines = logs.filter((l) => {
+      const lv = lineLevel(l);
+      return lv === "error" || lv === "warn";
+    });
+    const content = errorLines.length
+      ? errorLines.join("\n")
+      : "(no errors or warnings in the current log tail)";
+    try {
+      const path = await invoke<string>("dev_export_error_log", { content });
+      setExportedPath(path);
+      setTimeout(() => setExportedPath(null), 4000);
+    } catch (e) {
+      setExportedPath(`Export failed: ${String(e)}`);
+      setTimeout(() => setExportedPath(null), 4000);
+    }
+  };
+
+  // "Clear" only clears what's displayed — debug.log itself keeps growing, and
+  // auto-refresh re-tails it every couple seconds. Remember the last line at
+  // clear time and cut everything up to (and including) it on every
+  // subsequent fetch, so cleared lines don't reappear until new ones arrive.
+  const clearedMarkerRef = useRef<string | null>(null);
+  const handleClear = () => {
+    clearedMarkerRef.current = logs.length ? logs[logs.length - 1] : null;
+    setLogs([]);
+  };
+
   // Fetch logs from Rust backend
   const fetchLogs = useCallback(async () => {
     try {
       const lines = await invoke<string[]>("dev_get_log_tail", {
         lines: settings.logTailLines,
       });
-      setLogs(lines || []);
+      let display = lines || [];
+      const marker = clearedMarkerRef.current;
+      if (marker) {
+        const idx = display.lastIndexOf(marker);
+        if (idx !== -1) display = display.slice(idx + 1);
+      }
+      setLogs(display);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -247,20 +288,6 @@ export default function DevView() {
             Diagnostics, logs, and experimental settings.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => { fetchLogs(); fetchDiag(); }}
-            className="text-[10px] px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
-          >
-            ↻ Refresh
-          </button>
-          <button
-            onClick={() => setLogs([])}
-            className="text-[10px] px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
-          >
-            Clear
-          </button>
-        </div>
       </div>
 
       {/* Diagnostics Panel */}
@@ -303,6 +330,34 @@ export default function DevView() {
           <h3 className="text-xs font-semibold text-white/70 uppercase tracking-wider">
             Log Settings
           </h3>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <button
+                onClick={() => { fetchLogs(); fetchDiag(); }}
+                className="flex-1 text-[10px] px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
+              >
+                ↻ Refresh
+              </button>
+              <button
+                onClick={handleClear}
+                className="flex-1 text-[10px] px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+            <button
+              onClick={exportErrorLogs}
+              className="text-[10px] px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all cursor-pointer w-full"
+            >
+              {exportedPath ? "✓ Exported" : `⬇ Export Errors${errorCount ? ` (${errorCount})` : ""}`}
+            </button>
+            {exportedPath && (
+              <div className="text-[9px] text-white/40 font-mono truncate" title={exportedPath}>
+                Saved to {exportedPath}
+              </div>
+            )}
+          </div>
 
           <div className="flex flex-col gap-3">
             <SettingRow label="Tail Lines">

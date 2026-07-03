@@ -47,10 +47,16 @@ export async function fetchConfig(): Promise<AppConfig | null> {
 }
 
 export async function saveConfig(config: AppConfig): Promise<string> {
-  // backup: keep a Config.json.bak of the prior file (System > Automatic Backups)
+  // The Rust command is `fn import_config(payload: ConfigImportPayload)` — a
+  // single named parameter, so Tauri's IPC requires the invoke args to have a
+  // `payload` key wrapping the whole body, not `config`/`backup` at the top
+  // level (that fails with "missing required key payload" on every save).
   const res = await tauriApi("import_config", {
-    config,
-    backup: loadSystemPrefs().configBackupEnabled,
+    payload: {
+      config,
+      // backup: keep a Config.json.bak of the prior file (System > Automatic Backups)
+      backup: loadSystemPrefs().configBackupEnabled,
+    },
   });
   if (typeof res === "string") return res;
   // Surface the real backend error (e.g. validation failure) instead of a
