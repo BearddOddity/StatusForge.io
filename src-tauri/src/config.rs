@@ -360,14 +360,13 @@ impl AppConfig {
             errors.push("spark_pin must be 4 digits".to_string());
         }
 
-        // Broadcaster validation
-        if self.broadcaster.routing_mode == RoutingMode::Native {
-            if self.broadcaster.twitch_client.is_empty() {
-                errors.push("twitch_client required for native routing".to_string());
-            }
-            if self.broadcaster.kick_client.is_empty() {
-                errors.push("kick_client required for native routing".to_string());
-            }
+        // Broadcaster validation — native routing needs at least one platform
+        // client (Twitch-only or Kick-only setups are valid).
+        if self.broadcaster.routing_mode == RoutingMode::Native
+            && self.broadcaster.twitch_client.is_empty()
+            && self.broadcaster.kick_client.is_empty()
+        {
+            errors.push("native routing requires a Twitch or Kick client id".to_string());
         }
 
         // API keys - just length checks
@@ -404,7 +403,9 @@ impl AppConfig {
         // Truncate strings
         self.engine_settings.idle_category.truncate(100);
         self.engine_settings.sb_action_name.truncate(100);
-        if self.engine_settings.spark_pin.len() != 4 {
+        if self.engine_settings.spark_pin.len() != 4
+            || !self.engine_settings.spark_pin.chars().all(|c| c.is_ascii_digit())
+        {
             self.engine_settings.spark_pin = "0000".to_string();
         }
 
@@ -432,4 +433,66 @@ pub struct ImportConfigPayload {
 pub struct ExportConfigPayload {
     #[serde(default)]
     pub path: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_then_validate_accepts_out_of_range_ui_input() {
+        // Values a user can transiently produce in the UI (half-typed PIN,
+        // cleared number fields) must be repaired by sanitize(), not fail the
+        // whole config save.
+        let mut c = AppConfig::default();
+        c.engine_settings.spark_pin = "12".into();
+        c.engine_settings.widget_fade_timer = 0;
+        c.engine_settings.widget_poll_rate = 0;
+        c.engine_settings.scan_interval = 0;
+        c.engine_settings.confidence_threshold = 5.0;
+        c.engine_settings.ram_threshold = 900;
+        c.sanitize();
+        assert_eq!(c.engine_settings.spark_pin, "0000");
+        assert_eq!(c.engine_settings.widget_fade_timer, 1);
+        assert_eq!(c.engine_settings.widget_poll_rate, 1);
+        assert_eq!(c.engine_settings.scan_interval, 1);
+        assert_eq!(c.engine_settings.confidence_threshold, 1.0);
+        assert_eq!(c.engine_settings.ram_threshold, 100);
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn sanitize_resets_non_numeric_pin() {
+        let mut c = AppConfig::default();
+        c.engine_settings.spark_pin = "abcd".into();
+        c.sanitize();
+        assert_eq!(c.engine_settings.spark_pin, "0000");
+    }
+
+    #[test]
+    fn native_routing_needs_at_least_one_client() {
+        let mut c = AppConfig::default();
+        c.broadcaster.routing_mode = RoutingMode::Native;
+        assert!(c.validate().is_err(), "no clients should fail");
+        c.broadcaster.twitch_client = "abc".into();
+        assert!(c.validate().is_ok(), "twitch-only should pass");
+        c.broadcaster.twitch_client.clear();
+        c.broadcaster.kick_client = "xyz".into();
+        assert!(c.validate().is_ok(), "kick-only should pass");
+    }
+
+    #[test]
+    fn config_survives_json_round_trip() {
+        let mut c = AppConfig::default();
+        c.engine_settings.spark_pairing_key = "pair-key".into();
+        c.engine_settings.idle_category = "Art".into();
+        c.api_keys.steamgrid = "sg".into();
+        c.broadcaster.twitch_client = "tc".into();
+        let json = serde_json::to_string(&c).unwrap();
+        let back: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            serde_json::to_value(&back).unwrap(),
+            serde_json::to_value(&c).unwrap()
+        );
+    }
 }
