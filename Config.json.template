@@ -1,35 +1,35 @@
 {
-    "api_keys": {
-        "igdb_client": "YOUR_IGDB_CLIENT_ID",
-        "igdb_secret": "YOUR_IGDB_SECRET",
-        "igdb_token": "",
-        "rawg": "YOUR_RAWG_API_KEY",
-        "steamgrid": "YOUR_STEAMGRID_API_KEY"
-    },
-    "broadcaster": {
-        "kick_channel_id": "YOUR_KICK_CHANNEL_ID",
-        "kick_client": "YOUR_KICK_CLIENT_ID",
-        "kick_refresh": "",
-        "kick_secret": "YOUR_KICK_SECRET",
-        "kick_token": "",
-        "routing_mode": "native",
-        "twitch_broadcaster_id": "YOUR_TWITCH_BROADCASTER_ID",
-        "twitch_client": "YOUR_TWITCH_CLIENT_ID",
-        "twitch_refresh": "",
-        "twitch_secret": "YOUR_TWITCH_SECRET",
-        "twitch_token": ""
-    },
-    "engine_settings": {
-        "auto_push": false,
-        "grace_period": 0,
-        "idle_category": "Just Chatting",
-        "safe_mode": false,
-        "sb_action_name": "UpdateCategory",
-        "sb_port": 8080,
-        "scan_interval": 15,
-        "strict_forge_mode": false,
-        "widget_fade_timer": 15,
-        "widget_poll_rate": 8,
-        "widget_token": "GENERATE_A_RANDOM_TOKEN"
-    }
+  "api_keys": {
+    "igdb_client": "YOUR_IGDB_CLIENT_ID",
+    "igdb_secret": "YOUR_IGDB_SECRET",
+    "igdb_token": "",
+    "rawg": "YOUR_RAWG_API_KEY",
+    "steamgrid": "YOUR_STEAMGRID_API_KEY"
+  },
+  "broadcaster": {
+    "kick_channel_id": "YOUR_KICK_CHANNEL_ID",
+    "kick_client": "YOUR_KICK_CLIENT_ID",
+    "kick_refresh": "",
+    "kick_secret": "YOUR_KICK_SECRET",
+    "kick_token": "",
+    "routing_mode": "native",
+    "twitch_broadcaster_id": "YOUR_TWITCH_BROADCASTER_ID",
+    "twitch_client": "YOUR_TWITCH_CLIENT_ID",
+    "twitch_refresh": "",
+    "twitch_secret": "YOUR_TWITCH_SECRET",
+    "twitch_token": ""
+  },
+  "engine_settings": {
+    "auto_push": false,
+    "grace_period": 30,
+    "idle_category": "Just Chatting",
+    "safe_mode": false,
+    "sb_action_name": "UpdateCategory",
+    "sb_port": 8080,
+    "scan_interval": 5,
+    "strict_forge_mode": false,
+    "widget_fade_timer": 15,
+    "widget_poll_rate": 8,
+    "widget_token": "GENERATE_A_RANDOM_TOKEN"
+  }
 }

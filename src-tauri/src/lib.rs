@@ -44,6 +44,11 @@ fn init_app_base_dir(app: &tauri::AppHandle) {
                 log::warn!("Failed to bootstrap Config.json from template: {}", e);
             } else {
                 log::info!("Bootstrapped Config.json from template");
+                // The template ships a placeholder widget token; give each fresh
+                // install a unique one so overlay widgets authenticate.
+                if let Err(e) = auth::rotate_widget_token(&base) {
+                    log::warn!("Failed to generate initial widget token: {}", e);
+                }
             }
         }
     }
