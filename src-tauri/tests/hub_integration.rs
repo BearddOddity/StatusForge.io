@@ -25,7 +25,9 @@ fn udp_roundtrip(payload: &[u8]) -> Vec<u8> {
     let hub_addr = hub_socket.local_addr().unwrap();
 
     let spark_socket = UdpSocket::bind("127.0.0.1:0").expect("bind spark socket");
-    spark_socket.send_to(payload, hub_addr).expect("send heartbeat");
+    spark_socket
+        .send_to(payload, hub_addr)
+        .expect("send heartbeat");
 
     let mut buf = [0u8; 2048];
     let (len, _) = hub_socket.recv_from(&mut buf).expect("receive heartbeat");
@@ -37,7 +39,13 @@ fn valid_heartbeat_updates_hub_status_over_udp() {
     let hub = HubState::new();
     let engine = Arc::new(NativeEngineState::default());
 
-    let hb = build_heartbeat("GAMING-PC", Some("ELDEN RING"), Some("eldenring.exe"), PIN, KEY);
+    let hb = build_heartbeat(
+        "GAMING-PC",
+        Some("ELDEN RING"),
+        Some("eldenring.exe"),
+        PIN,
+        KEY,
+    );
     let wire = serde_json::to_vec(&hb).unwrap();
     let received = udp_roundtrip(&wire);
 
@@ -51,7 +59,12 @@ fn valid_heartbeat_updates_hub_status_over_udp() {
     assert_eq!(paired.game.as_deref(), Some("ELDEN RING"));
 
     // Fed into the same status path the local native engine uses
-    let game = engine.current_game.lock().unwrap().clone().expect("game set");
+    let game = engine
+        .current_game
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("game set");
     assert_eq!(game.title, "ELDEN RING");
     assert_eq!(game.process, "eldenring.exe");
     assert!(game.platform.starts_with("SPARK"));
@@ -70,7 +83,13 @@ fn wrong_pin_heartbeat_is_rejected() {
     let hub = HubState::new();
     let engine = Arc::new(NativeEngineState::default());
 
-    let hb = build_heartbeat("EVIL-PC", Some("Spoofed Game"), Some("evil.exe"), "9999", KEY);
+    let hb = build_heartbeat(
+        "EVIL-PC",
+        Some("Spoofed Game"),
+        Some("evil.exe"),
+        "9999",
+        KEY,
+    );
     let wire = serde_json::to_vec(&hb).unwrap();
 
     let err = handle_packet(&hub, &engine, &udp_roundtrip(&wire), PIN, KEY, None).unwrap_err();

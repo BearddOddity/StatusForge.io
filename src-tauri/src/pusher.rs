@@ -28,7 +28,10 @@ static LAST_TWITCH_PUSH_SECS: AtomicU64 = AtomicU64::new(0);
 static LAST_KICK_PUSH_SECS: AtomicU64 = AtomicU64::new(0);
 
 fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 /// True (and records the attempt) if the cooldown for this platform has
@@ -70,7 +73,11 @@ fn library_twitch_id(db: &ForgeDatabase, title: &str) -> Option<String> {
 
 /// Kick category id: prefer library[title].kick_id, else the kick_db name→id
 /// map (case-insensitive). Kick's PATCH body wants an integer.
-fn resolve_kick_id(db: &ForgeDatabase, kick_map: &HashMap<String, String>, title: &str) -> Option<i64> {
+fn resolve_kick_id(
+    db: &ForgeDatabase,
+    kick_map: &HashMap<String, String>,
+    title: &str,
+) -> Option<i64> {
     let from_lib = db
         .library
         .get(title)

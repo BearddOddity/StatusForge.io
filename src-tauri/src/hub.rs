@@ -72,7 +72,10 @@ fn read_pairing() -> (String, String) {
         .ok()
         .and_then(|base| crate::auth::load_config_at(&base).ok());
     match config {
-        Some(c) => (c.engine_settings.spark_pin, c.engine_settings.spark_pairing_key),
+        Some(c) => (
+            c.engine_settings.spark_pin,
+            c.engine_settings.spark_pairing_key,
+        ),
         None => ("0000".to_string(), String::new()),
     }
 }
@@ -168,11 +171,7 @@ pub fn handle_packet(
 }
 
 /// Start the Hub: heartbeat listener (UDP 53735) + discovery announcer (UDP 53736).
-pub fn start_hub(
-    hub: Arc<HubState>,
-    engine: Arc<NativeEngineState>,
-    app_handle: tauri::AppHandle,
-) {
+pub fn start_hub(hub: Arc<HubState>, engine: Arc<NativeEngineState>, app_handle: tauri::AppHandle) {
     // ── Heartbeat listener ─────────────────────────────────────────────
     {
         let hub = hub.clone();
@@ -186,7 +185,10 @@ pub fn start_hub(
                     return;
                 }
             };
-            log::info!("[HUB] Listening for SPARK heartbeats on udp/{}", HEARTBEAT_PORT);
+            log::info!(
+                "[HUB] Listening for SPARK heartbeats on udp/{}",
+                HEARTBEAT_PORT
+            );
             let mut buf = [0u8; 2048];
             loop {
                 match socket.recv_from(&mut buf) {

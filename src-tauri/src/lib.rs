@@ -1,15 +1,15 @@
-pub mod config;
 mod auth;
+pub mod config;
 pub mod pusher;
 pub use forge_detection as scanner;
+pub mod hub;
 pub mod metadata;
 pub mod server;
-pub mod hub;
 pub mod spark_protocol;
 use config::{AppConfig, EngineStatus};
 
-use std::sync::{Arc, Mutex, OnceLock};
 use serde::Deserialize;
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{Emitter, Manager};
 
 static APP_BASE_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
@@ -21,7 +21,9 @@ fn init_app_base_dir(app: &tauri::AppHandle) {
     // On Windows installed: next to the exe (e.g. C:\Program Files\StatusForge.io\)
     // In dev: the src-tauri/ directory (where Cargo.toml lives)
     // Bundled resources via ../ in tauri.conf.json land in _up_/ subdir of resource_dir.
-    let resource_dir = app.path().resource_dir()
+    let resource_dir = app
+        .path()
+        .resource_dir()
         .expect("Failed to resolve resource dir");
 
     // In dev mode, resource_dir is src-tauri/ but our data files (Config.json,
@@ -29,7 +31,10 @@ fn init_app_base_dir(app: &tauri::AppHandle) {
     // In production, resources are bundled directly into resource_dir.
     let base = if resource_dir.join("Config.json").exists() {
         resource_dir.to_path_buf()
-    } else if resource_dir.parent().is_some_and(|p| p.join("Config.json").exists()) {
+    } else if resource_dir
+        .parent()
+        .is_some_and(|p| p.join("Config.json").exists())
+    {
         resource_dir.parent().unwrap().to_path_buf()
     } else {
         resource_dir.to_path_buf()
@@ -63,9 +68,9 @@ fn app_base_dir() -> Result<std::path::PathBuf, String> {
         return Ok(dir.clone());
     }
     // Fallback if init hasn't been called yet (shouldn't happen in practice)
-    let exe_path = std::env::current_exe()
-        .map_err(|e| format!("Failed to get exe path: {}", e))?;
-    let base = exe_path.parent()
+    let exe_path = std::env::current_exe().map_err(|e| format!("Failed to get exe path: {}", e))?;
+    let base = exe_path
+        .parent()
         .ok_or_else(|| "Failed to get exe parent directory".to_string())?;
     let canonical = std::fs::canonicalize(base)
         .map_err(|e| format!("Failed to canonicalize base dir: {}", e))?;
@@ -75,17 +80,18 @@ fn app_base_dir() -> Result<std::path::PathBuf, String> {
 /// Validates that `path` is canonicalized and lives under `base`.
 /// Prevents path traversal attacks.
 fn assert_path_in_base(path: &std::path::Path, base: &std::path::Path) -> Result<(), String> {
-    let canonical = std::fs::canonicalize(path)
-        .or_else(|_| {
-            // Path may not yet exist (e.g. writing new file). Canonicalize parent, then join filename.
-            let parent = path.parent()
-                .ok_or_else(|| format!("Path has no parent: {:?}", path))?;
-            let file_name = path.file_name()
-                .ok_or_else(|| format!("Path has no file name: {:?}", path))?;
-            let canonical_parent = std::fs::canonicalize(parent)
-                .map_err(|e| format!("Failed to canonicalize parent: {}", e))?;
-            Ok::<_, String>(canonical_parent.join(file_name))
-        })?;
+    let canonical = std::fs::canonicalize(path).or_else(|_| {
+        // Path may not yet exist (e.g. writing new file). Canonicalize parent, then join filename.
+        let parent = path
+            .parent()
+            .ok_or_else(|| format!("Path has no parent: {:?}", path))?;
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| format!("Path has no file name: {:?}", path))?;
+        let canonical_parent = std::fs::canonicalize(parent)
+            .map_err(|e| format!("Failed to canonicalize parent: {}", e))?;
+        Ok::<_, String>(canonical_parent.join(file_name))
+    })?;
     if !canonical.starts_with(base) {
         return Err(format!(
             "Path traversal detected: {:?} is outside base {:?}",
@@ -114,8 +120,6 @@ struct ConfigImportPayload {
     backup: Option<bool>,
 }
 
-
-
 #[tauri::command]
 fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
@@ -126,11 +130,17 @@ fn get_app_version() -> String {
 #[tauri::command]
 fn get_platform() -> String {
     #[cfg(target_os = "windows")]
-    { "windows".to_string() }
+    {
+        "windows".to_string()
+    }
     #[cfg(target_os = "linux")]
-    { "linux".to_string() }
+    {
+        "linux".to_string()
+    }
     #[cfg(target_os = "macos")]
-    { "macos".to_string() }
+    {
+        "macos".to_string()
+    }
 }
 
 /// Shared `sysinfo::System` for the System Performance panel — a persistent
@@ -153,7 +163,9 @@ fn get_system_stats(monitor: tauri::State<SystemMonitor>) -> Result<SystemStats,
     sys.refresh_processes_specifics(
         sysinfo::ProcessesToUpdate::Some(&[pid]),
         true,
-        sysinfo::ProcessRefreshKind::nothing().with_cpu().with_memory(),
+        sysinfo::ProcessRefreshKind::nothing()
+            .with_cpu()
+            .with_memory(),
     );
     let proc = sys.process(pid).ok_or("process not found")?;
     Ok(SystemStats {
@@ -167,12 +179,21 @@ fn get_system_stats(monitor: tauri::State<SystemMonitor>) -> Result<SystemStats,
 #[tauri::command]
 fn get_engine_status(state: tauri::State<Arc<NativeEngineState>>) -> Result<EngineStatus, String> {
     let status = server::build_status(&state);
-    let s = |k: &str| status.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let s = |k: &str| {
+        status
+            .get(k)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
     Ok(EngineStatus {
         running: state.running.load(Ordering::Relaxed),
         game_title: s("game_title"),
         process_name: s("process_name"),
-        is_playing: status.get("is_playing").and_then(|v| v.as_bool()).unwrap_or(false),
+        is_playing: status
+            .get("is_playing")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         genre: s("genre"),
         developer: s("developer"),
         publisher: s("publisher"),
@@ -191,9 +212,10 @@ async fn get_widget_token() -> Result<String, String> {
         let content = tokio::fs::read_to_string(&config_path)
             .await
             .map_err(|e| format!("Failed to read config: {}", e))?;
-        let config: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse config: {}", e))?;
-        Ok(config.get("engine_settings")
+        let config: serde_json::Value =
+            serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
+        Ok(config
+            .get("engine_settings")
             .and_then(|v| v.get("widget_token"))
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown")
@@ -218,8 +240,8 @@ fn export_config(payload: Option<ConfigExportPayload>) -> Result<serde_json::Val
     if config_path.exists() {
         let content = std::fs::read_to_string(&config_path)
             .map_err(|e| format!("Failed to read config: {}", e))?;
-        let config: AppConfig = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse config: {}", e))?;
+        let config: AppConfig =
+            serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
         // Return full config — this is a local Tauri app, no need to redact
         Ok(serde_json::json!(config))
     } else {
@@ -233,7 +255,8 @@ fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
     // cleared number field), then validate what remains.
     let mut config = payload.config;
     config.sanitize();
-    config.validate()
+    config
+        .validate()
         .map_err(|e| format!("Config validation failed: {}", e))?;
 
     let base = app_base_dir()?;
@@ -257,10 +280,8 @@ fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
     let raw = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
     let tmp = config_path.with_extension("tmp");
-    std::fs::write(&tmp, raw)
-        .map_err(|e| format!("Failed to write temp config: {}", e))?;
-    std::fs::rename(&tmp, &config_path)
-        .map_err(|e| format!("Failed to rename config: {}", e))?;
+    std::fs::write(&tmp, raw).map_err(|e| format!("Failed to write temp config: {}", e))?;
+    std::fs::rename(&tmp, &config_path).map_err(|e| format!("Failed to rename config: {}", e))?;
 
     Ok("Config saved successfully".to_string())
 }
@@ -282,17 +303,13 @@ fn get_detection_mode() -> String {
 }
 
 #[tauri::command]
-fn stop_engine(
-    state: tauri::State<Arc<NativeEngineState>>,
-) -> Result<String, String> {
+fn stop_engine(state: tauri::State<Arc<NativeEngineState>>) -> Result<String, String> {
     state.running.store(false, Ordering::Relaxed);
     Ok("Engine stopped".to_string())
 }
 
 #[tauri::command]
-fn is_engine_running(
-    state: tauri::State<Arc<NativeEngineState>>,
-) -> bool {
+fn is_engine_running(state: tauri::State<Arc<NativeEngineState>>) -> bool {
     state.running.load(Ordering::Relaxed)
 }
 
@@ -300,10 +317,10 @@ fn is_engine_running(
 // NATIVE ENGINE — Phase 3: Rust Game Detection Loop
 // ═══════════════════════════════════════════════════════════════════════════════
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use scanner::waterfall::{ForgeWaterfall, LogFn};
 use scanner::{GameDetection, ScannerConfig};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Shared state for the native detection engine.
 pub struct NativeEngineState {
@@ -567,11 +584,7 @@ fn spawn_engine_loop(
                 let game_title = game.title.clone();
                 if current_game.as_ref() != Some(&game_title) {
                     current_game = Some(game_title.clone());
-                    log::info!(
-                        "[NATIVE] NEW GAME: {} ({})",
-                        game_title,
-                        game.platform
-                    );
+                    log::info!("[NATIVE] NEW GAME: {} ({})", game_title, game.platform);
 
                     state_arc.set_playing(&game);
 
@@ -605,7 +618,9 @@ fn spawn_engine_loop(
                                 }
                             }
                         }
-                        Err(e) => log::warn!("[NATIVE] Failed to load Forge DB for library upsert: {}", e),
+                        Err(e) => {
+                            log::warn!("[NATIVE] Failed to load Forge DB for library upsert: {}", e)
+                        }
                     }
                 }
             } else {
@@ -624,7 +639,10 @@ fn spawn_engine_loop(
                         .as_secs_f64()
                         - lost_focus_time.unwrap_or(0.0);
                     if time_away > grace_period as f64 {
-                        log::info!("[NATIVE] Grace period expired. Dropping: {}", current_game.as_deref().unwrap_or("?"));
+                        log::info!(
+                            "[NATIVE] Grace period expired. Dropping: {}",
+                            current_game.as_deref().unwrap_or("?")
+                        );
                         current_game = None;
                         lost_focus_time = None;
 
@@ -686,7 +704,8 @@ const KEYRING_SERVICE: &str = "statusforge.io";
 fn store_secret_token(service_name: String, token: String) -> Result<String, String> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, &service_name)
         .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
-    entry.set_password(&token)
+    entry
+        .set_password(&token)
         .map_err(|e| format!("Failed to store token in keychain: {}", e))?;
     Ok(format!("Token '{}' stored in OS keychain", service_name))
 }
@@ -696,7 +715,8 @@ fn store_secret_token(service_name: String, token: String) -> Result<String, Str
 fn get_secret_token(service_name: String) -> Result<String, String> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, &service_name)
         .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
-    let token = entry.get_password()
+    let token = entry
+        .get_password()
         .map_err(|e| format!("Failed to retrieve token from keychain: {}", e))?;
     Ok(token)
 }
@@ -706,7 +726,8 @@ fn get_secret_token(service_name: String) -> Result<String, String> {
 fn delete_secret_token(service_name: String) -> Result<String, String> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, &service_name)
         .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
-    entry.delete_credential()
+    entry
+        .delete_credential()
         .map_err(|e| format!("Failed to delete token from keychain: {}", e))?;
     Ok(format!("Token '{}' deleted from OS keychain", service_name))
 }
@@ -721,10 +742,11 @@ fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
 
     let content = std::fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read config: {}", e))?;
-    let mut config: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse config: {}", e))?;
+    let mut config: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
 
-    let broadcaster = config.get_mut("broadcaster")
+    let broadcaster = config
+        .get_mut("broadcaster")
         .ok_or_else(|| "No broadcaster section in config".to_string())?;
 
     let token_fields = [
@@ -740,9 +762,14 @@ fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
     for (json_key, keychain_name) in &token_fields {
         if let Some(val) = broadcaster.get(*json_key).and_then(|v| v.as_str()) {
             if !val.is_empty() {
-                let entry = keyring::Entry::new(KEYRING_SERVICE, keychain_name)
-                    .map_err(|e| format!("Failed to create keyring entry for {}: {}", keychain_name, e))?;
-                entry.set_password(val)
+                let entry = keyring::Entry::new(KEYRING_SERVICE, keychain_name).map_err(|e| {
+                    format!(
+                        "Failed to create keyring entry for {}: {}",
+                        keychain_name, e
+                    )
+                })?;
+                entry
+                    .set_password(val)
                     .map_err(|e| format!("Failed to store {}: {}", keychain_name, e))?;
                 // Blank the token in config
                 if let Some(obj) = broadcaster.as_object_mut() {
@@ -764,9 +791,15 @@ fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
         for (json_key, keychain_name) in &api_fields {
             if let Some(val) = api_keys.get(*json_key).and_then(|v| v.as_str()) {
                 if !val.is_empty() {
-                    let entry = keyring::Entry::new(KEYRING_SERVICE, keychain_name)
-                        .map_err(|e| format!("Failed to create keyring entry for {}: {}", keychain_name, e))?;
-                    entry.set_password(val)
+                    let entry =
+                        keyring::Entry::new(KEYRING_SERVICE, keychain_name).map_err(|e| {
+                            format!(
+                                "Failed to create keyring entry for {}: {}",
+                                keychain_name, e
+                            )
+                        })?;
+                    entry
+                        .set_password(val)
                         .map_err(|e| format!("Failed to store {}: {}", keychain_name, e))?;
                     if let Some(obj) = api_keys.as_object_mut() {
                         obj.insert(json_key.to_string(), serde_json::json!(""));
@@ -778,9 +811,12 @@ fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
     }
 
     // Write updated config
-    std::fs::write(&config_path, serde_json::to_string_pretty(&config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))?)
-        .map_err(|e| format!("Failed to write config: {}", e))?;
+    std::fs::write(
+        &config_path,
+        serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?,
+    )
+    .map_err(|e| format!("Failed to write config: {}", e))?;
 
     Ok(migrated)
 }
@@ -790,9 +826,14 @@ fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
 #[tauri::command]
 fn get_all_keychain_tokens() -> Result<serde_json::Value, String> {
     let broadcaster_keys = [
-        "twitch_token", "twitch_refresh", "kick_token", "kick_refresh",
-        "twitch_secret", "kick_secret",
-        "twitch_client_id", "kick_client_id",
+        "twitch_token",
+        "twitch_refresh",
+        "kick_token",
+        "kick_refresh",
+        "twitch_secret",
+        "kick_secret",
+        "twitch_client_id",
+        "kick_client_id",
     ];
     let api_keys = ["igdb_token", "igdb_secret", "rawg", "steamgrid"];
 
@@ -836,8 +877,8 @@ async fn kick_login(
     let content = tokio::fs::read_to_string(&config_path)
         .await
         .map_err(|e| format!("Failed to read config: {}", e))?;
-    let config: AppConfig = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse config: {}", e))?;
+    let config: AppConfig =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
 
     let client_id = &config.broadcaster.kick_client;
     if client_id.is_empty() {
@@ -867,7 +908,8 @@ async fn kick_login(
     #[allow(deprecated)]
     {
         use tauri_plugin_shell::ShellExt;
-        app.shell().open(&url, None)
+        app.shell()
+            .open(&url, None)
             .map_err(|e| format!("Failed to open browser: {}", e))?;
     }
 
@@ -886,8 +928,8 @@ async fn twitch_login(
     let content = tokio::fs::read_to_string(&config_path)
         .await
         .map_err(|e| format!("Failed to read config: {}", e))?;
-    let config: AppConfig = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse config: {}", e))?;
+    let config: AppConfig =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
 
     let client_id = &config.broadcaster.twitch_client;
     if client_id.is_empty() {
@@ -899,7 +941,8 @@ async fn twitch_login(
     #[allow(deprecated)]
     {
         use tauri_plugin_shell::ShellExt;
-        app.shell().open(&url, None)
+        app.shell()
+            .open(&url, None)
             .map_err(|e| format!("Failed to open browser: {}", e))?;
     }
 
@@ -1033,10 +1076,13 @@ fn dev_get_log_tail(lines: usize) -> Result<LogTail, String> {
     let base = app_base_dir()?;
     let log_path = base.join("debug.log");
     if !log_path.exists() {
-        return Ok(LogTail { lines: vec!["[no log file found]".to_string()], total_lines: 0 });
+        return Ok(LogTail {
+            lines: vec!["[no log file found]".to_string()],
+            total_lines: 0,
+        });
     }
-    let content = std::fs::read_to_string(&log_path)
-        .map_err(|e| format!("Failed to read log: {}", e))?;
+    let content =
+        std::fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log: {}", e))?;
     let all_lines: Vec<&str> = content.lines().collect();
     let total_lines = all_lines.len();
     let start = total_lines.saturating_sub(lines);
@@ -1243,7 +1289,11 @@ pub fn run() {
             }
 
             // LAN Hub: announce on udp/53736, receive SPARK heartbeats on udp/53735
-            hub::start_hub(hub_state.clone(), engine_state.clone(), app.handle().clone());
+            hub::start_hub(
+                hub_state.clone(),
+                engine_state.clone(),
+                app.handle().clone(),
+            );
 
             // Widget/status + OAuth server (tcp/127.0.0.1:53735, HTTP + TLS)
             let server_state = server::ServerState {
@@ -1324,7 +1374,12 @@ mod config_command_tests {
         config.broadcaster.routing_mode = config::RoutingMode::Native;
         config.broadcaster.twitch_client = "twitch-only".into(); // kick empty must still save
 
-        let msg = import_config(ConfigImportPayload { config, path: None, backup: None }).unwrap();
+        let msg = import_config(ConfigImportPayload {
+            config,
+            path: None,
+            backup: None,
+        })
+        .unwrap();
         assert_eq!(msg, "Config saved successfully");
         assert!(base.join("Config.json").exists());
 

@@ -23,42 +23,85 @@ use crate::{ForgeKnowledge, GameDetection, ScannerConfig};
 pub type LogFn = Box<dyn Fn(&str, &str, u64) + Send + Sync>;
 
 const SYSTEM_EXILES: &[&str] = &[
-    "explorer.exe", "chrome.exe", "msedge.exe", "firefox.exe", "discord.exe",
-    "obs64.exe", "obs32.exe", "taskmgr.exe", "spotify.exe", "code.exe",
-    "cmd.exe", "powershell.exe", "steam.exe", "epicgameslauncher.exe",
-    "bash", "zsh", "gnome-shell", "plasma-desktop", "finder", "dock",
+    "explorer.exe",
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "discord.exe",
+    "obs64.exe",
+    "obs32.exe",
+    "taskmgr.exe",
+    "spotify.exe",
+    "code.exe",
+    "cmd.exe",
+    "powershell.exe",
+    "steam.exe",
+    "epicgameslauncher.exe",
+    "bash",
+    "zsh",
+    "gnome-shell",
+    "plasma-desktop",
+    "finder",
+    "dock",
 ];
 
 const BANNED_PATHS: &[&str] = &["c:\\windows", "system32", "/usr/bin", "/usr/sbin", "/sbin"];
 
 const ENGINE_DNA: &[&str] = &[
     // Unity
-    "unityplayer.dll", "globalgamemanagers",
+    "unityplayer.dll",
+    "globalgamemanagers",
     // Godot
-    "project.godot", "data.pck",
+    "project.godot",
+    "data.pck",
     // GameMaker
-    "data.win", "audiogroup1.dat",
+    "data.win",
+    "audiogroup1.dat",
     // Ren'Py
-    "archive.rpa", "scripts.rpa",
+    "archive.rpa",
+    "scripts.rpa",
     // RPG Maker
-    "game.rgss3a", "game.rgss2a", "game.rxdata", "rpg_core.js",
+    "game.rgss3a",
+    "game.rgss2a",
+    "game.rxdata",
+    "rpg_core.js",
     // Java
-    "lwjgl.dll", "lwjgl64.dll", "liblwjgl.so",
+    "lwjgl.dll",
+    "lwjgl64.dll",
+    "liblwjgl.so",
     // Lua / LÖVE
-    "love.dll", "game.love",
+    "love.dll",
+    "game.love",
     // Construct / HTML5
-    "c3runtime.js", "package.nw",
+    "c3runtime.js",
+    "package.nw",
     // Proprietary AAA
-    "bink2w64.dll", "oo2core_", "steam_api64.dll", "fmodstudio.dll",
+    "bink2w64.dll",
+    "oo2core_",
+    "steam_api64.dll",
+    "fmodstudio.dll",
 ];
 
 const EMULATOR_TAGS: &[&str] = &[
-    "retroarch", "yuzu", "ryujinx", "pcsx2", "rpcs3", "dolphin", "cemu", "citra", "ppsspp",
+    "retroarch",
+    "yuzu",
+    "ryujinx",
+    "pcsx2",
+    "rpcs3",
+    "dolphin",
+    "cemu",
+    "citra",
+    "ppsspp",
 ];
 
 const GENERIC_EXE_NAMES: &[&str] = &[
-    "game.exe", "win64-shipping", "start.exe", "play.exe", "application.exe",
-    "runner", "binaries",
+    "game.exe",
+    "win64-shipping",
+    "start.exe",
+    "play.exe",
+    "application.exe",
+    "runner",
+    "binaries",
 ];
 
 /// Snapshot of the foreground process, decoupled from `sysinfo` for testability.
@@ -162,11 +205,7 @@ impl ForgeWaterfall {
     }
 
     /// Pure(ish) pipeline evaluation — separated from OS collection for tests.
-    pub fn evaluate(
-        &self,
-        window: &ActiveWindow,
-        proc: &ProcessSnapshot,
-    ) -> Option<GameDetection> {
+    pub fn evaluate(&self, window: &ActiveWindow, proc: &ProcessSnapshot) -> Option<GameDetection> {
         let kw = self.knowledge.as_ref()?;
         let exe_name = &proc.exe_name;
         let exe_path = &proc.exe_path;
@@ -175,7 +214,11 @@ impl ForgeWaterfall {
         // ── Stage 1: The Forge (VIP immunity via listed_apps) ──────────────
         if let Some(title) = kw.listed_apps.get(exe_name) {
             return Some(format_game_output(
-                exe_name, exe_path, title, "The Forge", kw.config.emulator_detection,
+                exe_name,
+                exe_path,
+                title,
+                "The Forge",
+                kw.config.emulator_detection,
             ));
         }
 
@@ -187,16 +230,17 @@ impl ForgeWaterfall {
         // ── Xbox Game Pass / UWP piercer ───────────────────────────────────
         if exe_name == "applicationframehost.exe" && !window_title.is_empty() {
             return Some(format_game_output(
-                exe_name, exe_path, window_title, "Xbox Game Pass",
+                exe_name,
+                exe_path,
+                window_title,
+                "Xbox Game Pass",
                 kw.config.emulator_detection,
             ));
         }
 
         // ── Stage 2: The Gauntlet (hard kills) ─────────────────────────────
         if !kw.config.process_filter_bypass {
-            if kw.delisted_apps.contains(exe_name)
-                || SYSTEM_EXILES.contains(&exe_name.as_str())
-            {
+            if kw.delisted_apps.contains(exe_name) || SYSTEM_EXILES.contains(&exe_name.as_str()) {
                 return None;
             }
             if BANNED_PATHS.iter().any(|b| exe_path.contains(b)) {
@@ -221,7 +265,10 @@ impl ForgeWaterfall {
             if let Some(app_id) = platform::read_steam_running_app_id() {
                 if app_id > 0 {
                     return Some(format_game_output(
-                        exe_name, exe_path, window_title, "Steam Registry",
+                        exe_name,
+                        exe_path,
+                        window_title,
+                        "Steam Registry",
                         kw.config.emulator_detection,
                     ));
                 }
@@ -232,7 +279,10 @@ impl ForgeWaterfall {
         {
             if let Some(platform_tag) = linux_golden_ticket(window.pid) {
                 return Some(format_game_output(
-                    exe_name, exe_path, window_title, &platform_tag,
+                    exe_name,
+                    exe_path,
+                    window_title,
+                    &platform_tag,
                     kw.config.emulator_detection,
                 ));
             }
@@ -241,17 +291,21 @@ impl ForgeWaterfall {
         // Process-tree parent check: Proton/Wine wrappers and official launchers
         if !proc.parent_name.is_empty() {
             let parent = proc.parent_name.as_str();
-            if ["wine64-preloader", "proton", "wine"].contains(&parent)
-                || parent.ends_with(".sh")
-            {
+            if ["wine64-preloader", "proton", "wine"].contains(&parent) || parent.ends_with(".sh") {
                 return Some(format_game_output(
-                    exe_name, exe_path, window_title, "Shell Wrapper/Proton",
+                    exe_name,
+                    exe_path,
+                    window_title,
+                    "Shell Wrapper/Proton",
                     kw.config.emulator_detection,
                 ));
             }
             if ["epicgameslauncher.exe", "eadesktop.exe", "upc.exe"].contains(&parent) {
                 return Some(format_game_output(
-                    exe_name, exe_path, window_title, "Official Launcher",
+                    exe_name,
+                    exe_path,
+                    window_title,
+                    "Official Launcher",
                     kw.config.emulator_detection,
                 ));
             }
@@ -265,10 +319,7 @@ impl ForgeWaterfall {
         if kw.config.score_fullscreen && window.is_fullscreen {
             confidence += 0.3;
         }
-        if kw.config.score_window_title
-            && !window_title.is_empty()
-            && title_lower != *exe_name
-        {
+        if kw.config.score_window_title && !window_title.is_empty() && title_lower != *exe_name {
             confidence += 0.2;
         }
         if kw.config.score_ram && proc.memory_mb > kw.config.ram_threshold_mb {
@@ -277,7 +328,10 @@ impl ForgeWaterfall {
 
         if confidence >= kw.config.confidence_threshold {
             return Some(format_game_output(
-                exe_name, exe_path, window_title, "Standalone/DRM-Free",
+                exe_name,
+                exe_path,
+                window_title,
+                "Standalone/DRM-Free",
                 kw.config.emulator_detection,
             ));
         }
@@ -305,7 +359,9 @@ impl ForgeWaterfall {
         if config.trap_chromium {
             if let Some(files) = &dir_contents {
                 let chromium_files = [
-                    "v8_context_snapshot.bin", "libcef.dll", "libcef.so",
+                    "v8_context_snapshot.bin",
+                    "libcef.dll",
+                    "libcef.so",
                     "chromium framework.framework",
                 ];
                 let is_chromium = chromium_files
@@ -321,8 +377,12 @@ impl ForgeWaterfall {
         // 3. Command line trap
         if config.trap_cmdline && !proc.cmdline.is_empty() {
             let bad_flags = [
-                "--type=renderer", "--type=crashpad", "-embedding",
-                "--background", "--hidden", "--silent",
+                "--type=renderer",
+                "--type=crashpad",
+                "-embedding",
+                "--background",
+                "--hidden",
+                "--silent",
             ];
             if bad_flags.iter().any(|f| proc.cmdline.contains(f)) {
                 (self.log)("[FILTER] Background/helper cmdline trapped", "debug", 300);
@@ -334,7 +394,11 @@ impl ForgeWaterfall {
         if config.trap_ui_framework {
             if let Some(files) = &dir_contents {
                 let ui_frameworks = [
-                    "qt5core", "qt6core", "mfc140.dll", "wxbase", "libgtk-3.so",
+                    "qt5core",
+                    "qt6core",
+                    "mfc140.dll",
+                    "wxbase",
+                    "libgtk-3.so",
                     "qtgui.framework",
                 ];
                 if ui_frameworks
@@ -410,7 +474,14 @@ pub fn extract_true_game_name(exe_path: &str) -> String {
     }
 
     let ignore = [
-        "binaries", "win64", "win32", "shipping", "x64", "x86", "bin", "release",
+        "binaries",
+        "win64",
+        "win32",
+        "shipping",
+        "x64",
+        "x86",
+        "bin",
+        "release",
         "windowsnoeditor",
     ];
     for part in parts.iter().rev().skip(1) {
@@ -611,7 +682,10 @@ mod tests {
     fn listed_app_wins_instantly() {
         let s = scout_with(&[("eldenring.exe", "ELDEN RING")], &[], false);
         let d = s
-            .evaluate(&win("ELDEN RING", true), &proc("eldenring.exe", "d:\\games\\eldenring.exe", 4000))
+            .evaluate(
+                &win("ELDEN RING", true),
+                &proc("eldenring.exe", "d:\\games\\eldenring.exe", 4000),
+            )
             .unwrap();
         assert_eq!(d.title, "ELDEN RING");
         assert_eq!(d.platform, "The Forge");
@@ -621,7 +695,10 @@ mod tests {
     fn strict_mode_kills_unlisted() {
         let s = scout_with(&[("a.exe", "A")], &[], true);
         assert!(s
-            .evaluate(&win("Some Game", true), &proc("game2.exe", "d:\\games\\game2.exe", 4000))
+            .evaluate(
+                &win("Some Game", true),
+                &proc("game2.exe", "d:\\games\\game2.exe", 4000)
+            )
             .is_none());
     }
 
@@ -633,7 +710,11 @@ mod tests {
         let d = s
             .evaluate(
                 &win("Forza Horizon 5", true),
-                &proc("applicationframehost.exe", "c:\\windows\\system32\\applicationframehost.exe", 500),
+                &proc(
+                    "applicationframehost.exe",
+                    "c:\\windows\\system32\\applicationframehost.exe",
+                    500,
+                ),
             )
             .unwrap();
         assert_eq!(d.title, "Forza Horizon 5");
@@ -646,7 +727,10 @@ mod tests {
     fn system_exiles_are_killed() {
         let s = scout_with(&[], &[], false);
         assert!(s
-            .evaluate(&win("Steam", false), &proc("steam.exe", "c:\\steam\\steam.exe", 900))
+            .evaluate(
+                &win("Steam", false),
+                &proc("steam.exe", "c:\\steam\\steam.exe", 900)
+            )
             .is_none());
     }
 
@@ -654,7 +738,10 @@ mod tests {
     fn delisted_apps_are_killed() {
         let s = scout_with(&[], &["mygame.exe"], false);
         assert!(s
-            .evaluate(&win("My Game", true), &proc("mygame.exe", "d:\\g\\mygame.exe", 900))
+            .evaluate(
+                &win("My Game", true),
+                &proc("mygame.exe", "d:\\g\\mygame.exe", 900)
+            )
             .is_none());
     }
 
@@ -662,7 +749,10 @@ mod tests {
     fn banned_paths_are_killed() {
         let s = scout_with(&[], &[], false);
         assert!(s
-            .evaluate(&win("Tool", true), &proc("tool.exe", "c:\\windows\\tool.exe", 900))
+            .evaluate(
+                &win("Tool", true),
+                &proc("tool.exe", "c:\\windows\\tool.exe", 900)
+            )
             .is_none());
     }
 
@@ -680,7 +770,10 @@ mod tests {
     #[test]
     fn filter_bypass_skips_exiles() {
         let mut s = scout_with(&[], &[], false);
-        let cfg = ScannerConfig { process_filter_bypass: true, ..Default::default() };
+        let cfg = ScannerConfig {
+            process_filter_bypass: true,
+            ..Default::default()
+        };
         s.update_forge_knowledge(HashMap::new(), vec![], false, cfg);
         // steam.exe survives the gauntlet with bypass on, and fullscreen +
         // title + RAM pushes it over the confidence threshold.
@@ -694,7 +787,10 @@ mod tests {
     fn ram_floor_trap() {
         let s = scout_with(&[], &[], false);
         assert!(s
-            .evaluate(&win("Tiny Tool", true), &proc("tiny.exe", "d:\\t\\tiny.exe", 10))
+            .evaluate(
+                &win("Tiny Tool", true),
+                &proc("tiny.exe", "d:\\t\\tiny.exe", 10)
+            )
             .is_none());
     }
 
@@ -711,7 +807,9 @@ mod tests {
         let s = scout_with(&[], &[], false);
         let mut w = win("Widget", false);
         w.rect = Some((0, 0, 320, 240));
-        assert!(s.evaluate(&w, &proc("widget.exe", "d:\\w\\widget.exe", 900)).is_none());
+        assert!(s
+            .evaluate(&w, &proc("widget.exe", "d:\\w\\widget.exe", 900))
+            .is_none());
     }
 
     #[test]
@@ -719,7 +817,9 @@ mod tests {
         let s = scout_with(&[], &[], false);
         let mut w = win("Hidden", true);
         w.rect = Some((-32000, -32000, 1920, 1080));
-        assert!(s.evaluate(&w, &proc("bg.exe", "d:\\b\\bg.exe", 900)).is_none());
+        assert!(s
+            .evaluate(&w, &proc("bg.exe", "d:\\b\\bg.exe", 900))
+            .is_none());
     }
 
     // ── Stage 4: golden tickets ─────────────────────────────────────────
@@ -750,7 +850,10 @@ mod tests {
         let s = scout_with(&[], &[], false);
         // fullscreen (0.3) + distinct title (0.2) + RAM (0.1) = 0.6 >= 0.5
         let d = s
-            .evaluate(&win("Hollow Knight", true), &proc("hollow_knight.exe", "", 900))
+            .evaluate(
+                &win("Hollow Knight", true),
+                &proc("hollow_knight.exe", "", 900),
+            )
             .unwrap();
         assert_eq!(d.title, "Hollow Knight");
         assert_eq!(d.platform, "Standalone/DRM-Free");
@@ -769,7 +872,13 @@ mod tests {
 
     #[test]
     fn non_generic_exe_uses_window_title() {
-        let d = format_game_output("celeste.exe", "d:\\games\\celeste\\celeste.exe", "Celeste", "Standalone/DRM-Free", true);
+        let d = format_game_output(
+            "celeste.exe",
+            "d:\\games\\celeste\\celeste.exe",
+            "Celeste",
+            "Standalone/DRM-Free",
+            true,
+        );
         assert_eq!(d.title, "Celeste");
         assert_eq!(d.process, "celeste.exe");
     }
@@ -777,8 +886,11 @@ mod tests {
     #[test]
     fn emulator_splitter_takes_window_title() {
         let d = format_game_output(
-            "yuzu.exe", "d:\\emu\\yuzu.exe",
-            "The Legend of Zelda - yuzu 1440", "Standalone/DRM-Free", true,
+            "yuzu.exe",
+            "d:\\emu\\yuzu.exe",
+            "The Legend of Zelda - yuzu 1440",
+            "Standalone/DRM-Free",
+            true,
         );
         assert_eq!(d.title, "The Legend of Zelda");
         assert_eq!(d.platform, "Emulator");
@@ -787,7 +899,11 @@ mod tests {
     #[test]
     fn emulator_splitter_with_pipe() {
         let d = format_game_output(
-            "retroarch.exe", "", "RetroArch | Super Mario World", "X", true,
+            "retroarch.exe",
+            "",
+            "RetroArch | Super Mario World",
+            "X",
+            true,
         );
         assert_eq!(d.title, "Super Mario World");
         assert_eq!(d.platform, "Emulator");
@@ -795,7 +911,13 @@ mod tests {
 
     #[test]
     fn emulator_without_window_title_falls_through() {
-        let d = format_game_output("pcsx2.exe", "d:\\emu\\pcsx2\\pcsx2.exe", "", "Standalone/DRM-Free", true);
+        let d = format_game_output(
+            "pcsx2.exe",
+            "d:\\emu\\pcsx2\\pcsx2.exe",
+            "",
+            "Standalone/DRM-Free",
+            true,
+        );
         assert_eq!(d.platform, "Standalone/DRM-Free");
     }
 
@@ -821,7 +943,9 @@ mod tests {
         let d = format_game_output(
             "game.exe",
             "d:\\steamlibrary\\steamapps\\common\\Hollow_Knight\\game.exe",
-            "game.exe", "Steam Registry", true,
+            "game.exe",
+            "Steam Registry",
+            true,
         );
         assert_eq!(d.title, "Hollow Knight");
     }
@@ -829,7 +953,11 @@ mod tests {
     #[test]
     fn no_window_title_uses_path() {
         let d = format_game_output(
-            "start.exe", "d:\\games\\Stardew_Valley\\start.exe", "", "X", true,
+            "start.exe",
+            "d:\\games\\Stardew_Valley\\start.exe",
+            "",
+            "X",
+            true,
         );
         assert_eq!(d.title, "Stardew Valley");
     }
