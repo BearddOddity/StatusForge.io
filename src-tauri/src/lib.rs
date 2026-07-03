@@ -103,6 +103,10 @@ struct ConfigExportPayload {
 struct ConfigImportPayload {
     config: AppConfig,
     path: Option<String>,
+    /// When true, copy the prior Config.json to Config.json.bak before writing
+    /// (driven by the frontend "Automatic Backups" system pref).
+    #[serde(default)]
+    backup: Option<bool>,
 }
 
 
@@ -205,6 +209,14 @@ fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
     } else {
         base.join("Config.json")
     };
+
+    // ponytail: one rolling .bak (not the 5-deep history) — add rotation if
+    // anyone ever actually needs older generations.
+    if payload.backup.unwrap_or(false) && config_path.exists() {
+        if let Err(e) = std::fs::copy(&config_path, config_path.with_extension("json.bak")) {
+            log::warn!("Config backup failed: {}", e);
+        }
+    }
 
     // Write with atomic temp-file-then-rename
     let raw = serde_json::to_string_pretty(&config)
@@ -896,6 +908,98 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
     Ok(enabled)
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// System prefs backends — log level, webhook relay (frontend System tab)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Runtime log verbosity. The log plugin is built at Debug; this moves the
+/// global `log` facade filter, so it applies immediately without a restart.
+#[tauri::command]
+fn set_log_level(level: String) -> Result<(), String> {
+    let filter = match level.as_str() {
+        "error" => log::LevelFilter::Error,
+        "warn" => log::LevelFilter::Warn,
+        "info" => log::LevelFilter::Info,
+        "debug" => log::LevelFilter::Debug,
+        other => return Err(format!("Unknown log level: {}", other)),
+    };
+    log::set_max_level(filter);
+    Ok(())
+}
+
+/// Relay a small JSON event to a user-configured webhook. Lives in Rust
+/// because the webview CSP blocks arbitrary outbound fetches.
+#[tauri::command]
+async fn post_webhook(
+    url: String,
+    event: String,
+    title: String,
+    platform: Option<String>,
+) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Webhook URL must be http(s)".to_string());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+    client
+        .post(&url)
+        .json(&serde_json::json!({
+            "event": event,
+            "title": title,
+            "platform": platform,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Webhook POST failed: {}", e))?;
+    Ok(())
+}
+
+/// System tray: Show / Quit. Whether closing the window hides to tray is
+/// decided in the frontend (minimizeToTray pref) via onCloseRequested.
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    fn show_main(app: &tauri::AppHandle) {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.show();
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
+    }
+
+    let show = MenuItem::with_id(app, "show", "Show StatusForge", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .tooltip("StatusForge.io")
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_main(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+    builder.build(app)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod config_command_tests {
     use super::*;
@@ -919,7 +1023,7 @@ mod config_command_tests {
         config.broadcaster.routing_mode = config::RoutingMode::Native;
         config.broadcaster.twitch_client = "twitch-only".into(); // kick empty must still save
 
-        let msg = import_config(ConfigImportPayload { config, path: None }).unwrap();
+        let msg = import_config(ConfigImportPayload { config, path: None, backup: None }).unwrap();
         assert_eq!(msg, "Config saved successfully");
         assert!(base.join("Config.json").exists());
 
@@ -955,6 +1059,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_notification::init())
         .manage(oauth_state.clone())
         .manage(engine_state.clone())
         .manage(hub_state.clone())
@@ -975,10 +1080,18 @@ pub fn run() {
                             file_name: Some("debug".to_string()),
                         }),
                     ])
-                    .level(log::LevelFilter::Info)
+                    // Debug ceiling; the effective level is the `log` facade
+                    // filter, adjusted at runtime by set_log_level (System tab).
+                    .level(log::LevelFilter::Debug)
                     .build(),
             ) {
                 eprintln!("Failed to init log plugin: {}", e);
+            }
+            log::set_max_level(log::LevelFilter::Info);
+
+            // System tray (Show / Quit + close-to-tray target)
+            if let Err(e) = setup_tray(app) {
+                log::warn!("Failed to set up system tray: {}", e);
             }
 
             // LAN Hub: announce on udp/53736, receive SPARK heartbeats on udp/53735
@@ -1030,6 +1143,8 @@ pub fn run() {
             dev_get_diagnostics,
             get_autostart,
             set_autostart,
+            set_log_level,
+            post_webhook,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
