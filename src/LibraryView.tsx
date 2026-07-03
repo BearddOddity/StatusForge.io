@@ -18,83 +18,6 @@ interface ExiledEntry {
 type ViewMode = "carousel" | "grid";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DUMMY DATA — dev preview when engine is offline
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function getDummyLibrary(): ForgeLibraryEntry[] {
-  const entries: Partial<ForgeLibraryEntry>[] = [
-    {
-      title: "Celeste",
-      genre: "PLATFORMER",
-      release_year: "2018",
-      developer: "Maddy Makes Games",
-      publisher: "Maddy Makes Games",
-      cover_url:
-        "https://shared.steamstatic.com/store_item_assets/steam/apps/504230/library_600x900.jpg",
-      steam_id: "504230",
-      igdb_id: "12345",
-      rawg_id: "58175",
-      twitch_id: "493997",
-      kick_id: "12345",
-    },
-    {
-      title: "Hollow Knight",
-      genre: "METROIDVANIA",
-      release_year: "2017",
-      developer: "Team Cherry",
-      publisher: "Team Cherry",
-      cover_url:
-        "https://shared.steamstatic.com/store_item_assets/steam/apps/367520/library_600x900.jpg",
-      steam_id: "367520",
-      igdb_id: "19516",
-      rawg_id: "3272",
-      twitch_id: "493096",
-      kick_id: "",
-    },
-    {
-      title: "Hades",
-      genre: "ROGUE-LIKE",
-      release_year: "2020",
-      developer: "Supergiant Games",
-      publisher: "Supergiant Games",
-      cover_url:
-        "https://shared.steamstatic.com/store_item_assets/steam/apps/1145360/library_600x900.jpg",
-      steam_id: "1145360",
-      igdb_id: "12350",
-      rawg_id: "562634",
-      twitch_id: "512980",
-      kick_id: "",
-    },
-    {
-      title: "Vampire Survivors",
-      genre: "SHOOT 'EM UP",
-      release_year: "2022",
-      developer: "Poncle",
-      publisher: "Poncle",
-      cover_url: "",
-      steam_id: "1794680",
-      igdb_id: "",
-      rawg_id: "768205",
-      twitch_id: "",
-      kick_id: "",
-    },
-  ];
-  return entries.map(
-    (e) =>
-      ({
-        discord_app_id: "",
-        gog_id: "",
-        itch_id: "",
-        sgdb_id: "",
-        xbox_title_id: "",
-        epic_id: "",
-        executables: "",
-        ...e,
-      }) as ForgeLibraryEntry
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN LIBRARY VIEW — orchestrator
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -215,19 +138,21 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
         const entries = Object.values(data).sort((a, b) =>
           (a.title || "").localeCompare(b.title || "")
         );
-        setLibrary(entries.length > 0 ? entries : getDummyLibrary());
+        setLibrary(entries);
       } else {
-        setLibrary(getDummyLibrary());
+        setLibrary([]);
+        toast("Couldn't load your library — is the engine running?", "error");
       }
       if (exiledRes.ok) {
         const ex = (await exiledRes.json()) as string[];
         setExiled(ex.map((p) => ({ process: p })));
       }
     } catch {
-      setLibrary(getDummyLibrary());
+      setLibrary([]);
+      toast("Couldn't reach the engine — is it running?", "error");
     }
     setLoading(false);
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     load();
