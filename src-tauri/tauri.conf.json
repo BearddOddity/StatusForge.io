@@ -21,7 +21,8 @@
         "decorations": true,
         "hiddenTitle": false,
         "visible": true,
-        "url": "index.html"
+        "url": "index.html",
+        "devtools": true
       }
     ],
     "security": {
