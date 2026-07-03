@@ -343,9 +343,86 @@ impl Default for NativeEngineState {
 }
 
 impl NativeEngineState {
+    /// Marks a game as detected/playing.
+    ///
+    /// Each lock is taken and released within its own statement (a temporary
+    /// `MutexGuard` from `.lock().unwrap()` drops at the end of the
+    /// statement it's created in, per Rust's temporary-lifetime rules) —
+    /// deliberately NOT `let guard = ...; *guard = ...;`, which extends the
+    /// guard's lifetime to the end of the enclosing block. That was the
+    /// exact shape of a real bug: holding guards across a later call to
+    /// `push_status()`, which re-locks these same mutexes via
+    /// `server::build_status`. `std::sync::Mutex` isn't reentrant, so that
+    /// self-deadlocked the engine thread the moment a game was detected,
+    /// then wedged every Tauri command touching engine state and froze the
+    /// whole app (Windows reported it as "Not Responding" after ~10 minutes,
+    /// not as an obvious deadlock). See `deadlock_regression` in this
+    /// module's tests for a regression guard.
+    pub fn set_playing(&self, game: &GameDetection) {
+        *self.current_game.lock().unwrap() = Some(game.clone());
+        *self.current_process.lock().unwrap() = game.process.clone();
+        *self.is_playing.lock().unwrap() = true;
+        *self.start_time.lock().unwrap() = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64();
+    }
+
+    /// Clears playing state (game closed / grace period expired). Same
+    /// per-statement locking discipline as `set_playing` — see its doc
+    /// comment for why that matters.
+    pub fn clear_playing(&self) {
+        *self.current_game.lock().unwrap() = None;
+        *self.current_process.lock().unwrap() = String::new();
+        *self.is_playing.lock().unwrap() = false;
+        *self.start_time.lock().unwrap() = 0.0;
+    }
+
     /// Recompute the widget status payload and push it to WS subscribers.
+    /// Re-locks current_game/current_process/is_playing/start_time — must
+    /// never be called while this thread already holds one of those guards.
     pub fn push_status(&self) {
         let _ = self.status_tx.send(server::build_status(self));
+    }
+}
+
+#[cfg(test)]
+mod native_engine_state_tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    /// Regression guard for a real bug (fixed 2026-07-03): set_playing() and
+    /// clear_playing() must never leave a mutex guard held when push_status()
+    /// runs right after (it re-locks the same mutexes via build_status).
+    /// std::sync::Mutex isn't reentrant, so that self-deadlocked the engine
+    /// thread in production — Windows reported the app as "Not Responding"
+    /// after ~10 minutes, not as an obvious deadlock. Runs the exact
+    /// set/push/clear/push sequence spawn_engine_loop uses on its own thread
+    /// with a timeout: if the locking discipline regresses, this test hangs
+    /// (and fails on timeout) instead of the whole app doing so for real users.
+    #[test]
+    fn state_update_then_push_status_never_deadlocks() {
+        let state = Arc::new(NativeEngineState::default());
+        let (tx, rx) = mpsc::channel();
+
+        let worker_state = state.clone();
+        std::thread::spawn(move || {
+            let game = GameDetection {
+                title: "Test Game".to_string(),
+                process: "test.exe".to_string(),
+                platform: "Test".to_string(),
+            };
+            worker_state.set_playing(&game);
+            worker_state.push_status();
+            worker_state.clear_playing();
+            worker_state.push_status();
+            let _ = tx.send(());
+        });
+
+        rx.recv_timeout(Duration::from_secs(2)).expect(
+            "state update + push_status sequence hung — a mutex guard is \
+             likely being held across a call that re-locks the same mutex",
+        );
     }
 }
 
@@ -496,21 +573,7 @@ fn spawn_engine_loop(
                         game.platform
                     );
 
-                    // Scope the guards so every lock is RELEASED before
-                    // push_status() below — build_status() re-locks these same
-                    // mutexes, and std Mutex is non-reentrant. Holding them
-                    // across push_status() self-deadlocks this thread, which
-                    // then wedges every Tauri command that touches engine
-                    // state and freezes the whole app (AppHangB1).
-                    {
-                        *state_arc.current_game.lock().unwrap() = Some(game.clone());
-                        *state_arc.current_process.lock().unwrap() = game.process.clone();
-                        *state_arc.is_playing.lock().unwrap() = true;
-                        *state_arc.start_time.lock().unwrap() = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs_f64();
-                    }
+                    state_arc.set_playing(&game);
 
                     // Emit event to frontend + push to WS widgets
                     let _ = app_handle.emit("game-detected", &game);
@@ -565,14 +628,7 @@ fn spawn_engine_loop(
                         current_game = None;
                         lost_focus_time = None;
 
-                        // Same as the NEW GAME branch: drop every guard before
-                        // push_status() re-locks these mutexes (deadlock otherwise).
-                        {
-                            *state_arc.current_game.lock().unwrap() = None;
-                            *state_arc.current_process.lock().unwrap() = String::new();
-                            *state_arc.is_playing.lock().unwrap() = false;
-                            *state_arc.start_time.lock().unwrap() = 0.0;
-                        }
+                        state_arc.clear_playing();
 
                         let _ = app_handle.emit("game-cleared", &idle_category);
                         state_arc.push_status();
