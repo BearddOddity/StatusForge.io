@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+// Module-scoped (not component state): App.tsx only renders `views[currentView]`,
+// so switching away from Dev Tools (including toggling its sidebar visibility
+// off) fully unmounts DevView. A useRef would reset on remount and silently
+// undo "Clear" the moment you navigate back. These live for the process's
+// whole run and reset only on a full app restart, matching what "Clear" should
+// actually mean here.
+let lastTotalLines = 0;
+let clearedAtLine: number | null = null;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Diagnostics {
@@ -197,10 +206,8 @@ export default function DevView() {
   // at the wrong occurrence. Instead track the file's total line count at
   // clear time and only show lines past it — reliable regardless of
   // duplicate content or how far the tail window has to reach.
-  const lastTotalLinesRef = useRef(0);
-  const clearedAtRef = useRef<number | null>(null);
   const handleClear = () => {
-    clearedAtRef.current = lastTotalLinesRef.current;
+    clearedAtLine = lastTotalLines;
     setLogs([]);
   };
 
@@ -211,10 +218,9 @@ export default function DevView() {
         lines: settings.logTailLines,
       });
       const tail = res.lines || [];
-      lastTotalLinesRef.current = res.total_lines;
-      const clearedAt = clearedAtRef.current;
-      if (clearedAt !== null) {
-        const newCount = Math.max(0, res.total_lines - clearedAt);
+      lastTotalLines = res.total_lines;
+      if (clearedAtLine !== null) {
+        const newCount = Math.max(0, res.total_lines - clearedAtLine);
         setLogs(newCount > 0 ? tail.slice(Math.max(0, tail.length - newCount)) : []);
       } else {
         setLogs(tail);
