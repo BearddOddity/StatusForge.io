@@ -67,7 +67,9 @@ describe("applyThemePrefs", () => {
   it("sets the font family CSS variable to the bundled default", () => {
     applyThemePrefs({ ...defaultThemePrefs, fontFamily: "Montserrat" });
 
-    expect(document.documentElement.style.getPropertyValue("--user-font-family")).toBe('"Montserrat"');
+    expect(document.documentElement.style.getPropertyValue("--user-font-family")).toBe(
+      '"Montserrat"'
+    );
   });
 
   it("removes the Google Font <link> when set back to Montserrat", () => {

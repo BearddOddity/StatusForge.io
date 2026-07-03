@@ -24,45 +24,81 @@ type ViewMode = "carousel" | "grid";
 function getDummyLibrary(): ForgeLibraryEntry[] {
   const entries: Partial<ForgeLibraryEntry>[] = [
     {
-      title: "Celeste", genre: "PLATFORMER", release_year: "2018",
-      developer: "Maddy Makes Games", publisher: "Maddy Makes Games",
-      cover_url: "https://shared.steamstatic.com/store_item_assets/steam/apps/504230/library_600x900.jpg",
-      steam_id: "504230", igdb_id: "12345", rawg_id: "58175", twitch_id: "493997", kick_id: "12345",
+      title: "Celeste",
+      genre: "PLATFORMER",
+      release_year: "2018",
+      developer: "Maddy Makes Games",
+      publisher: "Maddy Makes Games",
+      cover_url:
+        "https://shared.steamstatic.com/store_item_assets/steam/apps/504230/library_600x900.jpg",
+      steam_id: "504230",
+      igdb_id: "12345",
+      rawg_id: "58175",
+      twitch_id: "493997",
+      kick_id: "12345",
     },
     {
-      title: "Hollow Knight", genre: "METROIDVANIA", release_year: "2017",
-      developer: "Team Cherry", publisher: "Team Cherry",
-      cover_url: "https://shared.steamstatic.com/store_item_assets/steam/apps/367520/library_600x900.jpg",
-      steam_id: "367520", igdb_id: "19516", rawg_id: "3272", twitch_id: "493096", kick_id: "",
+      title: "Hollow Knight",
+      genre: "METROIDVANIA",
+      release_year: "2017",
+      developer: "Team Cherry",
+      publisher: "Team Cherry",
+      cover_url:
+        "https://shared.steamstatic.com/store_item_assets/steam/apps/367520/library_600x900.jpg",
+      steam_id: "367520",
+      igdb_id: "19516",
+      rawg_id: "3272",
+      twitch_id: "493096",
+      kick_id: "",
     },
     {
-      title: "Hades", genre: "ROGUE-LIKE", release_year: "2020",
-      developer: "Supergiant Games", publisher: "Supergiant Games",
-      cover_url: "https://shared.steamstatic.com/store_item_assets/steam/apps/1145360/library_600x900.jpg",
-      steam_id: "1145360", igdb_id: "12350", rawg_id: "562634", twitch_id: "512980", kick_id: "",
+      title: "Hades",
+      genre: "ROGUE-LIKE",
+      release_year: "2020",
+      developer: "Supergiant Games",
+      publisher: "Supergiant Games",
+      cover_url:
+        "https://shared.steamstatic.com/store_item_assets/steam/apps/1145360/library_600x900.jpg",
+      steam_id: "1145360",
+      igdb_id: "12350",
+      rawg_id: "562634",
+      twitch_id: "512980",
+      kick_id: "",
     },
     {
-      title: "Vampire Survivors", genre: "SHOOT 'EM UP", release_year: "2022",
-      developer: "Poncle", publisher: "Poncle",
+      title: "Vampire Survivors",
+      genre: "SHOOT 'EM UP",
+      release_year: "2022",
+      developer: "Poncle",
+      publisher: "Poncle",
       cover_url: "",
-      steam_id: "1794680", igdb_id: "", rawg_id: "768205", twitch_id: "", kick_id: "",
+      steam_id: "1794680",
+      igdb_id: "",
+      rawg_id: "768205",
+      twitch_id: "",
+      kick_id: "",
     },
   ];
-  return entries.map((e) => ({
-    discord_app_id: "", gog_id: "", itch_id: "", sgdb_id: "", xbox_title_id: "", epic_id: "",
-    executables: "", ...e,
-  }) as ForgeLibraryEntry);
+  return entries.map(
+    (e) =>
+      ({
+        discord_app_id: "",
+        gog_id: "",
+        itch_id: "",
+        sgdb_id: "",
+        xbox_title_id: "",
+        epic_id: "",
+        executables: "",
+        ...e,
+      }) as ForgeLibraryEntry
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN LIBRARY VIEW — orchestrator
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function LibraryView({
-  toast,
-}: {
-  toast: (msg: string, type?: ToastType) => void;
-}) {
+export default function LibraryView({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
   const [library, setLibrary] = useState<ForgeLibraryEntry[]>([]);
   const [exiled, setExiled] = useState<ExiledEntry[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -72,18 +108,38 @@ export default function LibraryView({
   const [showAddGame, setShowAddGame] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    try { return (localStorage.getItem("sf_viewMode") as ViewMode) || "carousel"; } catch { return "carousel"; }
+    try {
+      return (localStorage.getItem("sf_viewMode") as ViewMode) || "carousel";
+    } catch {
+      return "carousel";
+    }
   });
   const [sortBy, setSortBy] = useState<"title" | "genre" | "year" | "developer">(() => {
-    try { return (localStorage.getItem("sf_sortBy") as "title" | "genre" | "year" | "developer") || "title"; } catch { return "title"; }
+    try {
+      return (
+        (localStorage.getItem("sf_sortBy") as "title" | "genre" | "year" | "developer") || "title"
+      );
+    } catch {
+      return "title";
+    }
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() => {
-    try { return (localStorage.getItem("sf_sortDir") as "asc" | "desc") || "asc"; } catch { return "asc"; }
+    try {
+      return (localStorage.getItem("sf_sortDir") as "asc" | "desc") || "asc";
+    } catch {
+      return "asc";
+    }
   });
 
-  useEffect(() => { localStorage.setItem("sf_viewMode", viewMode); }, [viewMode]);
-  useEffect(() => { localStorage.setItem("sf_sortBy", sortBy); }, [sortBy]);
-  useEffect(() => { localStorage.setItem("sf_sortDir", sortDir); }, [sortDir]);
+  useEffect(() => {
+    localStorage.setItem("sf_viewMode", viewMode);
+  }, [viewMode]);
+  useEffect(() => {
+    localStorage.setItem("sf_sortBy", sortBy);
+  }, [sortBy]);
+  useEffect(() => {
+    localStorage.setItem("sf_sortDir", sortDir);
+  }, [sortDir]);
   const [sortOpen, setSortOpen] = useState(false);
   const sortBtnRef = useRef<HTMLDivElement>(null);
   const [sortMenuPos, setSortMenuPos] = useState({ top: 0, right: 0 });
@@ -112,10 +168,22 @@ export default function LibraryView({
     const sorted = [...results].sort((a, b) => {
       let va: string, vb: string;
       switch (sortBy) {
-        case "genre":   va = a.genre || ""; vb = b.genre || ""; break;
-        case "year":    va = a.release_year || ""; vb = b.release_year || ""; break;
-        case "developer": va = a.developer || ""; vb = b.developer || ""; break;
-        default:        va = a.title || ""; vb = b.title || ""; break;
+        case "genre":
+          va = a.genre || "";
+          vb = b.genre || "";
+          break;
+        case "year":
+          va = a.release_year || "";
+          vb = b.release_year || "";
+          break;
+        case "developer":
+          va = a.developer || "";
+          vb = b.developer || "";
+          break;
+        default:
+          va = a.title || "";
+          vb = b.title || "";
+          break;
       }
       const cmp = va.localeCompare(vb, undefined, { numeric: true, sensitivity: "base" });
       return sortDir === "asc" ? cmp : -cmp;
@@ -144,7 +212,9 @@ export default function LibraryView({
       ]);
       if (forgeRes.ok) {
         const data = (await forgeRes.json()) as Record<string, ForgeLibraryEntry>;
-        const entries = Object.values(data).sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+        const entries = Object.values(data).sort((a, b) =>
+          (a.title || "").localeCompare(b.title || "")
+        );
         setLibrary(entries.length > 0 ? entries : getDummyLibrary());
       } else {
         setLibrary(getDummyLibrary());
@@ -159,7 +229,9 @@ export default function LibraryView({
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // ── API helpers ──
 
@@ -173,7 +245,9 @@ export default function LibraryView({
       });
       toast("Saved", "success");
       load();
-    } catch { toast("Save failed", "error"); }
+    } catch {
+      toast("Save failed", "error");
+    }
   };
 
   const reinstate = async (proc: string) => {
@@ -186,14 +260,18 @@ export default function LibraryView({
       });
       toast(`Reinstated ${proc}`, "success");
       load();
-    } catch { toast("Failed to reinstate", "error"); }
+    } catch {
+      toast("Failed to reinstate", "error");
+    }
   };
 
   const deleteExiled = async (proc: string) => {
     if (!confirm(`Permanently delete "${proc}" from the database?`)) return;
     const token = await fetchWidgetToken();
     try {
-      const metaRes = await fetch("http://127.0.0.1:53735/export-meta", { headers: { "X-Forge-Token": token } });
+      const metaRes = await fetch("http://127.0.0.1:53735/export-meta", {
+        headers: { "X-Forge-Token": token },
+      });
       if (metaRes.ok) {
         const db = (await metaRes.json()) as {
           delisted_apps: string[];
@@ -201,7 +279,9 @@ export default function LibraryView({
           library: Record<string, ForgeLibraryEntry>;
         };
         db.delisted_apps = db.delisted_apps.filter((p) => p !== proc.toLowerCase());
-        Object.keys(db.listed_apps).forEach((k) => { if (k === proc.toLowerCase()) delete db.listed_apps[k]; });
+        Object.keys(db.listed_apps).forEach((k) => {
+          if (k === proc.toLowerCase()) delete db.listed_apps[k];
+        });
         await fetch("http://127.0.0.1:53735/import-meta", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Forge-Token": token },
@@ -210,13 +290,17 @@ export default function LibraryView({
         toast(`Deleted ${proc}`, "success");
         load();
       }
-    } catch { toast("Delete failed", "error"); }
+    } catch {
+      toast("Delete failed", "error");
+    }
   };
 
   const handleExile = async (title: string) => {
     const token = await fetchWidgetToken();
     try {
-      const metaRes = await fetch("http://127.0.0.1:53735/export-meta", { headers: { "X-Forge-Token": token } });
+      const metaRes = await fetch("http://127.0.0.1:53735/export-meta", {
+        headers: { "X-Forge-Token": token },
+      });
       if (metaRes.ok) {
         const db = (await metaRes.json()) as ForgeDatabase;
         delete db.library[title];
@@ -232,14 +316,19 @@ export default function LibraryView({
         setShowOverlay(false);
         load();
       }
-    } catch { toast("Exile failed", "error"); }
+    } catch {
+      toast("Exile failed", "error");
+    }
   };
 
   const saveBaseMetadata = async (title: string, year: string, dev: string) => {
     const token = await fetchWidgetToken();
     const payload: Record<string, string> = { title };
     if (year) payload["custom_release_year"] = year;
-    if (dev) { payload["custom_developer"] = dev; payload["custom_publisher"] = dev; }
+    if (dev) {
+      payload["custom_developer"] = dev;
+      payload["custom_publisher"] = dev;
+    }
     await fetch("http://127.0.0.1:53735/list", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Forge-Token": token },
@@ -248,7 +337,11 @@ export default function LibraryView({
     load();
   };
 
-  const handleAddGameScan = async (title: string, year: string, dev: string): Promise<ForgeLibraryEntry | null> => {
+  const handleAddGameScan = async (
+    title: string,
+    year: string,
+    dev: string
+  ): Promise<ForgeLibraryEntry | null> => {
     try {
       await saveBaseMetadata(title, year, dev);
       const token = await fetchWidgetToken();
@@ -259,7 +352,9 @@ export default function LibraryView({
       });
       if (scanRes.ok) return (await scanRes.json()) as ForgeLibraryEntry;
       return null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   };
 
   const handleScanMetadata = async (title: string): Promise<ForgeLibraryEntry | null> => {
@@ -272,14 +367,23 @@ export default function LibraryView({
       });
       if (scanRes.ok) return (await scanRes.json()) as ForgeLibraryEntry;
       return null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   };
 
   const activeEntry = library[activeIndex] || null;
 
   // ── Render ──
 
-  const sortLabel = sortBy === "title" ? "Title" : sortBy === "genre" ? "Genre" : sortBy === "year" ? "Year" : "Developer";
+  const sortLabel =
+    sortBy === "title"
+      ? "Title"
+      : sortBy === "genre"
+        ? "Genre"
+        : sortBy === "year"
+          ? "Year"
+          : "Developer";
 
   return (
     <div className="flex flex-col h-full">
@@ -292,7 +396,8 @@ export default function LibraryView({
               {filteredLibrary.length !== library.length
                 ? `${filteredLibrary.length} of ${library.length} games`
                 : `${library.length} game${library.length !== 1 ? "s" : ""}`}
-              {" · "}{exiled.length} exiled
+              {" · "}
+              {exiled.length} exiled
             </p>
           </div>
         </div>
@@ -301,8 +406,18 @@ export default function LibraryView({
         <div className="toolbar-glass">
           {/* Search */}
           <div className="relative flex-1 min-w-0">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
             <input
               type="text"
@@ -315,7 +430,9 @@ export default function LibraryView({
               <button
                 onClick={() => setSearchQuery("")}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors cursor-pointer bg-white/[0.06] border border-white/[0.06] rounded-md w-4 h-4 flex items-center justify-center text-[10px]"
-              >✕</button>
+              >
+                ✕
+              </button>
             )}
           </div>
 
@@ -329,8 +446,19 @@ export default function LibraryView({
               className="flex items-center gap-1.5 px-2.5 py-2 text-xs font-semibold text-white/50 hover:text-white/80 active:text-white transition-all cursor-pointer border-none rounded-lg bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.1]"
               title="Sort by"
             >
-              <svg className="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ transform: sortDir === "desc" ? "rotate(180deg)" : "rotate(0deg)" }}>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              <svg
+                className="w-4 h-4 transition-transform duration-200"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                style={{ transform: sortDir === "desc" ? "rotate(180deg)" : "rotate(0deg)" }}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                />
               </svg>
               <span className="hidden sm:inline">{sortLabel}</span>
             </button>
@@ -386,7 +514,12 @@ export default function LibraryView({
               title="Add Game"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
               </svg>
             </button>
             <button
@@ -395,7 +528,12 @@ export default function LibraryView({
               title="Exiled Apps"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                />
               </svg>
             </button>
           </div>
@@ -403,9 +541,14 @@ export default function LibraryView({
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>
+      <div
+        className="flex-1 min-h-0"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent" }}
+      >
         {loading ? (
-          <Card><p className="text-white/40">Loading library...</p></Card>
+          <Card>
+            <p className="text-white/40">Loading library...</p>
+          </Card>
         ) : viewMode === "carousel" ? (
           <div className="flex items-center justify-center h-full">
             <CarouselView
@@ -422,45 +565,75 @@ export default function LibraryView({
 
       {/* Overlays */}
       {showOverlay && activeEntry && (
-        <MetadataOverlay entry={activeEntry} onSave={saveEntry} onScan={handleScanMetadata} onExile={handleExile} onClose={() => setShowOverlay(false)} />
+        <MetadataOverlay
+          entry={activeEntry}
+          onSave={saveEntry}
+          onScan={handleScanMetadata}
+          onExile={handleExile}
+          onClose={() => setShowOverlay(false)}
+        />
       )}
       {showExiled && (
-        <ExiledPanel exiled={exiled} onReinstate={reinstate} onDelete={deleteExiled} onClose={() => setShowExiled(false)} />
+        <ExiledPanel
+          exiled={exiled}
+          onReinstate={reinstate}
+          onDelete={deleteExiled}
+          onClose={() => setShowExiled(false)}
+        />
       )}
       {showAddGame && (
-        <AddGamePanel onScan={handleAddGameScan} onSaveBase={saveBaseMetadata} onClose={() => setShowAddGame(false)} toast={toast} />
+        <AddGamePanel
+          onScan={handleAddGameScan}
+          onSaveBase={saveBaseMetadata}
+          onClose={() => setShowAddGame(false)}
+          toast={toast}
+        />
       )}
 
       {/* Sort dropdown — portaled to body to escape stacking contexts */}
-      {sortOpen && createPortal(
-        <>
-          <div className="fixed inset-0 z-[100]" onClick={() => setSortOpen(false)} />
-          <div
-            className="fixed z-[101] surface-glass rounded-xl overflow-hidden min-w-[140px]"
-            style={{ top: sortMenuPos.top, right: sortMenuPos.right }}
-          >
-            {(["title", "genre", "year", "developer"] as const).map((opt) => (
-              <button
-                key={opt}
-                onClick={() => {
-                  if (sortBy === opt) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-                  else { setSortBy(opt); setSortDir("asc"); }
-                  setSortOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors cursor-pointer border-none ${
-                  sortBy === opt ? "bg-[color-mix(in_srgb,var(--user-accent,#9146FF)_20%,transparent)] text-[var(--user-accent,#c084fc)]" : "bg-transparent text-white/60 hover:bg-white/[0.06] hover:text-white/80"
-                }`}
-              >
-                <span>{opt === "title" ? "Title" : opt === "genre" ? "Genre" : opt === "year" ? "Year" : "Developer"}</span>
-                {sortBy === opt && (
-                  <span className="text-[10px]">{sortDir === "asc" ? "↑" : "↓"}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </>,
-        document.body
-      )}
+      {sortOpen &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[100]" onClick={() => setSortOpen(false)} />
+            <div
+              className="fixed z-[101] surface-glass rounded-xl overflow-hidden min-w-[140px]"
+              style={{ top: sortMenuPos.top, right: sortMenuPos.right }}
+            >
+              {(["title", "genre", "year", "developer"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => {
+                    if (sortBy === opt) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+                    else {
+                      setSortBy(opt);
+                      setSortDir("asc");
+                    }
+                    setSortOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors cursor-pointer border-none ${
+                    sortBy === opt
+                      ? "bg-[color-mix(in_srgb,var(--user-accent,#9146FF)_20%,transparent)] text-[var(--user-accent,#c084fc)]"
+                      : "bg-transparent text-white/60 hover:bg-white/[0.06] hover:text-white/80"
+                  }`}
+                >
+                  <span>
+                    {opt === "title"
+                      ? "Title"
+                      : opt === "genre"
+                        ? "Genre"
+                        : opt === "year"
+                          ? "Year"
+                          : "Developer"}
+                  </span>
+                  {sortBy === opt && (
+                    <span className="text-[10px]">{sortDir === "asc" ? "↑" : "↓"}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body
+        )}
     </div>
   );
 }

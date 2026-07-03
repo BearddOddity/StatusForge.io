@@ -131,8 +131,9 @@ export function OverlayMetadataPanel({
             onClick={() => {
               if (entry.title) {
                 const idKeys =
-                  FIELD_SECTIONS.find((s) => s.title === "External IDs")
-                    ?.fields.map((f) => f.key) || [];
+                  FIELD_SECTIONS.find((s) => s.title === "External IDs")?.fields.map(
+                    (f) => f.key
+                  ) || [];
                 idKeys.forEach((key) => {
                   if (typedData[key]) onSearchApis(key, typedData[key]);
                 });
@@ -146,7 +147,12 @@ export function OverlayMetadataPanel({
             <Btn
               variant="danger"
               onClick={() => {
-                if (entry.title && confirm(`Exile "${entry.title}"? This will remove it from the library and prevent it from being re-detected by the scanner.`)) {
+                if (
+                  entry.title &&
+                  confirm(
+                    `Exile "${entry.title}"? This will remove it from the library and prevent it from being re-detected by the scanner.`
+                  )
+                ) {
                   onExile(entry.title);
                 }
               }}
@@ -201,8 +207,7 @@ export function OverlayMetadataPanel({
                       onSave={() => onSave(editData)}
                       onSearch={
                         section.title === "External IDs" && typedData[field.key]
-                          ? () =>
-                              onSearchApis(field.key, typedData[field.key])
+                          ? () => onSearchApis(field.key, typedData[field.key])
                           : undefined
                       }
                     />
@@ -246,18 +251,13 @@ export function ExiledManagerPanel({
 
   return (
     <div className="modal-backdrop" onClick={handleBackdropClick}>
-      <div
-        ref={panelRef}
-        className="modal-panel w-[90vw] max-w-[420px] max-h-[70vh] flex flex-col"
-      >
+      <div ref={panelRef} className="modal-panel w-[90vw] max-w-[420px] max-h-[70vh] flex flex-col">
         <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-xs">
               🚫
             </span>
-            <h3 className="text-white font-semibold text-sm">
-              Exiled Applications
-            </h3>
+            <h3 className="text-white font-semibold text-sm">Exiled Applications</h3>
           </div>
           <Btn variant="ghost" onClick={onClose}>
             ✕
@@ -286,16 +286,10 @@ export function ExiledManagerPanel({
                     {item.process}
                   </span>
                   <div className="flex gap-1.5 shrink-0">
-                    <Btn
-                      variant="success"
-                      onClick={() => onReinstate(item.process)}
-                    >
+                    <Btn variant="success" onClick={() => onReinstate(item.process)}>
                       ✓ Reinstate
                     </Btn>
-                    <Btn
-                      variant="danger"
-                      onClick={() => onDelete(item.process)}
-                    >
+                    <Btn variant="danger" onClick={() => onDelete(item.process)}>
                       🗑 Delete
                     </Btn>
                   </div>
@@ -412,10 +406,7 @@ export function AddGameOverlayPanel({
 
   return (
     <div className="modal-backdrop" onClick={handleBackdropClick}>
-      <div
-        ref={panelRef}
-        className="modal-panel w-[90vw] max-w-[480px] max-h-[85vh] flex flex-col"
-      >
+      <div ref={panelRef} className="modal-panel w-[90vw] max-w-[480px] max-h-[85vh] flex flex-col">
         <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-xs">
@@ -480,11 +471,9 @@ export function AddGameOverlayPanel({
               list="genre-suggestions"
             />
             <datalist id="genre-suggestions">
-              {[...new Set([...gameCategories, ...libraryGenres])]
-                .sort()
-                .map((g) => (
-                  <option key={g} value={g} />
-                ))}
+              {[...new Set([...gameCategories, ...libraryGenres])].sort().map((g) => (
+                <option key={g} value={g} />
+              ))}
             </datalist>
           </div>
           <div className="mb-4">
@@ -501,15 +490,11 @@ export function AddGameOverlayPanel({
 
           {result && (
             <div className="mt-5 bg-white/[0.02] border border-white/[0.08] rounded-xl p-4">
-              <h4 className="text-white font-semibold text-sm mb-3">
-                Scan Results
-              </h4>
+              <h4 className="text-white font-semibold text-sm mb-3">Scan Results</h4>
               <div className="grid grid-cols-2 gap-3">
                 {Object.entries(result).map(([k, v]) => (
                   <div key={k} className="data-row">
-                    <span className="data-row-label">
-                      {k.replace(/_/g, " ")}
-                    </span>
+                    <span className="data-row-label">{k.replace(/_/g, " ")}</span>
                     <span className="data-row-value">{v || "—"}</span>
                   </div>
                 ))}
@@ -521,11 +506,7 @@ export function AddGameOverlayPanel({
           <Btn onClick={handleSearch} className="flex-1 justify-center">
             🔍 Search APIs
           </Btn>
-          <Btn
-            variant="success"
-            onClick={handleSubmit}
-            className="flex-1 justify-center"
-          >
+          <Btn variant="success" onClick={handleSubmit} className="flex-1 justify-center">
             ➕ Add Game
           </Btn>
           <Btn variant="ghost" onClick={onClose}>
@@ -597,11 +578,7 @@ export function AddGamePanel({
   onSaveBase,
   onClose,
 }: {
-  onScan: (
-    title: string,
-    year: string,
-    dev: string
-  ) => Promise<ForgeLibraryEntry | null>;
+  onScan: (title: string, year: string, dev: string) => Promise<ForgeLibraryEntry | null>;
   onSaveBase: (title: string, year: string, dev: string) => void;
   onClose: () => void;
   toast: (msg: string, type?: "success" | "error" | "info") => void;

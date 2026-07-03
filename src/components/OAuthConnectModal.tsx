@@ -69,7 +69,11 @@ export default function OAuthConnectModal({
     if (!open) return;
 
     setStatus("connecting");
-    const win = window.open(connectUrl, "oauth-connect", "width=520,height=700,scrollbars=yes,resizable=yes");
+    const win = window.open(
+      connectUrl,
+      "oauth-connect",
+      "width=520,height=700,scrollbars=yes,resizable=yes"
+    );
     setWinRef(win);
 
     const handler = (e: MessageEvent) => {
@@ -92,7 +96,7 @@ export default function OAuthConnectModal({
         if (pollRef.current) clearInterval(pollRef.current);
         setWinRef(null);
         // Only auto-close if still connecting (user closed popup without completing)
-        setStatus((prev) => prev === "connecting" ? "connecting" : prev);
+        setStatus((prev) => (prev === "connecting" ? "connecting" : prev));
         // Don't auto-close — let user see the state or click cancel
       }
     }, 500);
@@ -107,10 +111,7 @@ export default function OAuthConnectModal({
   if (!open) return null;
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center"
-      onClick={handleClose}
-    >
+    <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={handleClose}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
 
@@ -158,11 +159,23 @@ export default function OAuthConnectModal({
                 }}
               >
                 {status === "success" ? (
-                  <svg className="w-8 h-8" fill="none" stroke="#4ade80" viewBox="0 0 24 24" strokeWidth={2.5}>
+                  <svg
+                    className="w-8 h-8"
+                    fill="none"
+                    stroke="#4ade80"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2.5}
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 ) : status === "error" ? (
-                  <svg className="w-8 h-8" fill="none" stroke="#f87171" viewBox="0 0 24 24" strokeWidth={2.5}>
+                  <svg
+                    className="w-8 h-8"
+                    fill="none"
+                    stroke="#f87171"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2.5}
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 ) : (
@@ -175,8 +188,19 @@ export default function OAuthConnectModal({
                       fill="none"
                       viewBox="0 0 24 24"
                     >
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
                     </svg>
                   </div>
                 )}
@@ -249,7 +273,11 @@ export default function OAuthConnectModal({
                   onClick={() => {
                     setStatus("connecting");
                     if (pollRef.current) clearInterval(pollRef.current);
-                    const win = window.open(connectUrl, "oauth-connect", "width=520,height=700,scrollbars=yes,resizable=yes");
+                    const win = window.open(
+                      connectUrl,
+                      "oauth-connect",
+                      "width=520,height=700,scrollbars=yes,resizable=yes"
+                    );
                     setWinRef(win);
                   }}
                   className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-white transition-all cursor-pointer border-none"
@@ -268,7 +296,9 @@ export default function OAuthConnectModal({
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
               </svg>
             </div>
-            <span className="text-[10px] text-white/20 font-medium tracking-wide">STATUSFORGE.IO</span>
+            <span className="text-[10px] text-white/20 font-medium tracking-wide">
+              STATUSFORGE.IO
+            </span>
           </div>
         </div>
       </div>

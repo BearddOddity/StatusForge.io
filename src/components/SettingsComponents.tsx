@@ -82,7 +82,13 @@ export function CollapsibleSection({
               open ? "rotate-180 bg-white/[0.06] text-white/70" : ""
             }`}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
@@ -124,7 +130,15 @@ export function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) 
 }
 
 // ─── Settings Form Row ──────────────────────────────────────────────────────
-export function SettingsRow({ label, description, children }: { label: string; description?: string; children: ReactNode }) {
+export function SettingsRow({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex items-center justify-between">
       <div>
@@ -137,12 +151,18 @@ export function SettingsRow({ label, description, children }: { label: string; d
 }
 
 // ─── Settings Input ──────────────────────────────────────────────────────────
-export function SettingsInput({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+export function SettingsInput({
+  className,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`input-glass ${className || ""}`} {...props} />;
 }
 
 // ─── Settings Select (native fallback) ─────────────────────────────────────
-export function SettingsSelect({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function SettingsSelect({
+  className,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select className={`select-glass ${className || ""}`} {...props} />;
 }
 
@@ -202,8 +222,12 @@ export function GlassSelect({
         <span>{selected?.label ?? value}</span>
         <svg
           className={`glass-select-arrow ${open ? "rotated" : ""}`}
-          width="12" height="12" viewBox="0 0 24 24" fill="none"
-          stroke="rgba(255,255,255,0.4)" strokeWidth="2"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="rgba(255,255,255,0.4)"
+          strokeWidth="2"
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
         </svg>
@@ -217,18 +241,35 @@ export function GlassSelect({
     <div
       ref={menuRef}
       className="glass-select-menu open"
-      style={{ position: "fixed", top: menuPos.top, left: menuPos.left, width: menuPos.width, zIndex: 9999 }}
+      style={{
+        position: "fixed",
+        top: menuPos.top,
+        left: menuPos.left,
+        width: menuPos.width,
+        zIndex: 9999,
+      }}
     >
       {options.map((opt) => (
         <button
           key={opt.value}
           type="button"
-          onClick={() => { onChange(opt.value); setOpen(false); }}
+          onClick={() => {
+            onChange(opt.value);
+            setOpen(false);
+          }}
           className={`glass-select-option ${opt.value === value ? "selected" : ""}`}
         >
           {opt.label}
           {opt.value === value && (
-            <svg className="glass-select-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg
+              className="glass-select-check"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           )}
@@ -247,12 +288,14 @@ export function GlassSelect({
 }
 
 // ─── Settings Panel ─────────────────────────────────────────────────────────
-export function SettingsPanel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`surface-card rounded-2xl p-6 mb-5 ${className}`}>
-      {children}
-    </div>
-  );
+export function SettingsPanel({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={`surface-card rounded-2xl p-6 mb-5 ${className}`}>{children}</div>;
 }
 
 // ─── Edit/Remove Button Pair ────────────────────────────────────────────────
@@ -270,7 +313,9 @@ export function EditRemoveButtons({
       <button onClick={onToggleEdit} className={`btn-icon-sm edit ${isEditing ? "active" : ""}`}>
         {isEditing ? "Close" : "Edit"}
       </button>
-      <button onClick={onRemove} className="btn-icon-sm remove">Remove</button>
+      <button onClick={onRemove} className="btn-icon-sm remove">
+        Remove
+      </button>
     </div>
   );
 }

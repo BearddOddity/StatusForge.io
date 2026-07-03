@@ -4,18 +4,8 @@ import { useState, useEffect, type ReactNode } from "react";
 // Card — surface container (glass treatment)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function Card({
-  children,
-  className = "",
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`card-glass p-5 ${className}`}>
-      {children}
-    </div>
-  );
+export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`card-glass p-5 ${className}`}>{children}</div>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -48,7 +38,11 @@ export function Btn({
       "bg-transparent border-white/[0.06] text-white/45 hover:bg-white/[0.04] hover:border-white/10 hover:text-white/70",
   };
   return (
-    <button className={`${base} ${variants[variant]} ${className}`} disabled={disabled} onClick={onClick}>
+    <button
+      className={`${base} ${variants[variant]} ${className}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
       {children}
     </button>
   );
@@ -58,18 +52,8 @@ export function Btn({
 // UiCard — elevated card with hover glow (for dashboard stat blocks)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function UiCard({
-  children,
-  className = "",
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`card-glass p-5 ${className}`}>
-      {children}
-    </div>
-  );
+export function UiCard({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`card-glass p-5 ${className}`}>{children}</div>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -115,7 +99,9 @@ export function CoverImage({
 }) {
   if (!src) {
     return (
-      <div className={`w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4 ${className}`}>
+      <div
+        className={`w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4 ${className}`}
+      >
         <span className="text-white/50 text-xs text-center font-semibold leading-tight">{alt}</span>
       </div>
     );
@@ -152,11 +138,13 @@ export function FieldSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className={`border rounded-2xl transition-all duration-300 overflow-hidden mb-4 ${
-      open
-        ? "bg-black/45 border-white/15 shadow-xl shadow-black/30"
-        : "bg-black/20 border-white/5 hover:border-white/10 hover:bg-black/25"
-    }`}>
+    <div
+      className={`border rounded-2xl transition-all duration-300 overflow-hidden mb-4 ${
+        open
+          ? "bg-black/45 border-white/15 shadow-xl shadow-black/30"
+          : "bg-black/20 border-white/5 hover:border-white/10 hover:bg-black/25"
+      }`}
+    >
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between p-4 text-left cursor-pointer select-none focus:outline-none bg-transparent border-none"
@@ -171,17 +159,27 @@ export function FieldSection({
             {title}
           </span>
         </div>
-        <div className={`w-6 h-6 rounded-lg bg-white/[0.03] flex items-center justify-center text-white/40 transition-all duration-300 ${
-          open ? "rotate-180 bg-white/[0.06]" : ""
-        }`}>
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <div
+          className={`w-6 h-6 rounded-lg bg-white/[0.03] flex items-center justify-center text-white/40 transition-all duration-300 ${
+            open ? "rotate-180 bg-white/[0.06]" : ""
+          }`}
+        >
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </div>
       </button>
       <div
         className={`grid transition-all duration-300 ease-in-out ${
-          open ? "grid-rows-[1fr] opacity-100 border-t border-white/[0.04]" : "grid-rows-[0fr] opacity-0"
+          open
+            ? "grid-rows-[1fr] opacity-100 border-t border-white/[0.04]"
+            : "grid-rows-[0fr] opacity-0"
         }`}
       >
         <div className="overflow-hidden">
@@ -214,12 +212,16 @@ export function MetadataField({
   const [editing, setEditing] = useState(false);
   const [localVal, setLocalVal] = useState(value);
 
-  useEffect(() => { setLocalVal(value); }, [value]);
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
 
   if (editing) {
     return (
       <div className="mb-4">
-        <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">{label}</label>
+        <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
+          {label}
+        </label>
         <div className="flex gap-2">
           <input
             value={localVal}
@@ -227,12 +229,37 @@ export function MetadataField({
             className="input-glass flex-1 min-w-0"
             autoFocus
             onKeyDown={(e) => {
-              if (e.key === "Enter") { onChange(localVal); onSave(); setEditing(false); }
-              if (e.key === "Escape") { setLocalVal(value); setEditing(false); }
+              if (e.key === "Enter") {
+                onChange(localVal);
+                onSave();
+                setEditing(false);
+              }
+              if (e.key === "Escape") {
+                setLocalVal(value);
+                setEditing(false);
+              }
             }}
           />
-          <Btn variant="success" disabled={saving} onClick={() => { onChange(localVal); onSave(); setEditing(false); }}>✓</Btn>
-          <Btn variant="ghost" onClick={() => { setLocalVal(value); setEditing(false); }}>✕</Btn>
+          <Btn
+            variant="success"
+            disabled={saving}
+            onClick={() => {
+              onChange(localVal);
+              onSave();
+              setEditing(false);
+            }}
+          >
+            ✓
+          </Btn>
+          <Btn
+            variant="ghost"
+            onClick={() => {
+              setLocalVal(value);
+              setEditing(false);
+            }}
+          >
+            ✕
+          </Btn>
         </div>
       </div>
     );
@@ -240,7 +267,9 @@ export function MetadataField({
 
   return (
     <div className="mb-4 group">
-      <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">{label}</label>
+      <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
+        {label}
+      </label>
       <div className="flex items-center gap-2">
         <span
           className="flex-1 text-white/80 text-sm truncate cursor-pointer hover:text-white transition-colors min-w-0 py-1"
@@ -250,10 +279,31 @@ export function MetadataField({
           {value || <span className="text-white/20 italic">Not set</span>}
         </span>
         {onSearch && (
-          <button onClick={onSearch} className="text-white/25 hover:text-purple-400 transition-all text-xs cursor-pointer bg-transparent border-none shrink-0 p-1 rounded-md hover:bg-white/[0.04]" title="Search APIs">🔍</button>
+          <button
+            onClick={onSearch}
+            className="text-white/25 hover:text-purple-400 transition-all text-xs cursor-pointer bg-transparent border-none shrink-0 p-1 rounded-md hover:bg-white/[0.04]"
+            title="Search APIs"
+          >
+            🔍
+          </button>
         )}
-        <button onClick={() => { onChange(value); onSave(); }} className="text-white/25 hover:text-green-400 transition-all text-xs cursor-pointer bg-transparent border-none shrink-0 p-1 rounded-md hover:bg-white/[0.04]" title="Save">💾</button>
-        <button onClick={() => setEditing(true)} className="text-white/25 hover:text-white/60 transition-all text-xs cursor-pointer bg-transparent border-none shrink-0 p-1 rounded-md hover:bg-white/[0.04]" title="Edit">✎</button>
+        <button
+          onClick={() => {
+            onChange(value);
+            onSave();
+          }}
+          className="text-white/25 hover:text-green-400 transition-all text-xs cursor-pointer bg-transparent border-none shrink-0 p-1 rounded-md hover:bg-white/[0.04]"
+          title="Save"
+        >
+          💾
+        </button>
+        <button
+          onClick={() => setEditing(true)}
+          className="text-white/25 hover:text-white/60 transition-all text-xs cursor-pointer bg-transparent border-none shrink-0 p-1 rounded-md hover:bg-white/[0.04]"
+          title="Edit"
+        >
+          ✎
+        </button>
       </div>
     </div>
   );

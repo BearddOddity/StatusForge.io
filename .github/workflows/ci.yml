@@ -30,6 +30,9 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Format check
+        run: npm run format:check
+
       - name: Unit tests
         run: npm test
 
@@ -52,7 +55,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -67,6 +70,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      # Formatting is OS-independent — only needs to run once.
+      - name: cargo fmt check (StatusForge)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: cargo fmt check (forge-detection)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --manifest-path forge-detection/Cargo.toml -- --check
 
       - name: cargo test (StatusForge)
         run: cargo test --manifest-path src-tauri/Cargo.toml

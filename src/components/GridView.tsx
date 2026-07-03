@@ -91,7 +91,8 @@ function GridCard({
         ref={innerRef}
         className="w-full h-full rounded-xl"
         style={{
-          transition: "transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), border 0.3s, box-shadow 0.3s",
+          transition:
+            "transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), border 0.3s, box-shadow 0.3s",
           transformStyle: "preserve-3d",
           background: "rgba(0, 0, 0, 0.25)",
           border: "1px solid rgba(255, 255, 255, 0.05)",
@@ -109,14 +110,20 @@ function GridCard({
 
         {/* Title plate */}
         <div className="grid-view-title">
-          <p className="text-white text-[11px] font-bold truncate leading-tight drop-shadow-lg">{entry.title}</p>
-          {entry.release_year && <p className="text-white/40 text-[9px] font-medium mt-px">{entry.release_year}</p>}
+          <p className="text-white text-[11px] font-bold truncate leading-tight drop-shadow-lg">
+            {entry.title}
+          </p>
+          {entry.release_year && (
+            <p className="text-white/40 text-[9px] font-medium mt-px">{entry.release_year}</p>
+          )}
         </div>
 
         {/* Genre badge — visible via container query */}
         {entry.genre && (
           <div className="grid-view-genre-badge">
-            <span className="text-[9px] font-semibold tracking-wider text-purple-300/80">{entry.genre.charAt(0).toUpperCase() + entry.genre.slice(1).toLowerCase()}</span>
+            <span className="text-[9px] font-semibold tracking-wider text-purple-300/80">
+              {entry.genre.charAt(0).toUpperCase() + entry.genre.slice(1).toLowerCase()}
+            </span>
           </div>
         )}
 

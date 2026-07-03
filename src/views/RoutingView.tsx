@@ -5,15 +5,13 @@ import { Card, Btn, Field } from "@/components/primitives";
 import { GlassSelect } from "@/components/SettingsComponents";
 import OAuthConnectModal from "@/components/OAuthConnectModal";
 
-export default function RoutingView({
-  toast,
-}: {
-  toast: (msg: string, type?: ToastType) => void;
-}) {
+export default function RoutingView({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(null);
+  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(
+    null
+  );
 
   const loadConfig = useCallback(async () => {
     const res = await tauriApi("export_config");
@@ -37,7 +35,10 @@ export default function RoutingView({
   const set = (section: string, key: string, value: string | number) => {
     setConfig((prev) => ({
       ...prev!,
-      [section]: { ...(prev as unknown as Record<string, Record<string, string | number>>)[section], [key]: value },
+      [section]: {
+        ...(prev as unknown as Record<string, Record<string, string | number>>)[section],
+        [key]: value,
+      },
     }));
   };
 
@@ -170,7 +171,12 @@ export default function RoutingView({
           onSuccess={() => {
             loadConfig();
             setOauthModal(null);
-            toast(oauthModal.platform.charAt(0).toUpperCase() + oauthModal.platform.slice(1) + " connected!", "success");
+            toast(
+              oauthModal.platform.charAt(0).toUpperCase() +
+                oauthModal.platform.slice(1) +
+                " connected!",
+              "success"
+            );
           }}
         />
       )}

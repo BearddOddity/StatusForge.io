@@ -1,18 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import type {
-  EngineStatus,
-  AppConfig,
-  SettingsSubTab,
-  ToastType,
-  ApiKeys,
-} from "@/types";
+import type { EngineStatus, AppConfig, SettingsSubTab, ToastType, ApiKeys } from "@/types";
 import type { KeychainStatus } from "@/types";
-import {
-  fetchWidgetToken,
-  getKeychainStatus,
-  saveConfig,
-  tauriApi,
-} from "@/hooks/useTauriApi";
+import { fetchWidgetToken, getKeychainStatus, saveConfig, tauriApi } from "@/hooks/useTauriApi";
 import {
   SubTabBtn,
   CollapsibleSection,
@@ -24,12 +13,7 @@ import {
   EditRemoveButtons,
 } from "@/components/SettingsComponents";
 import OAuthConnectModal from "@/components/OAuthConnectModal";
-import {
-  type ThemePrefs,
-  loadThemePrefs,
-  saveThemePrefs,
-  applyThemePrefs,
-} from "@/theme";
+import { type ThemePrefs, loadThemePrefs, saveThemePrefs, applyThemePrefs } from "@/theme";
 import {
   type SystemPrefs,
   defaultSystemPrefs,
@@ -55,7 +39,9 @@ function EngineSubTab({
   const [platform, setPlatform] = useState<string>("windows");
   const skipSave = useRef(false);
 
-  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(null);
+  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(
+    null
+  );
 
   const loadConfig = useCallback(async () => {
     skipSave.current = true;
@@ -67,7 +53,9 @@ function EngineSubTab({
     } else {
       setConfig(defaultConfig);
     }
-    setTimeout(() => { skipSave.current = false; }, 500);
+    setTimeout(() => {
+      skipSave.current = false;
+    }, 500);
   }, []);
 
   useEffect(() => {
@@ -76,9 +64,7 @@ function EngineSubTab({
       .catch(() => setWidgetToken(defaultConfig.engine_settings.widget_token));
     getKeychainStatus()
       .then((s) => setKeychainInfo(s))
-      .catch(() =>
-        setKeychainInfo({ stored: ["twitch_token", "kick_token"], count: 2 })
-      );
+      .catch(() => setKeychainInfo({ stored: ["twitch_token", "kick_token"], count: 2 }));
     loadConfig();
     // Detect platform to grey out incompatible options
     tauriApi("get_platform")
@@ -165,10 +151,14 @@ function EngineSubTab({
         }
       >
         <p className="text-xs text-white/50 mb-5 leading-relaxed">
-          The detection engine runs on port 53735. Mode: <strong className="text-white/70">Native (Rust)</strong>.
-          Platform: <strong className="text-white/70">{platform}</strong>.
+          The detection engine runs on port 53735. Mode:{" "}
+          <strong className="text-white/70">Native (Rust)</strong>. Platform:{" "}
+          <strong className="text-white/70">{platform}</strong>.
           {platform === "macos" && (
-            <span className="text-yellow-400/70"> macOS requires the Screen Recording permission to read window titles.</span>
+            <span className="text-yellow-400/70">
+              {" "}
+              macOS requires the Screen Recording permission to read window titles.
+            </span>
           )}
         </p>
         <div className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/5 rounded-xl">
@@ -197,504 +187,574 @@ function EngineSubTab({
       </CollapsibleSection>
 
       {/* Detection Engine & Pipeline */}
-      {config && (() => {
-        const isMacOS = platform === "macos";
-        return (
-        <CollapsibleSection
-          title="Detection Engine & Pipeline"
-          description="Native Rust detection engine and the ForgeWaterfall process pipeline."
-          icon="🔄"
-          badge={
-            <span className="text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 border transition-all duration-300 bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              NATIVE
-            </span>
-          }
-        >
-          <p className="text-xs text-white/40 mb-4 leading-relaxed">
-            Detection runs <strong className="text-emerald-300/80">natively in Rust</strong> on Windows, macOS, and Linux — no Python required.
-            {isMacOS && (
-              <> On macOS, grant <strong className="text-yellow-300/80">Screen Recording</strong> permission
-              (System Settings → Privacy &amp; Security) so the engine can read window titles.</>
-            )}
-          </p>
-
-          {/* SPARK dual-PC pairing (Hub side) */}
-          <div className="mt-2 p-3 bg-blue-500/[0.04] border border-blue-500/15 rounded-xl">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-xs text-white/80 font-medium">SPARK Dual-PC Link</span>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 font-semibold">OPTIONAL</span>
-            </div>
-            <p className="text-[10px] text-white/30 mb-2">
-              Streaming from two PCs? Run the SPARK agent on the gaming PC — this hub receives its
-              detections over the LAN and updates overlays exactly like local detection.
-            </p>
-            <label className="block text-[11px] uppercase tracking-wider text-white/50 mb-1.5">
-              Network PIN
-            </label>
-            <input
-              type="text"
-              maxLength={4}
-              value={config.engine_settings.spark_pin}
-              onChange={(e) =>
-                setEngine("spark_pin", e.target.value.replace(/\D/g, "").slice(0, 4))
+      {config &&
+        (() => {
+          const isMacOS = platform === "macos";
+          return (
+            <CollapsibleSection
+              title="Detection Engine & Pipeline"
+              description="Native Rust detection engine and the ForgeWaterfall process pipeline."
+              icon="🔄"
+              badge={
+                <span className="text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 border transition-all duration-300 bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  NATIVE
+                </span>
               }
-              placeholder="0000"
-              className="input-glass !w-24 tracking-[0.5em] text-center placeholder:tracking-normal font-mono"
-            />
-            <p className="text-[10px] text-white/25 mt-1.5">
-              4-digit PIN — must match the PIN shown in the SPARK agent on your gaming PC.
-            </p>
-          </div>
-
-          {/* Pipeline section */}
-          <div className="mt-6 pt-6 border-t border-white/[0.06]">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/5 flex items-center justify-center text-lg shadow-inner shrink-0">⛓️</span>
-              <div>
-                <h4 className="text-sm font-semibold text-white/95 tracking-wide">Detection Pipeline</h4>
-                <p className="text-[11px] text-white/40 mt-0.5">Configure the 6-stage ForgeWaterfall process pipeline.</p>
-              </div>
-            </div>
-
-          <p className="text-xs text-white/40 mb-4 leading-relaxed">
-            The multi-stage ForgeWaterfall evaluates running processes to decide whether they should
-            be accepted, rejected, or forwarded for further analysis.
-          </p>
-
-          {/* Pipeline flow indicator */}
-          <div className="flex items-center gap-1.5 mb-5 p-3 bg-white/[0.02] border border-white/5 rounded-xl">
-            {["1", "2", "3", "4", "5", "6"].map((s, i) => (
-              <span key={s} className="flex items-center gap-1">
-                <span
-                  className={`w-2.5 h-2.5 rounded-full transition-colors duration-300 ${
-                    s === "2"
-                      ? config.engine_settings.strict_forge_mode
-                        ? "bg-green-400 shadow-sm shadow-green-400/50"
-                        : "bg-white/15"
-                      : s === "3"
-                      ? config.engine_settings.process_filter_bypass
-                        ? "bg-yellow-400/60 shadow-sm shadow-yellow-400/50"
-                        : "bg-green-400"
-                      : "bg-green-400"
-                  }`}
-                />
-                {i < 5 && <span className="text-white/[0.08] text-[10px]">→</span>}
-              </span>
-            ))}
-            <span className="text-[11px] font-medium text-white/50 ml-2">
-              Waterfall Mode:{" "}
-              <span className="text-purple-300">
-                {config.engine_settings.strict_forge_mode ? "Strict Lockdown" : "Standard Evaluator"}
-              </span>
-            </span>
-          </div>
-
-          {!showPipelineAdvanced && (
-            <button
-              type="button"
-              onClick={() => setShowPipelineAdvanced(true)}
-              className="mt-2 w-full text-left text-[10px] uppercase tracking-wider font-semibold text-white/30 hover:text-white/60 transition-colors cursor-pointer px-3 py-2.5 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] bg-white/[0.01] hover:bg-white/[0.03]"
             >
-              ▸ Advanced
-            </button>
-          )}
+              <p className="text-xs text-white/40 mb-4 leading-relaxed">
+                Detection runs <strong className="text-emerald-300/80">natively in Rust</strong> on
+                Windows, macOS, and Linux — no Python required.
+                {isMacOS && (
+                  <>
+                    {" "}
+                    On macOS, grant <strong className="text-yellow-300/80">
+                      Screen Recording
+                    </strong>{" "}
+                    permission (System Settings → Privacy &amp; Security) so the engine can read
+                    window titles.
+                  </>
+                )}
+              </p>
 
-          {showPipelineAdvanced && (
-            <button
-              type="button"
-              onClick={() => setShowPipelineAdvanced(false)}
-              className="mb-3 w-full text-left text-[10px] uppercase tracking-wider font-semibold text-white/30 hover:text-white/60 transition-colors cursor-pointer px-3 py-2.5 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] bg-white/[0.01] hover:bg-white/[0.03]"
-            >
-              ▸ Simple
-            </button>
-          )}
-
-          <div className={showPipelineAdvanced ? "flex flex-col gap-1" : "hidden"}>
-            {/* Stage 1: Instant Match */}
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.05]">
-              <div className="flex items-center gap-3.5">
-                <span className="w-6 h-6 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                  1
-                </span>
-                <div>
-                  <span className="text-xs text-white/80 font-medium">Instant Match</span>
-                  <p className="text-[10px] text-white/30 mt-0.5">
-                    Skips immediately to output if process matches a known game in library
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Stage 2: Lockdown */}
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.05]">
-              <div className="flex items-center gap-3.5">
-                <span className="w-6 h-6 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                  2
-                </span>
-                <div>
-                  <span className="text-xs text-white/80 font-medium">Lockdown</span>
-                  <p className="text-[10px] text-white/30 mt-0.5">
-                    Instantly rejects any process that is not explicitly in your library
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                on={config.engine_settings.strict_forge_mode}
-                onToggle={() =>
-                  setEngine("strict_forge_mode", !config.engine_settings.strict_forge_mode)
-                }
-              />
-            </div>
-
-            {/* Stage 3: Behavior Traps */}
-            <div className="border-b border-white/[0.05]">
-              <div className="flex items-center justify-between py-3">
-                <button
-                  onClick={() => setTrapsOpen(!trapsOpen)}
-                  className="flex items-center gap-3.5 cursor-pointer text-left focus:outline-none"
-                >
-                  <span className="w-6 h-6 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                    3
+              {/* SPARK dual-PC pairing (Hub side) */}
+              <div className="mt-2 p-3 bg-blue-500/[0.04] border border-blue-500/15 rounded-xl">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs text-white/80 font-medium">SPARK Dual-PC Link</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 font-semibold">
+                    OPTIONAL
                   </span>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-white/80 font-medium">Behavior Traps</span>
-                      <svg
-                        className={`w-3 h-3 text-white/30 transition-transform duration-200 ${
-                          trapsOpen ? "rotate-180" : ""
-                        }`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <p className="text-[10px] text-white/30 mt-0.5">
-                      Instantly discards non-game software using smart geometric & system traps
-                    </p>
-                  </div>
-                </button>
-                <button
-                  onClick={() =>
-                    setEngine(
-                      "process_filter_bypass",
-                      !config.engine_settings.process_filter_bypass
-                    )
+                </div>
+                <p className="text-[10px] text-white/30 mb-2">
+                  Streaming from two PCs? Run the SPARK agent on the gaming PC — this hub receives
+                  its detections over the LAN and updates overlays exactly like local detection.
+                </p>
+                <label className="block text-[11px] uppercase tracking-wider text-white/50 mb-1.5">
+                  Network PIN
+                </label>
+                <input
+                  type="text"
+                  maxLength={4}
+                  value={config.engine_settings.spark_pin}
+                  onChange={(e) =>
+                    setEngine("spark_pin", e.target.value.replace(/\D/g, "").slice(0, 4))
                   }
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer border ${
-                    config.engine_settings.process_filter_bypass
-                      ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-                      : "bg-white/[0.05] text-white/40 border-white/10 hover:bg-white/[0.08]"
-                  }`}
-                >
-                  {config.engine_settings.process_filter_bypass ? "Bypassed" : "Active"}
-                </button>
+                  placeholder="0000"
+                  className="input-glass !w-24 tracking-[0.5em] text-center placeholder:tracking-normal font-mono"
+                />
+                <p className="text-[10px] text-white/25 mt-1.5">
+                  4-digit PIN — must match the PIN shown in the SPARK agent on your gaming PC.
+                </p>
               </div>
-              <div
-                className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  trapsOpen ? "max-h-[600px] opacity-100 mb-4" : "max-h-0 opacity-0"
-                }`}
-              >
-                <div className="ml-9 mt-2 p-4 bg-white/[0.02] border border-white/5 rounded-xl flex flex-col gap-4">
-                  {/* Emulator Detection */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs text-white/70 font-medium">Emulator Detection</span>
-                      <p className="text-[10px] text-white/35 mt-0.5">
-                        Detect games inside popular emulators (Yuzu, RPCS3, Citra, etc.)
-                      </p>
-                    </div>
-                    <Toggle
-                      on={config.engine_settings.emulator_detection}
-                      onToggle={() =>
-                        setEngine("emulator_detection", !config.engine_settings.emulator_detection)
-                      }
-                    />
-                  </div>
-                  {/* RAM Floor */}
-                  <div className="border-t border-white/[0.03] pt-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div>
-                        <span className="text-xs text-white/70 font-medium">RAM Floor</span>
-                        <p className="text-[10px] text-white/35 mt-0.5">
-                          Processes consuming less memory are discarded as non-games
-                        </p>
-                      </div>
-                      <span className="text-xs font-mono font-semibold text-purple-300">
-                        {config.engine_settings.ram_threshold} MB
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={10}
-                      max={500}
-                      step={10}
-                      value={config.engine_settings.ram_threshold}
-                      onChange={(e) => setEngine("ram_threshold", parseInt(e.target.value))}
-                      className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
-                    />
-                    <div className="flex justify-between text-[9px] text-white/20 mt-0.5 font-mono">
-                      <span>10 MB</span>
-                      <span>500 MB</span>
-                    </div>
-                  </div>
-                  {/* Chromium / Electron Trap */}
-                  <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
-                    <div>
-                      <span className="text-xs text-white/70 font-medium">Chromium / Electron Trap</span>
-                      <p className="text-[10px] text-white/35 mt-0.5">
-                        Kills Discord, Spotify, VS Code, and other Electron/Chromium shells
-                      </p>
-                    </div>
-                    <Toggle
-                      on={config.engine_settings.trap_chromium}
-                      onToggle={() =>
-                        setEngine("trap_chromium", !config.engine_settings.trap_chromium)
-                      }
-                    />
-                  </div>
-                  {/* Command-Line Flag Trap */}
-                  <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
-                    <div>
-                      <span className="text-xs text-white/70 font-medium">Command-Line Flag Trap</span>
-                      <p className="text-[10px] text-white/35 mt-0.5">
-                        Kills helper processes launched with utility/render flags
-                      </p>
-                    </div>
-                    <Toggle
-                      on={config.engine_settings.trap_cmdline}
-                      onToggle={() => setEngine("trap_cmdline", !config.engine_settings.trap_cmdline)}
-                    />
-                  </div>
-                  {/* UI Framework Trap */}
-                  <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
-                    <div>
-                      <span className="text-xs text-white/70 font-medium">UI Framework Trap</span>
-                      <p className="text-[10px] text-white/35 mt-0.5">
-                        Kills known desktop tools like Task Manager, File Explorer, etc.
-                      </p>
-                    </div>
-                    <Toggle
-                      on={config.engine_settings.trap_ui_framework}
-                      onToggle={() =>
-                        setEngine("trap_ui_framework", !config.engine_settings.trap_ui_framework)
-                      }
-                    />
-                  </div>
-                  {/* Window Geometry Trap */}
-                  <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
-                    <div>
-                      <span className="text-xs text-white/70 font-medium">Window Geometry Trap</span>
-                      <p className="text-[10px] text-white/35 mt-0.5">
-                        Kills background or invisible processes with no visible presence
-                      </p>
-                    </div>
-                    <Toggle
-                      on={config.engine_settings.trap_geometry}
-                      onToggle={() =>
-                        setEngine("trap_geometry", !config.engine_settings.trap_geometry)
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Stage 4: Authority Scan */}
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.05]">
-              <div className="flex items-center gap-3.5">
-                <span className="w-6 h-6 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                  4
-                </span>
-                <div>
-                  <span className="text-xs text-white/80 font-medium">Authority Scan</span>
-                  <p className="text-[10px] text-white/30 mt-0.5">
-                    Overrides criteria if matched in Steam Registry, Discord Rich Presence, or game managers
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Stage 5: Score & Classify */}
-            <div className="border-b border-white/[0.05]">
-              <div className="flex items-center justify-between py-3">
-                <button
-                  onClick={() => setScoreOpen(!scoreOpen)}
-                  className="flex items-center gap-3.5 cursor-pointer text-left focus:outline-none"
-                >
-                  <span className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                    5
+              {/* Pipeline section */}
+              <div className="mt-6 pt-6 border-t border-white/[0.06]">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/5 flex items-center justify-center text-lg shadow-inner shrink-0">
+                    ⛓️
                   </span>
                   <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-white/80 font-medium">Score & Classify</span>
-                      <svg
-                        className={`w-3 h-3 text-white/30 transition-transform duration-200 ${
-                          scoreOpen ? "rotate-180" : ""
-                        }`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <p className="text-[10px] text-white/30 mt-0.5">
-                      Accumulates weight traits to determine whether a process is a gaming app
+                    <h4 className="text-sm font-semibold text-white/95 tracking-wide">
+                      Detection Pipeline
+                    </h4>
+                    <p className="text-[11px] text-white/40 mt-0.5">
+                      Configure the 6-stage ForgeWaterfall process pipeline.
                     </p>
                   </div>
-                </button>
-              </div>
-              <div
-                className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  scoreOpen ? "max-h-[600px] opacity-100 mb-4" : "max-h-0 opacity-0"
-                }`}
-              >
-                <div className="ml-9 mt-2 p-4 bg-white/[0.02] border border-white/5 rounded-xl flex flex-col gap-4">
-                  {/* Engine DNA */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[10px] font-mono font-bold text-white/35 w-7 text-right">
-                        +0.4
+                </div>
+
+                <p className="text-xs text-white/40 mb-4 leading-relaxed">
+                  The multi-stage ForgeWaterfall evaluates running processes to decide whether they
+                  should be accepted, rejected, or forwarded for further analysis.
+                </p>
+
+                {/* Pipeline flow indicator */}
+                <div className="flex items-center gap-1.5 mb-5 p-3 bg-white/[0.02] border border-white/5 rounded-xl">
+                  {["1", "2", "3", "4", "5", "6"].map((s, i) => (
+                    <span key={s} className="flex items-center gap-1">
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full transition-colors duration-300 ${
+                          s === "2"
+                            ? config.engine_settings.strict_forge_mode
+                              ? "bg-green-400 shadow-sm shadow-green-400/50"
+                              : "bg-white/15"
+                            : s === "3"
+                              ? config.engine_settings.process_filter_bypass
+                                ? "bg-yellow-400/60 shadow-sm shadow-yellow-400/50"
+                                : "bg-green-400"
+                              : "bg-green-400"
+                        }`}
+                      />
+                      {i < 5 && <span className="text-white/[0.08] text-[10px]">→</span>}
+                    </span>
+                  ))}
+                  <span className="text-[11px] font-medium text-white/50 ml-2">
+                    Waterfall Mode:{" "}
+                    <span className="text-purple-300">
+                      {config.engine_settings.strict_forge_mode
+                        ? "Strict Lockdown"
+                        : "Standard Evaluator"}
+                    </span>
+                  </span>
+                </div>
+
+                {!showPipelineAdvanced && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPipelineAdvanced(true)}
+                    className="mt-2 w-full text-left text-[10px] uppercase tracking-wider font-semibold text-white/30 hover:text-white/60 transition-colors cursor-pointer px-3 py-2.5 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] bg-white/[0.01] hover:bg-white/[0.03]"
+                  >
+                    ▸ Advanced
+                  </button>
+                )}
+
+                {showPipelineAdvanced && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPipelineAdvanced(false)}
+                    className="mb-3 w-full text-left text-[10px] uppercase tracking-wider font-semibold text-white/30 hover:text-white/60 transition-colors cursor-pointer px-3 py-2.5 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] bg-white/[0.01] hover:bg-white/[0.03]"
+                  >
+                    ▸ Simple
+                  </button>
+                )}
+
+                <div className={showPipelineAdvanced ? "flex flex-col gap-1" : "hidden"}>
+                  {/* Stage 1: Instant Match */}
+                  <div className="flex items-center justify-between py-3 border-b border-white/[0.05]">
+                    <div className="flex items-center gap-3.5">
+                      <span className="w-6 h-6 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        1
                       </span>
                       <div>
-                        <span className="text-xs text-white/70 font-medium">Engine DNA</span>
-                        <p className="text-[10px] text-white/35 mt-0.5">
-                          Check for signatures (Unity, Unreal, Godot, GameMaker, RPG Maker)
+                        <span className="text-xs text-white/80 font-medium">Instant Match</span>
+                        <p className="text-[10px] text-white/30 mt-0.5">
+                          Skips immediately to output if process matches a known game in library
                         </p>
                       </div>
                     </div>
-                    <Toggle
-                      on={config.engine_settings.score_engine_dna}
-                      onToggle={() =>
-                        setEngine("score_engine_dna", !config.engine_settings.score_engine_dna)
-                      }
-                    />
                   </div>
-                  {/* Fullscreen */}
-                  <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[10px] font-mono font-bold text-white/35 w-7 text-right">
-                        +0.3
+
+                  {/* Stage 2: Lockdown */}
+                  <div className="flex items-center justify-between py-3 border-b border-white/[0.05]">
+                    <div className="flex items-center gap-3.5">
+                      <span className="w-6 h-6 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        2
                       </span>
                       <div>
-                        <span className="text-xs text-white/70 font-medium">Fullscreen Presence</span>
-                        <p className="text-[10px] text-white/35 mt-0.5">
-                          Target owns the active fullscreen foreground graphic viewport
+                        <span className="text-xs text-white/80 font-medium">Lockdown</span>
+                        <p className="text-[10px] text-white/30 mt-0.5">
+                          Instantly rejects any process that is not explicitly in your library
                         </p>
                       </div>
                     </div>
                     <Toggle
-                      on={config.engine_settings.score_fullscreen}
+                      on={config.engine_settings.strict_forge_mode}
                       onToggle={() =>
-                        setEngine("score_fullscreen", !config.engine_settings.score_fullscreen)
+                        setEngine("strict_forge_mode", !config.engine_settings.strict_forge_mode)
                       }
-                    />
-                  </div>
-                  {/* Window Title */}
-                  <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[10px] font-mono font-bold text-white/35 w-7 text-right">
-                        +0.2
-                      </span>
-                      <div>
-                        <span className="text-xs text-white/70 font-medium">Unique Window Title</span>
-                        <p className="text-[10px] text-white/35 mt-0.5">
-                          Window title contains localized readable display name (not .exe string)
-                        </p>
-                      </div>
-                    </div>
-                    <Toggle
-                      on={config.engine_settings.score_window_title}
-                      onToggle={() =>
-                        setEngine("score_window_title", !config.engine_settings.score_window_title)
-                      }
-                    />
-                  </div>
-                  {/* RAM Usage */}
-                  <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[10px] font-mono font-bold text-white/35 w-7 text-right">
-                        +0.1
-                      </span>
-                      <div>
-                        <span className="text-xs text-white/70 font-medium">Heavy RAM Allocation</span>
-                        <p className="text-[10px] text-white/35 mt-0.5">
-                          Adds points when memory exceeds the base RAM floor criteria
-                        </p>
-                      </div>
-                    </div>
-                    <Toggle
-                      on={config.engine_settings.score_ram}
-                      onToggle={() => setEngine("score_ram", !config.engine_settings.score_ram)}
                     />
                   </div>
 
-                  {/* Score Threshold */}
-                  <div className="border-t border-white/[0.03] pt-3">
-                    <div className="flex items-center justify-between mb-1.5">
+                  {/* Stage 3: Behavior Traps */}
+                  <div className="border-b border-white/[0.05]">
+                    <div className="flex items-center justify-between py-3">
+                      <button
+                        onClick={() => setTrapsOpen(!trapsOpen)}
+                        className="flex items-center gap-3.5 cursor-pointer text-left focus:outline-none"
+                      >
+                        <span className="w-6 h-6 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                          3
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-white/80 font-medium">
+                              Behavior Traps
+                            </span>
+                            <svg
+                              className={`w-3 h-3 text-white/30 transition-transform duration-200 ${
+                                trapsOpen ? "rotate-180" : ""
+                              }`}
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M19 9l-7 7-7-7"
+                              />
+                            </svg>
+                          </div>
+                          <p className="text-[10px] text-white/30 mt-0.5">
+                            Instantly discards non-game software using smart geometric & system
+                            traps
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() =>
+                          setEngine(
+                            "process_filter_bypass",
+                            !config.engine_settings.process_filter_bypass
+                          )
+                        }
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer border ${
+                          config.engine_settings.process_filter_bypass
+                            ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                            : "bg-white/[0.05] text-white/40 border-white/10 hover:bg-white/[0.08]"
+                        }`}
+                      >
+                        {config.engine_settings.process_filter_bypass ? "Bypassed" : "Active"}
+                      </button>
+                    </div>
+                    <div
+                      className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                        trapsOpen ? "max-h-[600px] opacity-100 mb-4" : "max-h-0 opacity-0"
+                      }`}
+                    >
+                      <div className="ml-9 mt-2 p-4 bg-white/[0.02] border border-white/5 rounded-xl flex flex-col gap-4">
+                        {/* Emulator Detection */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs text-white/70 font-medium">
+                              Emulator Detection
+                            </span>
+                            <p className="text-[10px] text-white/35 mt-0.5">
+                              Detect games inside popular emulators (Yuzu, RPCS3, Citra, etc.)
+                            </p>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.emulator_detection}
+                            onToggle={() =>
+                              setEngine(
+                                "emulator_detection",
+                                !config.engine_settings.emulator_detection
+                              )
+                            }
+                          />
+                        </div>
+                        {/* RAM Floor */}
+                        <div className="border-t border-white/[0.03] pt-3">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div>
+                              <span className="text-xs text-white/70 font-medium">RAM Floor</span>
+                              <p className="text-[10px] text-white/35 mt-0.5">
+                                Processes consuming less memory are discarded as non-games
+                              </p>
+                            </div>
+                            <span className="text-xs font-mono font-semibold text-purple-300">
+                              {config.engine_settings.ram_threshold} MB
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={10}
+                            max={500}
+                            step={10}
+                            value={config.engine_settings.ram_threshold}
+                            onChange={(e) => setEngine("ram_threshold", parseInt(e.target.value))}
+                            className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
+                          />
+                          <div className="flex justify-between text-[9px] text-white/20 mt-0.5 font-mono">
+                            <span>10 MB</span>
+                            <span>500 MB</span>
+                          </div>
+                        </div>
+                        {/* Chromium / Electron Trap */}
+                        <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
+                          <div>
+                            <span className="text-xs text-white/70 font-medium">
+                              Chromium / Electron Trap
+                            </span>
+                            <p className="text-[10px] text-white/35 mt-0.5">
+                              Kills Discord, Spotify, VS Code, and other Electron/Chromium shells
+                            </p>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.trap_chromium}
+                            onToggle={() =>
+                              setEngine("trap_chromium", !config.engine_settings.trap_chromium)
+                            }
+                          />
+                        </div>
+                        {/* Command-Line Flag Trap */}
+                        <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
+                          <div>
+                            <span className="text-xs text-white/70 font-medium">
+                              Command-Line Flag Trap
+                            </span>
+                            <p className="text-[10px] text-white/35 mt-0.5">
+                              Kills helper processes launched with utility/render flags
+                            </p>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.trap_cmdline}
+                            onToggle={() =>
+                              setEngine("trap_cmdline", !config.engine_settings.trap_cmdline)
+                            }
+                          />
+                        </div>
+                        {/* UI Framework Trap */}
+                        <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
+                          <div>
+                            <span className="text-xs text-white/70 font-medium">
+                              UI Framework Trap
+                            </span>
+                            <p className="text-[10px] text-white/35 mt-0.5">
+                              Kills known desktop tools like Task Manager, File Explorer, etc.
+                            </p>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.trap_ui_framework}
+                            onToggle={() =>
+                              setEngine(
+                                "trap_ui_framework",
+                                !config.engine_settings.trap_ui_framework
+                              )
+                            }
+                          />
+                        </div>
+                        {/* Window Geometry Trap */}
+                        <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
+                          <div>
+                            <span className="text-xs text-white/70 font-medium">
+                              Window Geometry Trap
+                            </span>
+                            <p className="text-[10px] text-white/35 mt-0.5">
+                              Kills background or invisible processes with no visible presence
+                            </p>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.trap_geometry}
+                            onToggle={() =>
+                              setEngine("trap_geometry", !config.engine_settings.trap_geometry)
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stage 4: Authority Scan */}
+                  <div className="flex items-center justify-between py-3 border-b border-white/[0.05]">
+                    <div className="flex items-center gap-3.5">
+                      <span className="w-6 h-6 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        4
+                      </span>
                       <div>
-                        <span className="text-xs text-white/70 font-medium">Score Threshold</span>
-                        <p className="text-[10px] text-white/35 mt-0.5">
-                          Required aggregate weight to classify process as an active game
+                        <span className="text-xs text-white/80 font-medium">Authority Scan</span>
+                        <p className="text-[10px] text-white/30 mt-0.5">
+                          Overrides criteria if matched in Steam Registry, Discord Rich Presence, or
+                          game managers
                         </p>
                       </div>
-                      <span className="text-xs font-mono font-semibold text-purple-300">
-                        {config.engine_settings.confidence_threshold.toFixed(1)}
-                      </span>
                     </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={5}
-                      value={Math.round(config.engine_settings.confidence_threshold * 100)}
-                      onChange={(e) =>
-                        setEngine("confidence_threshold", parseInt(e.target.value) / 100)
-                      }
-                      className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
-                    />
-                    <div className="flex justify-between text-[9px] text-white/20 mt-0.5 font-mono">
-                      <span>0.0 — absolute trust</span>
-                      <span>
-                        {(
-                          (config.engine_settings.score_engine_dna ? 0.4 : 0) +
-                          (config.engine_settings.score_fullscreen ? 0.3 : 0) +
-                          (config.engine_settings.score_window_title ? 0.2 : 0) +
-                          (config.engine_settings.score_ram ? 0.1 : 0)
-                        ).toFixed(1)}{" "}
-                        — maximum strict
+                  </div>
+
+                  {/* Stage 5: Score & Classify */}
+                  <div className="border-b border-white/[0.05]">
+                    <div className="flex items-center justify-between py-3">
+                      <button
+                        onClick={() => setScoreOpen(!scoreOpen)}
+                        className="flex items-center gap-3.5 cursor-pointer text-left focus:outline-none"
+                      >
+                        <span className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                          5
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-white/80 font-medium">
+                              Score & Classify
+                            </span>
+                            <svg
+                              className={`w-3 h-3 text-white/30 transition-transform duration-200 ${
+                                scoreOpen ? "rotate-180" : ""
+                              }`}
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M19 9l-7 7-7-7"
+                              />
+                            </svg>
+                          </div>
+                          <p className="text-[10px] text-white/30 mt-0.5">
+                            Accumulates weight traits to determine whether a process is a gaming app
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+                    <div
+                      className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                        scoreOpen ? "max-h-[600px] opacity-100 mb-4" : "max-h-0 opacity-0"
+                      }`}
+                    >
+                      <div className="ml-9 mt-2 p-4 bg-white/[0.02] border border-white/5 rounded-xl flex flex-col gap-4">
+                        {/* Engine DNA */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[10px] font-mono font-bold text-white/35 w-7 text-right">
+                              +0.4
+                            </span>
+                            <div>
+                              <span className="text-xs text-white/70 font-medium">Engine DNA</span>
+                              <p className="text-[10px] text-white/35 mt-0.5">
+                                Check for signatures (Unity, Unreal, Godot, GameMaker, RPG Maker)
+                              </p>
+                            </div>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.score_engine_dna}
+                            onToggle={() =>
+                              setEngine(
+                                "score_engine_dna",
+                                !config.engine_settings.score_engine_dna
+                              )
+                            }
+                          />
+                        </div>
+                        {/* Fullscreen */}
+                        <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[10px] font-mono font-bold text-white/35 w-7 text-right">
+                              +0.3
+                            </span>
+                            <div>
+                              <span className="text-xs text-white/70 font-medium">
+                                Fullscreen Presence
+                              </span>
+                              <p className="text-[10px] text-white/35 mt-0.5">
+                                Target owns the active fullscreen foreground graphic viewport
+                              </p>
+                            </div>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.score_fullscreen}
+                            onToggle={() =>
+                              setEngine(
+                                "score_fullscreen",
+                                !config.engine_settings.score_fullscreen
+                              )
+                            }
+                          />
+                        </div>
+                        {/* Window Title */}
+                        <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[10px] font-mono font-bold text-white/35 w-7 text-right">
+                              +0.2
+                            </span>
+                            <div>
+                              <span className="text-xs text-white/70 font-medium">
+                                Unique Window Title
+                              </span>
+                              <p className="text-[10px] text-white/35 mt-0.5">
+                                Window title contains localized readable display name (not .exe
+                                string)
+                              </p>
+                            </div>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.score_window_title}
+                            onToggle={() =>
+                              setEngine(
+                                "score_window_title",
+                                !config.engine_settings.score_window_title
+                              )
+                            }
+                          />
+                        </div>
+                        {/* RAM Usage */}
+                        <div className="flex items-center justify-between border-t border-white/[0.03] pt-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[10px] font-mono font-bold text-white/35 w-7 text-right">
+                              +0.1
+                            </span>
+                            <div>
+                              <span className="text-xs text-white/70 font-medium">
+                                Heavy RAM Allocation
+                              </span>
+                              <p className="text-[10px] text-white/35 mt-0.5">
+                                Adds points when memory exceeds the base RAM floor criteria
+                              </p>
+                            </div>
+                          </div>
+                          <Toggle
+                            on={config.engine_settings.score_ram}
+                            onToggle={() =>
+                              setEngine("score_ram", !config.engine_settings.score_ram)
+                            }
+                          />
+                        </div>
+
+                        {/* Score Threshold */}
+                        <div className="border-t border-white/[0.03] pt-3">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div>
+                              <span className="text-xs text-white/70 font-medium">
+                                Score Threshold
+                              </span>
+                              <p className="text-[10px] text-white/35 mt-0.5">
+                                Required aggregate weight to classify process as an active game
+                              </p>
+                            </div>
+                            <span className="text-xs font-mono font-semibold text-purple-300">
+                              {config.engine_settings.confidence_threshold.toFixed(1)}
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={Math.round(config.engine_settings.confidence_threshold * 100)}
+                            onChange={(e) =>
+                              setEngine("confidence_threshold", parseInt(e.target.value) / 100)
+                            }
+                            className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
+                          />
+                          <div className="flex justify-between text-[9px] text-white/20 mt-0.5 font-mono">
+                            <span>0.0 — absolute trust</span>
+                            <span>
+                              {(
+                                (config.engine_settings.score_engine_dna ? 0.4 : 0) +
+                                (config.engine_settings.score_fullscreen ? 0.3 : 0) +
+                                (config.engine_settings.score_window_title ? 0.2 : 0) +
+                                (config.engine_settings.score_ram ? 0.1 : 0)
+                              ).toFixed(1)}{" "}
+                              — maximum strict
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stage 6: Forged Output */}
+                  <div className="flex items-center justify-between py-3">
+                    <div className="flex items-center gap-3.5">
+                      <span className="w-6 h-6 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        6
                       </span>
+                      <div>
+                        <span className="text-xs text-white/80 font-medium">Forged Output</span>
+                        <p className="text-[10px] text-white/30 mt-0.5">
+                          Funnels metadata out to your active overlays, rich presence, and chat
+                          integrations
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Stage 6: Forged Output */}
-            <div className="flex items-center justify-between py-3">
-              <div className="flex items-center gap-3.5">
-                <span className="w-6 h-6 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                  6
-                </span>
-                <div>
-                  <span className="text-xs text-white/80 font-medium">Forged Output</span>
-                  <p className="text-[10px] text-white/30 mt-0.5">
-                    Funnels metadata out to your active overlays, rich presence, and chat integrations
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          </div>
-        </CollapsibleSection>
-        );
-      })()}
+            </CollapsibleSection>
+          );
+        })()}
 
       {/* Timing */}
       {config && (
@@ -757,12 +817,13 @@ function EngineSubTab({
                 min={1}
                 max={300}
                 value={config.engine_settings.widget_fade_timer}
-                onChange={(e) => setEngine("widget_fade_timer", clampInt(e.target.value, 1, 300, 1))}
+                onChange={(e) =>
+                  setEngine("widget_fade_timer", clampInt(e.target.value, 1, 300, 1))
+                }
                 className="input-glass font-mono"
               />
             </div>
           </div>
-
         </CollapsibleSection>
       )}
 
@@ -793,7 +854,6 @@ function EngineSubTab({
               Category published to streaming APIs when no valid game is detected.
             </p>
           </div>
-
         </CollapsibleSection>
       )}
 
@@ -836,7 +896,6 @@ function EngineSubTab({
               />
             </div>
           </div>
-
         </CollapsibleSection>
       )}
 
@@ -965,8 +1024,18 @@ const KEY_CATALOG: {
   icon: string;
   group?: { key: string; label: string }[];
 }[] = [
-  { key: "steamgrid", label: "SteamGridDB", desc: "Custom grid artwork, hero banners, and logo images", icon: "🖼️" },
-  { key: "rawg", label: "RAWG", desc: "Game metadata — genres, ratings, release dates, screenshots", icon: "🎮" },
+  {
+    key: "steamgrid",
+    label: "SteamGridDB",
+    desc: "Custom grid artwork, hero banners, and logo images",
+    icon: "🖼️",
+  },
+  {
+    key: "rawg",
+    label: "RAWG",
+    desc: "Game metadata — genres, ratings, release dates, screenshots",
+    icon: "🎮",
+  },
   {
     key: "igdb",
     label: "IGDB",
@@ -1038,11 +1107,7 @@ const ROUTING_CATALOG: {
 ];
 
 // ─── API & Routing Sub-tab ──────────────────────────────
-function ApiRoutingSubTab({
-  toast,
-}: {
-  toast: (msg: string, type?: ToastType) => void;
-}) {
+function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
   const [section, setSection] = useState<"keys" | "routing">("keys");
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [floatingOpen, setFloatingOpen] = useState(false);
@@ -1050,7 +1115,9 @@ function ApiRoutingSubTab({
   const [floatingType, setFloatingType] = useState<"keys" | "routing">("keys");
   const [search, setSearch] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(null);
+  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(
+    null
+  );
   const floatingRef = useRef<HTMLDivElement>(null);
   const skipSave = useRef(false);
 
@@ -1064,7 +1131,9 @@ function ApiRoutingSubTab({
     } else {
       setConfig(defaultConfig);
     }
-    setTimeout(() => { skipSave.current = false; }, 500);
+    setTimeout(() => {
+      skipSave.current = false;
+    }, 500);
   }, []);
 
   useEffect(() => {
@@ -1158,7 +1227,8 @@ function ApiRoutingSubTab({
     setConfig((prev) => {
       const next = { ...prev!.api_keys };
       if (entry.group) {
-        for (const g of entry.group) next[g.key as keyof ApiKeys] = next[g.key as keyof ApiKeys] || "";
+        for (const g of entry.group)
+          next[g.key as keyof ApiKeys] = next[g.key as keyof ApiKeys] || "";
         return { ...prev!, api_keys: next };
       }
       next[entry.key as keyof ApiKeys] = "";
@@ -1182,8 +1252,7 @@ function ApiRoutingSubTab({
     toast("Key removed — save to confirm", "info");
   };
 
-  const truncate = (v: string) =>
-    v.length > 8 ? v.slice(0, 4) + "…" + v.slice(-4) : "—";
+  const truncate = (v: string) => (v.length > 8 ? v.slice(0, 4) + "…" + v.slice(-4) : "—");
 
   // ── Routing helpers ────────────────────────────────
   const setField = (key: string, value: string) => {
@@ -1214,7 +1283,8 @@ function ApiRoutingSubTab({
   const addRouteFromCatalog = (entry: (typeof ROUTING_CATALOG)[number]) => {
     setConfig((prev) => {
       const next = { ...prev!.broadcaster };
-      for (const f of entry.userFields) next[f.key as keyof typeof next] = (next[f.key as keyof typeof next] || "") as any;
+      for (const f of entry.userFields)
+        next[f.key as keyof typeof next] = (next[f.key as keyof typeof next] || "") as any;
       return { ...prev!, broadcaster: next };
     });
     setEditingKey(entry.key);
@@ -1242,8 +1312,20 @@ function ApiRoutingSubTab({
     const items = isKeys ? filteredAvailableKeys : filteredAvailableRoutes;
     const title = isKeys ? "Add API Key" : "Add Integration";
     const placeholder = isKeys ? "Search keys…" : "Search integrations…";
-    const emptyMain = isKeys ? (search ? "No matches" : "All keys added") : (search ? "No matches" : "All integrations active");
-    const emptySub = isKeys ? (search ? "Try a different search term" : "You can manage keys in the list") : (search ? "Try a different search term" : "You can manage integrations in the list");
+    const emptyMain = isKeys
+      ? search
+        ? "No matches"
+        : "All keys added"
+      : search
+        ? "No matches"
+        : "All integrations active";
+    const emptySub = isKeys
+      ? search
+        ? "Try a different search term"
+        : "You can manage keys in the list"
+      : search
+        ? "Try a different search term"
+        : "You can manage integrations in the list";
 
     return (
       <div
@@ -1300,9 +1382,7 @@ function ApiRoutingSubTab({
                   onClick={() => addKeyFromCatalog(k)}
                   className="flex items-center gap-3 p-3 rounded-xl surface-1 hover:bg-white/[0.07] hover:border-white/15 transition-all cursor-pointer text-left group"
                 >
-                  <span className="section-head-icon text-sm !w-8 !h-8 !rounded-lg">
-                    {k.icon}
-                  </span>
+                  <span className="section-head-icon text-sm !w-8 !h-8 !rounded-lg">{k.icon}</span>
                   <div className="flex-1 min-w-0">
                     <span className="text-xs text-white/80 font-medium block">{k.label}</span>
                     <span className="text-[10px] text-white/30 block truncate">{k.desc}</span>
@@ -1351,7 +1431,12 @@ function ApiRoutingSubTab({
     KEY_CATALOG.flatMap((e) => (e.group ? e.group.map((g) => g.key) : [e.key]))
   );
   const orphanApiKeys = activeApiKeys.filter((k) => !catalogKeys.has(k));
-  const orphanKeyEntries: typeof displayKeyEntries = orphanApiKeys.map((k) => ({ key: k, label: k, desc: "", icon: "🔑" }));
+  const orphanKeyEntries: typeof displayKeyEntries = orphanApiKeys.map((k) => ({
+    key: k,
+    label: k,
+    desc: "",
+    icon: "🔑",
+  }));
   const allKeyDisplay = [...displayKeyEntries, ...orphanKeyEntries];
   const keyCount = allKeyDisplay.length;
 
@@ -1397,7 +1482,11 @@ function ApiRoutingSubTab({
         >
           <span className="text-sm">🗝️</span>
           API Keys
-          {keyCount > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.06] text-white/50">{keyCount}</span>}
+          {keyCount > 0 && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.06] text-white/50">
+              {keyCount}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setSection("routing")}
@@ -1409,7 +1498,11 @@ function ApiRoutingSubTab({
         >
           <span className="text-sm">♾️</span>
           Routing
-          {routeCount > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.06] text-white/50">{routeCount}</span>}
+          {routeCount > 0 && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.06] text-white/50">
+              {routeCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -1450,21 +1543,23 @@ function ApiRoutingSubTab({
           ) : (
             <div className="flex flex-col gap-2">
               {allKeyDisplay.map((entry) => {
-                const isGroup = 'group' in entry && !!(entry as any).group;
+                const isGroup = "group" in entry && !!(entry as any).group;
                 const isEditing = editingKey === entry.key;
                 const filledCount = isGroup
-                  ? (entry as any).group.filter((g: { key: string }) => !!apiKeys[g.key as keyof ApiKeys]).length
+                  ? (entry as any).group.filter(
+                      (g: { key: string }) => !!apiKeys[g.key as keyof ApiKeys]
+                    ).length
                   : apiKeys[entry.key as keyof ApiKeys]
-                  ? 1
-                  : 0;
+                    ? 1
+                    : 0;
                 const totalCount = isGroup ? (entry as any).group.length : 1;
                 const hasValue = filledCount > 0;
                 const allFilled = filledCount === totalCount;
                 const subFilled = isGroup
                   ? `${filledCount}/${totalCount} fields filled`
                   : hasValue
-                  ? truncate(apiKeys[entry.key as keyof ApiKeys] as string)
-                  : "Not configured";
+                    ? truncate(apiKeys[entry.key as keyof ApiKeys] as string)
+                    : "Not configured";
 
                 return (
                   <div
@@ -1485,7 +1580,9 @@ function ApiRoutingSubTab({
                         {entry.icon}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <span className="text-xs text-white/80 font-medium block">{entry.label}</span>
+                        <span className="text-xs text-white/80 font-medium block">
+                          {entry.label}
+                        </span>
                         <span className="text-[10px] text-white/30 block truncate font-mono">
                           {subFilled}
                         </span>
@@ -1588,16 +1685,25 @@ function ApiRoutingSubTab({
                 </svg>
               </div>
               <p className="text-sm mb-1">No broadcaster channels routed</p>
-              <p className="text-[10px] text-white/20">Click "Add Integration" to connect Twitch or Kick</p>
+              <p className="text-[10px] text-white/20">
+                Click "Add Integration" to connect Twitch or Kick
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               {allRouteDisplay.map((entry) => {
                 const isEditing = editingKey === entry.key;
-                const userFilled = entry.userFields.filter((f) => !!bc[f.key as keyof typeof bc]).length;
+                const userFilled = entry.userFields.filter(
+                  (f) => !!bc[f.key as keyof typeof bc]
+                ).length;
                 const userTotal = entry.userFields.length;
-                const managedFields = 'managedFields' in entry ? (entry as any).managedFields as { key: string; label: string }[] | undefined : undefined;
-                const hasOauth = managedFields?.some((f: { key: string }) => !!bc[f.key as keyof typeof bc]) ?? false;
+                const managedFields =
+                  "managedFields" in entry
+                    ? ((entry as any).managedFields as { key: string; label: string }[] | undefined)
+                    : undefined;
+                const hasOauth =
+                  managedFields?.some((f: { key: string }) => !!bc[f.key as keyof typeof bc]) ??
+                  false;
                 const hasValue = userFilled > 0 || hasOauth;
                 const allFilled = userFilled === userTotal;
                 const subFilled = hasOauth
@@ -1616,7 +1722,11 @@ function ApiRoutingSubTab({
                     <div className="flex items-center gap-3 px-4 py-3">
                       <span
                         className={`w-2 h-2 rounded-full shrink-0 ${
-                          hasValue ? (allFilled || hasOauth ? "bg-green-400" : "bg-yellow-400") : "bg-white/15"
+                          hasValue
+                            ? allFilled || hasOauth
+                              ? "bg-green-400"
+                              : "bg-yellow-400"
+                            : "bg-white/15"
                         }`}
                       />
                       <span
@@ -1663,7 +1773,12 @@ function ApiRoutingSubTab({
 
                           {entry.connectUrl && (
                             <button
-                              onClick={() => setOauthModal({ platform: entry.key as "twitch" | "kick", url: entry.connectUrl })}
+                              onClick={() =>
+                                setOauthModal({
+                                  platform: entry.key as "twitch" | "kick",
+                                  url: entry.connectUrl,
+                                })
+                              }
                               className="btn-cta"
                             >
                               🔗 Connect {entry.label}
@@ -1680,7 +1795,9 @@ function ApiRoutingSubTab({
                                 return (
                                   <div key={f.key} className="flex items-center justify-between">
                                     <div className="flex-1 min-w-0">
-                                      <span className="text-[10px] text-white/40 block">{f.label}</span>
+                                      <span className="text-[10px] text-white/40 block">
+                                        {f.label}
+                                      </span>
                                       <span className="text-[10px] text-white/20 font-mono block truncate">
                                         {val
                                           ? val.length > 12
@@ -1727,7 +1844,12 @@ function ApiRoutingSubTab({
           onSuccess={() => {
             loadConfig();
             setOauthModal(null);
-            toast(oauthModal.platform.charAt(0).toUpperCase() + oauthModal.platform.slice(1) + " connected!", "success");
+            toast(
+              oauthModal.platform.charAt(0).toUpperCase() +
+                oauthModal.platform.slice(1) +
+                " connected!",
+              "success"
+            );
           }}
         />
       )}
@@ -1886,7 +2008,10 @@ function AdvancedAnimations({
                 Animate rainbow accent borders on cursor hover
               </p>
             </div>
-            <Toggle on={prefs.holoEffects} onToggle={() => set("holoEffects", !prefs.holoEffects)} />
+            <Toggle
+              on={prefs.holoEffects}
+              onToggle={() => set("holoEffects", !prefs.holoEffects)}
+            />
           </div>
         </div>
       </div>
@@ -1899,12 +2024,17 @@ function AdvancedAnimations({
         <div className="flex flex-col gap-3.5">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs text-white/75 font-medium font-sans">Indicators Pulsing</span>
+              <span className="text-xs text-white/75 font-medium font-sans">
+                Indicators Pulsing
+              </span>
               <p className="text-[10px] text-white/35 mt-0.5">
                 Pulsing green/yellow nodes for LIVE &amp; active system engines
               </p>
             </div>
-            <Toggle on={prefs.statusPulse} onToggle={() => set("statusPulse", !prefs.statusPulse)} />
+            <Toggle
+              on={prefs.statusPulse}
+              onToggle={() => set("statusPulse", !prefs.statusPulse)}
+            />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
             <div>
@@ -1932,7 +2062,9 @@ function AdvancedAnimations({
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
             <div>
-              <span className="text-xs text-white/75 font-medium font-sans">Usage Bar Transition</span>
+              <span className="text-xs text-white/75 font-medium font-sans">
+                Usage Bar Transition
+              </span>
               <p className="text-[10px] text-white/35 mt-0.5 font-sans">
                 Enable smooth layout width transitions on CPU / Memory monitoring stats
               </p>
@@ -1960,7 +2092,17 @@ function AdvancedAnimations({
   );
 }
 
-function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg: string, type?: ToastType) => void; config: AppConfig | null; setConfig: React.Dispatch<React.SetStateAction<AppConfig | null>>; onSaveConfig: (section: string) => Promise<void> }) {
+function SystemSubTab({
+  toast,
+  config,
+  setConfig,
+  onSaveConfig,
+}: {
+  toast: (msg: string, type?: ToastType) => void;
+  config: AppConfig | null;
+  setConfig: React.Dispatch<React.SetStateAction<AppConfig | null>>;
+  onSaveConfig: (section: string) => Promise<void>;
+}) {
   const [prefs, setPrefs] = useState<SystemPrefs>(loadSystemPrefs);
   const [showAnimAdvanced, setShowAnimAdvanced] = useState(false);
   const skipSave = useRef(false);
@@ -2142,7 +2284,10 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
                 Notify when Twitch / Kick channel categories update successfully
               </p>
             </div>
-            <Toggle on={prefs.notifyOnStreamEvents} onToggle={() => toggle("notifyOnStreamEvents")} />
+            <Toggle
+              on={prefs.notifyOnStreamEvents}
+              onToggle={() => toggle("notifyOnStreamEvents")}
+            />
           </div>
         </div>
       </CollapsibleSection>
@@ -2221,13 +2366,15 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
         description="Manage log verbosities, backups, and app updates."
         icon="📓"
         badge={
-          <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium uppercase border ${
-            prefs.updateChannel === "closed-beta"
-              ? "bg-red-500/10 border-red-500/20 text-red-400"
-              : prefs.updateChannel === "beta"
-              ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
-              : "bg-white/5 border-white/5 text-white/50"
-          }`}>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium uppercase border ${
+              prefs.updateChannel === "closed-beta"
+                ? "bg-red-500/10 border-red-500/20 text-red-400"
+                : prefs.updateChannel === "beta"
+                  ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+                  : "bg-white/5 border-white/5 text-white/50"
+            }`}
+          >
             Channel: {prefs.updateChannel === "closed-beta" ? "Closed Beta" : prefs.updateChannel}
           </span>
         }
@@ -2295,7 +2442,9 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
 
       {/* Actions */}
       <div className="flex gap-3 mt-5">
-        <button onClick={exportConfig} className="btn-ghost">Export Config</button>
+        <button onClick={exportConfig} className="btn-ghost">
+          Export Config
+        </button>
       </div>
     </div>
   );
@@ -2325,7 +2474,6 @@ const BG_PRESETS: { name: string; color: string }[] = [
   { name: "Slate", color: "#0d1117" },
 ];
 
-
 // ─── Image Compression Helper ────────────────────────────────────────────────
 // Compresses uploaded images to JPEG at 85% quality, max 1920px, to keep
 // data URLs small enough for localStorage (~5MB quota).
@@ -2344,13 +2492,21 @@ function compressImage(file: File, maxSize = 1920, quality = 0.85): Promise<stri
         let w = img.width;
         let h = img.height;
         if (w > maxSize || h > maxSize) {
-          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-          else { w = Math.round(w * maxSize / h); h = maxSize; }
+          if (w > h) {
+            h = Math.round((h * maxSize) / w);
+            w = maxSize;
+          } else {
+            w = Math.round((w * maxSize) / h);
+            h = maxSize;
+          }
         }
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext("2d");
-        if (!ctx) { reject(new Error("Canvas not supported")); return; }
+        if (!ctx) {
+          reject(new Error("Canvas not supported"));
+          return;
+        }
         ctx.drawImage(img, 0, 0, w, h);
         resolve(canvas.toDataURL("image/jpeg", quality));
       };
@@ -2399,11 +2555,21 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
             Live Theme Preview
           </h4>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: prefs.accentColor }} />
-            <span className="text-[10px] font-mono text-white/30">{prefs.accentColor.toUpperCase()}</span>
+            <span
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ backgroundColor: prefs.accentColor }}
+            />
+            <span className="text-[10px] font-mono text-white/30">
+              {prefs.accentColor.toUpperCase()}
+            </span>
             <span className="text-white/10">•</span>
-            <span className="w-2.5 h-2.5 rounded-full border border-white/10" style={{ backgroundColor: prefs.bgColor }} />
-            <span className="text-[10px] font-mono text-white/30">{prefs.bgColor.toUpperCase()}</span>
+            <span
+              className="w-2.5 h-2.5 rounded-full border border-white/10"
+              style={{ backgroundColor: prefs.bgColor }}
+            />
+            <span className="text-[10px] font-mono text-white/30">
+              {prefs.bgColor.toUpperCase()}
+            </span>
           </div>
         </div>
         <div
@@ -2431,8 +2597,8 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                   prefs.borderRadius === "sharp"
                     ? "2px"
                     : prefs.borderRadius === "soft"
-                    ? "8px"
-                    : "16px",
+                      ? "8px"
+                      : "16px",
               }}
             >
               <p className="text-xs font-bold mb-1" style={{ color: prefs.accentColor }}>
@@ -2452,8 +2618,8 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                       prefs.borderRadius === "sharp"
                         ? "2px"
                         : prefs.borderRadius === "soft"
-                        ? "6px"
-                        : "12px",
+                          ? "6px"
+                          : "12px",
                   }}
                 >
                   Primary Button
@@ -2465,8 +2631,8 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                       prefs.borderRadius === "sharp"
                         ? "2px"
                         : prefs.borderRadius === "soft"
-                        ? "6px"
-                        : "12px",
+                          ? "6px"
+                          : "12px",
                   }}
                 >
                   Ghost Button
@@ -2474,7 +2640,10 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: prefs.accentColor }} />
+              <span
+                className="w-2 h-2 rounded-full animate-pulse"
+                style={{ backgroundColor: prefs.accentColor }}
+              />
               <span className="text-[10px] text-white/40 font-medium">Streamer status active</span>
               <span className="text-[10px] text-white/20 font-mono ml-auto">Token: KXMDV•••Sg</span>
             </div>
@@ -2507,7 +2676,10 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 hover:border-white/20 transition-all shrink-0 shadow-sm p-0.5" style={{ backgroundColor: prefs.accentColor }}>
+              <div
+                className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 hover:border-white/20 transition-all shrink-0 shadow-sm p-0.5"
+                style={{ backgroundColor: prefs.accentColor }}
+              >
                 <input
                   type="color"
                   value={prefs.accentColor}
@@ -2568,7 +2740,10 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 hover:border-white/20 transition-all shrink-0 shadow-sm p-0.5" style={{ backgroundColor: prefs.bgColor }}>
+              <div
+                className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 hover:border-white/20 transition-all shrink-0 shadow-sm p-0.5"
+                style={{ backgroundColor: prefs.bgColor }}
+              >
                 <input
                   type="color"
                   value={prefs.bgColor}
@@ -2654,7 +2829,11 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
 
           {prefs.bgImage ? (
             <div className="relative w-full h-32 rounded-xl overflow-hidden border border-white/10 group">
-              <img src={prefs.bgImage} alt="Background preview" className="w-full h-full object-cover" />
+              <img
+                src={prefs.bgImage}
+                alt="Background preview"
+                className="w-full h-full object-cover"
+              />
               <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <label className="px-3.5 py-1.5 rounded-xl bg-white/10 border border-white/20 text-white/90 text-xs font-semibold cursor-pointer hover:bg-white/20 transition-all">
                   Upload New
@@ -2772,7 +2951,9 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                 Apply standard hardware-accelerated blurring to background pixels
               </p>
             </div>
-            <span className="text-xs font-mono font-semibold text-purple-300">{prefs.bgBlur}px</span>
+            <span className="text-xs font-mono font-semibold text-purple-300">
+              {prefs.bgBlur}px
+            </span>
           </div>
           <input
             type="range"
@@ -2879,8 +3060,8 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
             <div>
               <span className="text-xs text-white/75 font-medium">Font Family</span>
               <p className="text-[10px] text-white/35 mt-0.5">
-                Type any Google Fonts family name — fetched on demand. Leave as
-                "Montserrat" to use the bundled default (works offline).
+                Type any Google Fonts family name — fetched on demand. Leave as "Montserrat" to use
+                the bundled default (works offline).
               </p>
             </div>
           </div>
@@ -2893,8 +3074,8 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
           />
           {prefs.fontFamily.trim() && prefs.fontFamily.trim().toLowerCase() !== "montserrat" && (
             <p className="text-[10px] text-white/25 mt-1.5">
-              If "{prefs.fontFamily.trim()}" isn't a real Google Fonts family, the
-              UI quietly falls back to Montserrat.
+              If "{prefs.fontFamily.trim()}" isn't a real Google Fonts family, the UI quietly falls
+              back to Montserrat.
             </p>
           )}
         </div>
@@ -2973,7 +3154,10 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                 Instantly terminate all hover translations and scales for optimal hardware response
               </p>
             </div>
-            <Toggle on={prefs.reducedMotion} onToggle={() => set("reducedMotion", !prefs.reducedMotion)} />
+            <Toggle
+              on={prefs.reducedMotion}
+              onToggle={() => set("reducedMotion", !prefs.reducedMotion)}
+            />
           </div>
 
           {showAnimAdvanced && <AdvancedAnimations prefs={prefs} set={set} />}
@@ -2998,7 +3182,6 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
           )}
         </div>
       </CollapsibleSection>
-
     </div>
   );
 }
@@ -3082,7 +3265,14 @@ export default function SettingsView({
 
       {/* Sub-tab content */}
       <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-        {subTab === "system" && <SystemSubTab toast={toast} config={config} setConfig={setConfig} onSaveConfig={saveSection} />}
+        {subTab === "system" && (
+          <SystemSubTab
+            toast={toast}
+            config={config}
+            setConfig={setConfig}
+            onSaveConfig={saveSection}
+          />
+        )}
         {subTab === "engine" && (
           <EngineSubTab engineStatus={engineStatus} onRefresh={onRefresh} toast={toast} />
         )}
