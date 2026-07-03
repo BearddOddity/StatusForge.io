@@ -526,4 +526,24 @@ mod tests {
             serde_json::to_value(&c).unwrap()
         );
     }
+
+    /// Regression guard against Config.json.template silently drifting out
+    /// of sync with AppConfig — e.g. a field gets renamed/removed in Rust but
+    /// the shipped template (what a fresh install actually bootstraps from,
+    /// see init_app_base_dir in lib.rs) never gets updated to match, or vice
+    /// versa. Also checks the resulting config passes validate(), since a
+    /// template that deserializes but fails validation would still break a
+    /// fresh install.
+    #[test]
+    fn config_template_matches_app_config() {
+        let template_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../Config.json.template");
+        let content = std::fs::read_to_string(&template_path)
+            .unwrap_or_else(|e| panic!("failed to read {:?}: {}", template_path, e));
+        let config: AppConfig = serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("Config.json.template no longer deserializes into AppConfig — did a field get renamed/removed? {}", e));
+        config
+            .validate()
+            .unwrap_or_else(|e| panic!("Config.json.template fails validate(): {}", e));
+    }
 }

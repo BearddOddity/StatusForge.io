@@ -92,19 +92,20 @@ jobs:
       - name: cargo clippy (forge-detection)
         run: cargo clippy --manifest-path forge-detection/Cargo.toml --all-targets -- -D warnings
 
-      # Dependency vulnerability scan. Advisories are OS-independent, so this
-      # only needs to run once rather than across the whole matrix.
-      - name: Install cargo-audit
+      # Dependency vulnerability/license/duplicate-version scan. Advisories
+      # and licenses are OS-independent, so this only needs to run once
+      # rather than across the whole matrix. Ignored advisories/licenses are
+      # documented in each crate's deny.toml, not here.
+      - name: Install cargo-deny
         if: matrix.os == 'ubuntu-latest'
-        run: cargo install cargo-audit --locked
+        run: cargo install cargo-deny --locked
 
-      - name: cargo audit (StatusForge)
+      - name: cargo deny check (StatusForge)
         if: matrix.os == 'ubuntu-latest'
-        # RUSTSEC-2026-0194/0195 (quick-xml DoS-class issues): transitive via
-        # tauri-utils -> plist -> quick-xml, not a direct dependency. Fixable
-        # only by Tauri bumping its own deps — re-check when upgrading tauri.
-        run: cargo audit --file src-tauri/Cargo.lock --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
+        working-directory: src-tauri
+        run: cargo deny check
 
-      - name: cargo audit (forge-detection)
+      - name: cargo deny check (forge-detection)
         if: matrix.os == 'ubuntu-latest'
-        run: cargo audit --file forge-detection/Cargo.lock --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
+        working-directory: forge-detection
+        run: cargo deny check
