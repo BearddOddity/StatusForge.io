@@ -1431,6 +1431,41 @@ pub fn run() {
                 }
             });
 
+            // Periodic Kick category database refresh. Kick's category list
+            // churns (renamed/added/removed) more than a typical metadata
+            // source, so the one-time sync at OAuth-connect time (or a
+            // manually-triggered one) goes stale over a long-running
+            // session. Runs on a fixed interval for as long as a Kick token
+            // is configured; silently skipped otherwise (no error spam for
+            // users who don't use Kick).
+            tauri::async_runtime::spawn(async move {
+                const SYNC_INTERVAL: std::time::Duration =
+                    std::time::Duration::from_secs(12 * 60 * 60);
+                // Give the app a moment to finish starting before the first sync.
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                loop {
+                    if let Ok(base_dir) = app_base_dir() {
+                        if let Ok(config) = auth::load_config_at(&base_dir) {
+                            let token = config.broadcaster.kick_token;
+                            if !token.is_empty() {
+                                match auth::sync_kick_database(&token, &base_dir).await {
+                                    Ok(()) => {
+                                        log::info!(
+                                            "[KICK] Periodic category database sync succeeded"
+                                        )
+                                    }
+                                    Err(e) => log::warn!(
+                                        "[KICK] Periodic category database sync failed: {}",
+                                        e
+                                    ),
+                                }
+                            }
+                        }
+                    }
+                    tokio::time::sleep(SYNC_INTERVAL).await;
+                }
+            });
+
             // Prime the CPU-usage baseline now, not on the frontend's first
             // poll — see SystemMonitor's doc comment for why.
             app.state::<SystemMonitor>().prime();
