@@ -323,6 +323,7 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
     let mut publisher = String::new();
     let mut release_date = String::new();
     let mut cover_url = String::new();
+    let mut logo_url = String::new();
     if !game_title.is_empty() {
         if let Ok(base) = crate::app_base_dir() {
             if let Ok(content) = std::fs::read_to_string(base.join("Forge_Database.json")) {
@@ -344,6 +345,7 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
                         publisher = s("publisher");
                         release_date = s("release_year");
                         cover_url = s("cover_url");
+                        logo_url = s("logo_url");
                     }
                 }
             }
@@ -361,6 +363,7 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
         "publisher": publisher,
         "release_date": release_date,
         "cover_url": cover_url,
+        "logo_url": logo_url,
         "fade_timer": fade_timer,
         "permission_error": crate::scanner::platform::permission_error(),
     })
