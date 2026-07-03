@@ -42,12 +42,10 @@ function EngineSubTab({
   engineStatus,
   onRefresh,
   toast,
-  devUnlocked,
 }: {
   engineStatus: EngineStatus;
   onRefresh: () => void;
   toast: (msg: string, type?: ToastType) => void;
-  devUnlocked: boolean;
 }) {
   const [widgetToken, setWidgetToken] = useState("Loading...");
   const [keychainInfo, setKeychainInfo] = useState<KeychainStatus | null>(null);
@@ -2289,12 +2287,26 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
-              <span className="text-xs text-white/75 font-medium">Automatic Backups</span>
+              <span className="text-xs text-white/75 font-medium">Developer Tools</span>
               <p className="text-[10px] text-white/35 mt-0.5">
-                Keep a Config.json.bak copy of the prior config before writing updates
+                Toggle inspect element and dev console
               </p>
             </div>
-            <Toggle on={prefs.configBackupEnabled} onToggle={() => toggle("configBackupEnabled")} />
+            <button
+              onClick={() => tauriApi("open_devtools")}
+              className="text-[10px] px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20"
+            >
+              Open DevTools
+            </button>
+          </div>
+          <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
+            <div>
+              <span className="text-xs text-white/75 font-medium">Dev Tools Tab</span>
+              <p className="text-[10px] text-white/35 mt-0.5">
+                Show the Dev Tools sidebar tab (log terminal + diagnostics)
+              </p>
+            </div>
+            <Toggle on={prefs.showDevTools} onToggle={() => toggle("showDevTools")} />
           </div>
         </div>
       </CollapsibleSection>
@@ -3000,12 +3012,10 @@ export default function SettingsView({
   engineStatus,
   onRefresh,
   toast,
-  devUnlocked,
 }: {
   engineStatus: EngineStatus;
   onRefresh: () => void;
   toast: (msg: string, type?: ToastType) => void;
-  devUnlocked: boolean;
 }) {
   const [subTab, setSubTab] = useState<SettingsSubTab>("system");
 
@@ -3078,7 +3088,7 @@ export default function SettingsView({
       <div className="flex-1 overflow-y-auto min-h-0 pr-1">
         {subTab === "system" && <SystemSubTab toast={toast} config={config} setConfig={setConfig} onSaveConfig={saveSection} />}
         {subTab === "engine" && (
-          <EngineSubTab engineStatus={engineStatus} onRefresh={onRefresh} toast={toast} devUnlocked={devUnlocked} />
+          <EngineSubTab engineStatus={engineStatus} onRefresh={onRefresh} toast={toast} />
         )}
         {subTab === "api-routing" && <ApiRoutingSubTab toast={toast} />}
         {subTab === "theme" && <ThemeSubTab toast={toast} />}
