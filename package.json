@@ -10,6 +10,7 @@
     "test": "vitest run",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
+    "check:capabilities": "node scripts/check-capabilities.mjs",
     "tauri": "tauri",
     "docs:kick": "npx tsx ../shared/kick-mcp/fetch-kick-docs.ts --out ./kick-docs",
     "docs:kick:list": "npx tsx ../shared/kick-mcp/cli.ts list",
