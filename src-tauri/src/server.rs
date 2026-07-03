@@ -571,8 +571,10 @@ mod tests {
 
     #[test]
     fn unexile_removes_case_insensitive() {
-        let mut db = ForgeDatabase::default();
-        db.delisted_apps = vec!["celeste.exe".to_string(), "other.exe".to_string()];
+        let mut db = ForgeDatabase {
+            delisted_apps: vec!["celeste.exe".to_string(), "other.exe".to_string()],
+            ..Default::default()
+        };
         unexile(&mut db, "Celeste.EXE");
         assert_eq!(db.delisted_apps, vec!["other.exe".to_string()]);
     }
