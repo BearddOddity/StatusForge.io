@@ -26,7 +26,7 @@ interface OverlayMetadataPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (entry: Record<string, string>) => void;
-  onSearchApis: (field: string, query: string) => void;
+  onSearchApis: (field: string, query: string) => Promise<Record<string, string> | null>;
   onExile?: (title: string) => void;
   saving: boolean;
 }
@@ -97,6 +97,19 @@ export function OverlayMetadataPanel({
     }
   };
 
+  // Metadata scanning is always a whole-title lookup across every source
+  // (Steam/GOG/RAWG/IGDB/SteamGridDB), not resolvable to a single field, so
+  // every field's search button runs the same scan — but each merges the
+  // result back into the edit buffer immediately so you see it without
+  // closing and reopening the panel.
+  const runScan = async () => {
+    if (!entry?.title) return;
+    const result = await onSearchApis("", entry.title);
+    if (result) {
+      setEditData((prev) => ({ ...prev, ...result }));
+    }
+  };
+
   if (!isOpen || !entry) return null;
 
   const typedData = editData as Record<string, string>;
@@ -126,22 +139,8 @@ export function OverlayMetadataPanel({
           >
             {saving ? "Saving..." : "💾 Save Changes"}
           </Btn>
-          <Btn
-            variant="ghost"
-            onClick={() => {
-              if (entry.title) {
-                const idKeys =
-                  FIELD_SECTIONS.find((s) => s.title === "External IDs")?.fields.map(
-                    (f) => f.key
-                  ) || [];
-                idKeys.forEach((key) => {
-                  if (typedData[key]) onSearchApis(key, typedData[key]);
-                });
-              }
-            }}
-            className="w-full justify-center mt-2"
-          >
-            🔍 Refresh All IDs
+          <Btn variant="ghost" onClick={runScan} className="w-full justify-center mt-2">
+            🔍 Scan Metadata
           </Btn>
           {onExile && (
             <Btn
@@ -205,11 +204,7 @@ export function OverlayMetadataPanel({
                         }))
                       }
                       onSave={() => onSave(editData)}
-                      onSearch={
-                        section.title === "External IDs" && typedData[field.key]
-                          ? () => onSearchApis(field.key, typedData[field.key])
-                          : undefined
-                      }
+                      onSearch={field.key !== "title" && entry.title ? () => runScan() : undefined}
                     />
                   ))}
                 </div>
