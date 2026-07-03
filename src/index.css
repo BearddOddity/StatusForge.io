@@ -86,8 +86,9 @@
   --user-bg-image: none;
   --user-panel-opacity: 0.3;
   --user-font-scale: 1;
+  --user-font-family: "Montserrat";
+  --user-font-weight: 400;
   --user-radius: 16px;
-  --user-density: 1rem;
   --user-anim-duration: 0.2s;
   --user-reduced-motion: false;
   --user-transition-speed: 0.2s;
@@ -103,13 +104,60 @@
   --user-btn-hover: unset;
 }
 
+/* Bundled default font (Montserrat) — works fully offline, no CDN round trip
+   for the out-of-the-box experience. Latin subset only; matches what most of
+   the UI's text actually needs. */
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-800.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-900.woff2") format("woff2");
+}
+
 /* Base overrides */
 body {
   @apply bg-theme-bg text-white/80 h-screen overflow-hidden m-0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+  font-family: var(--user-font-family, "Montserrat"), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
     Ubuntu, sans-serif;
   background-color: var(--user-bg);
   font-size: calc(1rem * var(--user-font-scale));
+  font-weight: var(--user-font-weight, 400);
 }
 
 /* Base body background — shows behind the app when no image is set */
@@ -384,7 +432,7 @@ input[type="submit"]:not(:disabled):hover {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: var(--user-radius, 16px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   transition: border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
 }
@@ -514,9 +562,9 @@ input[type="submit"]:not(:disabled):hover {
 .input-glass {
   width: 100%;
   padding: 10px 14px;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, calc(0.35 + var(--user-panel-opacity, 0.3) * 0.15));
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: var(--user-radius, 12px);
   color: white;
   font-size: 13px;
   outline: none;
@@ -851,7 +899,7 @@ input[type="submit"]:not(:disabled):hover {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  border-radius: var(--user-radius, 16px);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 80px color-mix(in srgb, var(--user-accent, #9146FF) 12%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   animation: var(--user-modal-anim, slide-in 0.3s ease);
   overflow: hidden;
@@ -933,7 +981,7 @@ input[type="range"]::-moz-range-thumb {
 /* ── Reusable action button (purple gradient CTA) ─────────────────────────── */
 .btn-cta {
   padding: 10px 20px;
-  border-radius: 12px;
+  border-radius: var(--user-radius, 12px);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -960,7 +1008,7 @@ input[type="range"]::-moz-range-thumb {
 /* ── Reusable reset / ghost button ────────────────────────────────────────── */
 .btn-ghost {
   padding: 10px 20px;
-  border-radius: 12px;
+  border-radius: var(--user-radius, 12px);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -979,7 +1027,7 @@ input[type="range"]::-moz-range-thumb {
 /* ── Reusable danger button (red gradient) ────────────────────────────────── */
 .btn-danger {
   padding: 10px 20px;
-  border-radius: 12px;
+  border-radius: var(--user-radius, 12px);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -1039,13 +1087,14 @@ input[type="range"]::-moz-range-thumb {
 
 /* ── Reusable settings panel card ─────────────────────────────────────────── */
 .surface-card {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, var(--user-panel-opacity, 0.3));
   border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--user-radius, 16px);
 }
 
 /* ── Reusable loading placeholder panel ───────────────────────────────────── */
 .panel-loading {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, var(--user-panel-opacity, 0.3));
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   padding: 24px;
