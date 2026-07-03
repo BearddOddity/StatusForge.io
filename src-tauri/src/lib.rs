@@ -1198,6 +1198,15 @@ pub fn run() {
                     // Debug ceiling; the effective level is the `log` facade
                     // filter, adjusted at runtime by set_log_level (System tab).
                     .level(log::LevelFilter::Debug)
+                    // Bound disk usage so debug.log can never grow forever even
+                    // if a user never hits "Clear" in Dev Tools — but keep the
+                    // cap generous (well past the plugin's tiny 40KB default,
+                    // which would silently drop history within an hour or two
+                    // of the periodic scan-filter noise). 5MB per file, current
+                    // + 2 archived = ~15MB worst case, plenty of history for a
+                    // desktop app's debug log.
+                    .max_file_size(5 * 1024 * 1024)
+                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(3))
                     .build(),
             ) {
                 eprintln!("Failed to init log plugin: {}", e);

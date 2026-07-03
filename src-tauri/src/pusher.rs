@@ -5,7 +5,8 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::auth;
 use crate::config::{AppConfig, ForgeDatabase, RoutingMode};
@@ -13,6 +14,34 @@ use crate::config::{AppConfig, ForgeDatabase, RoutingMode};
 const TWITCH_GAMES_URL: &str = "https://api.twitch.tv/helix/games";
 const TWITCH_CHANNELS_URL: &str = "https://api.twitch.tv/helix/channels";
 const KICK_CHANNELS_URL: &str = "https://api.kick.com/public/v1/channels";
+
+/// Neither Twitch nor Kick publish a specific numeric limit for category
+/// changes (Twitch: general points-bucket per app/user per minute; Kick:
+/// public docs don't list numbers at all) — so this isn't sized against a
+/// documented threshold. It's a floor independent of `grace_period`: rapid
+/// detection flapping (grace_period can be set to 0, so a quick alt-tab can
+/// cause NEW GAME → drop → NEW GAME within seconds) would otherwise fire a
+/// real API call to both platforms on every flap.
+const PUSH_COOLDOWN_SECS: u64 = 15;
+
+static LAST_TWITCH_PUSH_SECS: AtomicU64 = AtomicU64::new(0);
+static LAST_KICK_PUSH_SECS: AtomicU64 = AtomicU64::new(0);
+
+fn now_secs() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+}
+
+/// True (and records the attempt) if the cooldown for this platform has
+/// elapsed. Engine loop is single-threaded so plain atomics are enough —
+/// no lock needed, nothing to poison.
+fn cooldown_elapsed(last: &AtomicU64) -> bool {
+    let now = now_secs();
+    if now.saturating_sub(last.load(Ordering::Relaxed)) < PUSH_COOLDOWN_SECS {
+        return false;
+    }
+    last.store(now, Ordering::Relaxed);
+    true
+}
 
 /// One attempt's outcome — Unauthorized triggers a single refresh+retry.
 enum Outcome {
@@ -118,6 +147,14 @@ fn twitch_push_once(
 
     match resp.status() {
         reqwest::StatusCode::UNAUTHORIZED => Ok(Outcome::Unauthorized),
+        reqwest::StatusCode::TOO_MANY_REQUESTS => {
+            // Not a token problem — don't refresh-and-retry, that only makes
+            // it worse. Just skip this push; the cooldown in push_category
+            // already keeps our own request rate well below anything Twitch
+            // would reasonably throttle.
+            log::warn!("[PUSH] Twitch rate-limited (429) — skipping this push");
+            Ok(Outcome::Done)
+        }
         s if s.is_success() => {
             log::info!("[PUSH] Twitch category set to \"{}\" ({})", title, game_id);
             Ok(Outcome::Done)
@@ -175,6 +212,12 @@ fn kick_push_once(category_id: i64, token: &str) -> Result<Outcome, String> {
 
     match resp.status() {
         reqwest::StatusCode::UNAUTHORIZED => Ok(Outcome::Unauthorized),
+        reqwest::StatusCode::TOO_MANY_REQUESTS => {
+            // Not a token problem — don't refresh-and-retry. The cooldown in
+            // push_category already keeps our own request rate low.
+            log::warn!("[PUSH] Kick rate-limited (429) — skipping this push");
+            Ok(Outcome::Done)
+        }
         s if s.is_success() => {
             log::info!("[PUSH] Kick category set ({})", category_id);
             Ok(Outcome::Done)
@@ -233,10 +276,18 @@ pub fn push_category(base_dir: &Path, config: &AppConfig, db: &ForgeDatabase, ti
     }
     let b = &config.broadcaster;
     if !b.twitch_token.is_empty() && !b.twitch_broadcaster_id.is_empty() {
-        push_twitch(base_dir, config, db, title);
+        if cooldown_elapsed(&LAST_TWITCH_PUSH_SECS) {
+            push_twitch(base_dir, config, db, title);
+        } else {
+            log::info!("[PUSH] Twitch category push skipped — cooldown active");
+        }
     }
     if !b.kick_token.is_empty() {
-        push_kick(base_dir, config, db, title);
+        if cooldown_elapsed(&LAST_KICK_PUSH_SECS) {
+            push_kick(base_dir, config, db, title);
+        } else {
+            log::info!("[PUSH] Kick category push skipped — cooldown active");
+        }
     }
 }
 

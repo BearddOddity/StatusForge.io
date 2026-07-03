@@ -724,10 +724,10 @@ function EngineSubTab({
               </label>
               <input
                 type="number"
-                min={1}
+                min={2}
                 max={60}
                 value={config.engine_settings.scan_interval}
-                onChange={(e) => setEngine("scan_interval", clampInt(e.target.value, 1, 60, 1))}
+                onChange={(e) => setEngine("scan_interval", clampInt(e.target.value, 2, 60, 2))}
                 className="input-glass font-mono"
               />
             </div>
