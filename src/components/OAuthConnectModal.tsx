@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { tauriApi } from "@/hooks/useTauriApi";
+import type { AppConfig } from "@/types";
 
 type Status = "connecting" | "success" | "error";
 
@@ -44,18 +47,29 @@ export default function OAuthConnectModal({
   onSuccess,
 }: Props) {
   const [status, setStatus] = useState<Status>("connecting");
-  const [winRef, setWinRef] = useState<Window | null>(null);
   const [animateIn, setAnimateIn] = useState(false);
+  const [showSlowHint, setShowSlowHint] = useState(false);
   const meta = PLATFORM_META[platform];
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const slowHintRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (slowHintRef.current) {
+      clearTimeout(slowHintRef.current);
+      slowHintRef.current = null;
+    }
+  }, []);
 
   const handleClose = useCallback(() => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    if (winRef && !winRef.closed) winRef.close();
-    setWinRef(null);
+    stopPolling();
     setStatus("connecting");
+    setShowSlowHint(false);
     onClose();
-  }, [winRef, onClose]);
+  }, [stopPolling, onClose]);
 
   useEffect(() => {
     if (!open) {
@@ -65,47 +79,65 @@ export default function OAuthConnectModal({
     requestAnimationFrame(() => setAnimateIn(true));
   }, [open]);
 
+  // Tauri's webview can't open real detached popup windows (window.open()
+  // silently fails/does nothing inside a webview) — the OAuth URL has to
+  // launch in the user's actual system browser via the shell plugin
+  // instead. That also means there's no `window.opener` for the callback
+  // page to postMessage back to, so completion is detected by polling
+  // export_config for the platform's token field going from empty to set
+  // (the local /oauth/callback/:platform route already writes it to
+  // Config.json as soon as the browser completes the redirect).
+  const launchAndPoll = useCallback(async () => {
+    setStatus("connecting");
+    setShowSlowHint(false);
+    stopPolling();
+
+    // No postMessage channel means we can't distinguish "still working" from
+    // "actually failed" — surface a hint + manual retry after a while rather
+    // than spinning forever with no feedback.
+    slowHintRef.current = setTimeout(() => setShowSlowHint(true), 45_000);
+
+    const tokenKey = `${platform}_token` as const;
+    let hadTokenBefore = false;
+    try {
+      const before = await tauriApi("export_config");
+      if (before && typeof before === "object" && "broadcaster" in before) {
+        hadTokenBefore = !!(before as AppConfig).broadcaster[tokenKey];
+      }
+    } catch {
+      // export_config failing shouldn't block trying to connect
+    }
+
+    try {
+      await openUrl(connectUrl);
+    } catch (e) {
+      setStatus("error");
+      console.error("Failed to open browser for OAuth:", e);
+      return;
+    }
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await tauriApi("export_config");
+        if (res && typeof res === "object" && "broadcaster" in res) {
+          const hasTokenNow = !!(res as AppConfig).broadcaster[tokenKey];
+          if (hasTokenNow && !hadTokenBefore) {
+            stopPolling();
+            setStatus("success");
+            onSuccess?.();
+          }
+        }
+      } catch {
+        // transient failure — keep polling
+      }
+    }, 1500);
+  }, [platform, connectUrl, stopPolling, onSuccess]);
+
   useEffect(() => {
     if (!open) return;
-
-    setStatus("connecting");
-    const win = window.open(
-      connectUrl,
-      "oauth-connect",
-      "width=520,height=700,scrollbars=yes,resizable=yes"
-    );
-    setWinRef(win);
-
-    const handler = (e: MessageEvent) => {
-      if (e.data && e.data.type === "oauth-callback" && e.data.platform === platform) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        if (e.data.status === "success") {
-          setStatus("success");
-          onSuccess?.();
-        } else {
-          setStatus("error");
-        }
-        if (win && !win.closed) win.close();
-        setWinRef(null);
-      }
-    };
-    window.addEventListener("message", handler);
-
-    pollRef.current = setInterval(() => {
-      if (win && win.closed) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        setWinRef(null);
-        // Only auto-close if still connecting (user closed popup without completing)
-        setStatus((prev) => (prev === "connecting" ? "connecting" : prev));
-        // Don't auto-close — let user see the state or click cancel
-      }
-    }, 500);
-
-    return () => {
-      window.removeEventListener("message", handler);
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (win && !win.closed) win.close();
-    };
+    launchAndPoll();
+    return () => stopPolling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, platform, connectUrl]);
 
   if (!open) return null;
@@ -217,12 +249,18 @@ export default function OAuthConnectModal({
             {/* Subtitle */}
             <p className="text-white/40 text-[13px] leading-relaxed mb-6 max-w-[280px] mx-auto">
               {status === "connecting" &&
-                `A ${meta.label} authorization window has been opened. Please log in and grant access to continue.`}
+                `Your browser has opened to log in to ${meta.label}. This window will update automatically once you grant access.`}
               {status === "success" &&
                 "Your account has been linked. You can now use all streaming features."}
-              {status === "error" &&
-                "We couldn't complete the authorization. This can happen if the popup was closed early or access was denied."}
+              {status === "error" && "We couldn't open your browser to start the authorization."}
             </p>
+
+            {status === "connecting" && showSlowHint && (
+              <p className="text-white/25 text-[11px] leading-relaxed mb-4 max-w-[280px] mx-auto">
+                Still waiting — if no browser tab opened, or you closed it without finishing, try
+                again below.
+              </p>
+            )}
 
             {/* Connecting progress dots */}
             {status === "connecting" && (
@@ -242,13 +280,31 @@ export default function OAuthConnectModal({
             )}
 
             {/* Actions */}
-            {status === "connecting" && (
+            {status === "connecting" && !showSlowHint && (
               <button
                 onClick={handleClose}
                 className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/70"
               >
                 Cancel
               </button>
+            )}
+
+            {status === "connecting" && showSlowHint && (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleClose}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/70"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => launchAndPoll()}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-white transition-all cursor-pointer border-none"
+                  style={{ background: meta.gradient, boxShadow: `0 4px 20px ${meta.color}30` }}
+                >
+                  Try Again
+                </button>
+              </div>
             )}
 
             {status === "success" && (
@@ -270,16 +326,7 @@ export default function OAuthConnectModal({
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    setStatus("connecting");
-                    if (pollRef.current) clearInterval(pollRef.current);
-                    const win = window.open(
-                      connectUrl,
-                      "oauth-connect",
-                      "width=520,height=700,scrollbars=yes,resizable=yes"
-                    );
-                    setWinRef(win);
-                  }}
+                  onClick={() => launchAndPoll()}
                   className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-white transition-all cursor-pointer border-none"
                   style={{ background: meta.gradient, boxShadow: `0 4px 20px ${meta.color}30` }}
                 >
