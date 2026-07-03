@@ -952,19 +952,34 @@ fn dev_export_error_log(app: tauri::AppHandle, content: String) -> Result<String
     Ok(path.to_string_lossy().to_string())
 }
 
-/// Read the last N lines of the debug log file.
+#[derive(serde::Serialize)]
+struct LogTail {
+    lines: Vec<String>,
+    /// Total line count in the file right now. The Dev Tools "Clear" button
+    /// records this and only shows lines past it on later fetches — content
+    /// matching doesn't work here since the log is full of exact-duplicate
+    /// lines (e.g. "RAM floor not met" every scan tick).
+    total_lines: usize,
+}
+
+/// Read the last N lines of the debug log file, plus the file's total line
+/// count (see `LogTail::total_lines`).
 #[tauri::command]
-fn dev_get_log_tail(lines: usize) -> Result<Vec<String>, String> {
+fn dev_get_log_tail(lines: usize) -> Result<LogTail, String> {
     let base = app_base_dir()?;
     let log_path = base.join("debug.log");
     if !log_path.exists() {
-        return Ok(vec!["[no log file found]".to_string()]);
+        return Ok(LogTail { lines: vec!["[no log file found]".to_string()], total_lines: 0 });
     }
     let content = std::fs::read_to_string(&log_path)
         .map_err(|e| format!("Failed to read log: {}", e))?;
     let all_lines: Vec<&str> = content.lines().collect();
-    let start = all_lines.len().saturating_sub(lines);
-    Ok(all_lines[start..].iter().map(|l| l.to_string()).collect())
+    let total_lines = all_lines.len();
+    let start = total_lines.saturating_sub(lines);
+    Ok(LogTail {
+        lines: all_lines[start..].iter().map(|l| l.to_string()).collect(),
+        total_lines,
+    })
 }
 
 /// Get dev diagnostics: platform, detection mode, native engine status.

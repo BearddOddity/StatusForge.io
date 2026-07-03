@@ -191,28 +191,34 @@ export default function DevView() {
   };
 
   // "Clear" only clears what's displayed — debug.log itself keeps growing, and
-  // auto-refresh re-tails it every couple seconds. Remember the last line at
-  // clear time and cut everything up to (and including) it on every
-  // subsequent fetch, so cleared lines don't reappear until new ones arrive.
-  const clearedMarkerRef = useRef<string | null>(null);
+  // auto-refresh re-tails it every couple seconds. Content-matching a "last
+  // line" marker doesn't work here: the log is full of exact-duplicate lines
+  // (e.g. "RAM floor not met" every scan tick), so matching by text can cut
+  // at the wrong occurrence. Instead track the file's total line count at
+  // clear time and only show lines past it — reliable regardless of
+  // duplicate content or how far the tail window has to reach.
+  const lastTotalLinesRef = useRef(0);
+  const clearedAtRef = useRef<number | null>(null);
   const handleClear = () => {
-    clearedMarkerRef.current = logs.length ? logs[logs.length - 1] : null;
+    clearedAtRef.current = lastTotalLinesRef.current;
     setLogs([]);
   };
 
   // Fetch logs from Rust backend
   const fetchLogs = useCallback(async () => {
     try {
-      const lines = await invoke<string[]>("dev_get_log_tail", {
+      const res = await invoke<{ lines: string[]; total_lines: number }>("dev_get_log_tail", {
         lines: settings.logTailLines,
       });
-      let display = lines || [];
-      const marker = clearedMarkerRef.current;
-      if (marker) {
-        const idx = display.lastIndexOf(marker);
-        if (idx !== -1) display = display.slice(idx + 1);
+      const tail = res.lines || [];
+      lastTotalLinesRef.current = res.total_lines;
+      const clearedAt = clearedAtRef.current;
+      if (clearedAt !== null) {
+        const newCount = Math.max(0, res.total_lines - clearedAt);
+        setLogs(newCount > 0 ? tail.slice(Math.max(0, tail.length - newCount)) : []);
+      } else {
+        setLogs(tail);
       }
-      setLogs(display);
       setError(null);
     } catch (e) {
       setError(String(e));
