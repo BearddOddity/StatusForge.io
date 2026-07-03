@@ -332,8 +332,12 @@ impl AppConfig {
         let mut errors = Vec::new();
 
         // Engine settings validation
-        if self.engine_settings.scan_interval == 0 {
-            errors.push("scan_interval must be > 0".to_string());
+        if self.engine_settings.scan_interval < 2 {
+            // A floor, not just > 0: below this the loop's per-tick disk reads
+            // (Config.json + Forge_Database.json) and log volume both scale
+            // roughly 1:1 with scan frequency — 1s was cheap to set from the
+            // UI but expensive to actually run at for a whole session.
+            errors.push("scan_interval must be >= 2".to_string());
         }
         if self.engine_settings.grace_period > 300 {
             errors.push("grace_period must be <= 300".to_string());
@@ -393,7 +397,7 @@ impl AppConfig {
     /// Sanitize config by clamping/truncating values
     pub fn sanitize(&mut self) {
         // Clamp numeric values
-        self.engine_settings.scan_interval = self.engine_settings.scan_interval.clamp(1, 300);
+        self.engine_settings.scan_interval = self.engine_settings.scan_interval.clamp(2, 300);
         self.engine_settings.grace_period = self.engine_settings.grace_period.clamp(0, 300);
         self.engine_settings.widget_poll_rate = self.engine_settings.widget_poll_rate.clamp(1, 60);
         self.engine_settings.widget_fade_timer = self.engine_settings.widget_fade_timer.clamp(1, 300);
@@ -455,7 +459,7 @@ mod tests {
         assert_eq!(c.engine_settings.spark_pin, "0000");
         assert_eq!(c.engine_settings.widget_fade_timer, 1);
         assert_eq!(c.engine_settings.widget_poll_rate, 1);
-        assert_eq!(c.engine_settings.scan_interval, 1);
+        assert_eq!(c.engine_settings.scan_interval, 2);
         assert_eq!(c.engine_settings.confidence_threshold, 1.0);
         assert_eq!(c.engine_settings.ram_threshold, 100);
         assert!(c.validate().is_ok());
