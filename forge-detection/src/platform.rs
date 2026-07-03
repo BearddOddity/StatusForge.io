@@ -144,7 +144,7 @@ pub fn get_active_window() -> Option<ActiveWindow> {
         .filter(|r| !r.value.is_empty())
         .map(|r| String::from_utf8_lossy(&r.value).trim().to_string())
         .or_else(|| {
-            conn.get_property(false, window, AtomEnum::WM_NAME.into(), AtomEnum::STRING, 0, 1024)
+            conn.get_property(false, window, AtomEnum::WM_NAME, AtomEnum::STRING, 0, 1024)
                 .ok()
                 .and_then(|c| c.reply().ok())
                 .map(|r| String::from_utf8_lossy(&r.value).trim().to_string())
