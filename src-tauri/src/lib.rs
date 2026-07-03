@@ -525,6 +525,99 @@ mod native_engine_state_tests {
     }
 }
 
+/// Shared by the native engine loop and the LAN Hub (hub.rs): whichever
+/// detects a new game — this PC's own scanner or a paired SPARK agent on a
+/// second PC — funnels through here for the exact same treatment. SPARK
+/// itself never touches metadata or platform pushes (detect-and-forward
+/// only); this app is what finds metadata and pushes categories, regardless
+/// of which PC the detection came from.
+///
+/// Upserts a bare Library entry if this title has never been seen, pushes
+/// the category to configured platforms, and — if the entry still lacks
+/// basic info — fires a background metadata scan that saves + re-pushes
+/// status once it resolves, same as a local detection already does.
+pub fn on_game_detected(
+    base: &std::path::Path,
+    config: &AppConfig,
+    game_title: &str,
+    process: &str,
+    state_arc: &Arc<NativeEngineState>,
+    app_handle: &tauri::AppHandle,
+) {
+    let forge_db_path = base.join("Forge_Database.json");
+    let forge_db: config::ForgeDatabase = std::fs::read_to_string(&forge_db_path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default();
+
+    pusher::push_category(base, config, &forge_db, game_title);
+
+    // Reload fresh rather than reusing the snapshot above, to avoid
+    // clobbering a concurrent write from the axum server.
+    let needs_metadata = match server::load_db() {
+        Ok(mut db) => {
+            if !db.library.contains_key(game_title) {
+                db.library.insert(
+                    game_title.to_string(),
+                    config::ForgeLibraryEntry {
+                        title: game_title.to_string(),
+                        executables: process.to_string(),
+                        ..Default::default()
+                    },
+                );
+                if let Err(e) = server::save_db(&db) {
+                    log::warn!("[DETECT] Failed to save new library entry: {}", e);
+                }
+            }
+            // Covers both the freshly-inserted case and an older bare entry
+            // from before this existed.
+            db.library
+                .get(game_title)
+                .map(|e| e.genre.is_empty() && e.developer.is_empty() && e.cover_url.is_empty())
+                .unwrap_or(false)
+        }
+        Err(e) => {
+            log::warn!("[DETECT] Failed to load Forge DB for library upsert: {}", e);
+            false
+        }
+    };
+
+    if !needs_metadata {
+        return;
+    }
+
+    let title = game_title.to_string();
+    let keys = config.api_keys.clone();
+    let broadcaster = config.broadcaster.clone();
+    let state_for_scan = state_arc.clone();
+    let app_for_scan = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let existing = server::load_db()
+            .ok()
+            .and_then(|db| db.library.get(&title).cloned())
+            .unwrap_or_else(|| config::ForgeLibraryEntry {
+                title: title.clone(),
+                ..Default::default()
+            });
+        let merged = metadata::scan(&title, &keys, &broadcaster, existing).await;
+        match server::load_db() {
+            Ok(mut db) => {
+                db.library.insert(title.clone(), merged);
+                if let Err(e) = server::save_db(&db) {
+                    log::warn!("[DETECT] Failed to save scanned metadata: {}", e);
+                } else {
+                    state_for_scan.push_status();
+                    let _ = app_for_scan.emit("library-updated", &title);
+                }
+            }
+            Err(e) => log::warn!(
+                "[DETECT] Failed to reload Forge DB after metadata scan: {}",
+                e
+            ),
+        }
+    });
+}
+
 /// Start the native engine detection loop in a background thread.
 /// Runs natively on Windows, macOS, and Linux.
 #[tauri::command]
@@ -674,98 +767,18 @@ fn spawn_engine_loop(
                     let _ = app_handle.emit("game-detected", &game);
                     state_arc.push_status();
 
-                    // Native category push (edge-triggered: only on new game)
+                    // Category push, Library upsert, and metadata scan —
+                    // shared with the LAN Hub so a SPARK-detected game on a
+                    // second PC gets identical treatment.
                     if let Some(cfg) = config.as_ref() {
-                        pusher::push_category(&base, cfg, &forge_db, &game_title);
-                    }
-
-                    // Auto-populate the Library with newly-seen games (bare
-                    // entry — metadata is filled in below, same detection
-                    // event, not a separate manual step) so detections show
-                    // up without a manual add.
-                    // Reload fresh rather than reusing `forge_db` above to
-                    // avoid clobbering a concurrent write from the axum server.
-                    let needs_metadata = match server::load_db() {
-                        Ok(mut db) => {
-                            if !db.library.contains_key(&game_title) {
-                                db.library.insert(
-                                    game_title.clone(),
-                                    config::ForgeLibraryEntry {
-                                        title: game_title.clone(),
-                                        executables: game.process.clone(),
-                                        ..Default::default()
-                                    },
-                                );
-                                if let Err(e) = server::save_db(&db) {
-                                    log::warn!("[NATIVE] Failed to save new library entry: {}", e);
-                                }
-                            }
-                            // Covers both the freshly-inserted case and an
-                            // older bare entry from before this existed.
-                            db.library
-                                .get(&game_title)
-                                .map(|e| {
-                                    e.genre.is_empty()
-                                        && e.developer.is_empty()
-                                        && e.cover_url.is_empty()
-                                })
-                                .unwrap_or(false)
-                        }
-                        Err(e) => {
-                            log::warn!(
-                                "[NATIVE] Failed to load Forge DB for library upsert: {}",
-                                e
-                            );
-                            false
-                        }
-                    };
-
-                    // Metadata scan is network I/O — fire in the background
-                    // on the app's async runtime rather than blocking this
-                    // detection loop's own thread. Once it resolves, save it
-                    // and re-push status so the overlay/widgets pick up the
-                    // enriched genre/developer/cover in the same detection
-                    // event, not on some later manual "scan metadata" click.
-                    if needs_metadata {
-                        if let Some(cfg) = config.as_ref().cloned() {
-                            let title = game_title.clone();
-                            let state_for_scan = state_arc.clone();
-                            let app_for_scan = app_handle.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let existing = server::load_db()
-                                    .ok()
-                                    .and_then(|db| db.library.get(&title).cloned())
-                                    .unwrap_or_else(|| config::ForgeLibraryEntry {
-                                        title: title.clone(),
-                                        ..Default::default()
-                                    });
-                                let merged = metadata::scan(
-                                    &title,
-                                    &cfg.api_keys,
-                                    &cfg.broadcaster,
-                                    existing,
-                                )
-                                .await;
-                                match server::load_db() {
-                                    Ok(mut db) => {
-                                        db.library.insert(title.clone(), merged);
-                                        if let Err(e) = server::save_db(&db) {
-                                            log::warn!(
-                                                "[NATIVE] Failed to save scanned metadata: {}",
-                                                e
-                                            );
-                                        } else {
-                                            state_for_scan.push_status();
-                                            let _ = app_for_scan.emit("library-updated", &title);
-                                        }
-                                    }
-                                    Err(e) => log::warn!(
-                                        "[NATIVE] Failed to reload Forge DB after metadata scan: {}",
-                                        e
-                                    ),
-                                }
-                            });
-                        }
+                        on_game_detected(
+                            &base,
+                            cfg,
+                            &game_title,
+                            &game.process,
+                            &state_arc,
+                            &app_handle,
+                        );
                     }
                 }
             } else {
