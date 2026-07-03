@@ -217,6 +217,15 @@ pub struct ForgeLibraryEntry {
     pub epic_id: String,
     #[serde(default)]
     pub executables: String,
+    /// Field names the user has explicitly saved by hand via the Library
+    /// editor. metadata::scan()'s merge never touches a locked field again —
+    /// not "only if non-empty" (that alone can't tell "never scanned yet"
+    /// apart from "user intentionally cleared this"), a real lock. Scanned
+    /// data is meant to help fill in the gaps, not override what someone
+    /// chose to set themselves — a personal cover/logo/genre/etc. sticks
+    /// until they edit that field again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locked_fields: Vec<String>,
 }
 
 /// Forge database

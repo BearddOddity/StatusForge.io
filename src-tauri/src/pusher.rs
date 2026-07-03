@@ -14,6 +14,7 @@ use crate::config::{AppConfig, ForgeDatabase, RoutingMode};
 const TWITCH_GAMES_URL: &str = "https://api.twitch.tv/helix/games";
 const TWITCH_CHANNELS_URL: &str = "https://api.twitch.tv/helix/channels";
 const KICK_CHANNELS_URL: &str = "https://api.kick.com/public/v1/channels";
+const KICK_CATEGORIES_URL: &str = "https://api.kick.com/public/v2/categories";
 
 /// Neither Twitch nor Kick publish a specific numeric limit for category
 /// changes (Twitch: general points-bucket per app/user per minute; Kick:
@@ -97,6 +98,28 @@ fn load_kick_map(base_dir: &Path) -> HashMap<String, String> {
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
+}
+
+/// Live fallback when the library and the periodically-synced kick_db.json
+/// both come up empty: search Kick's own category catalog by name directly,
+/// same endpoint/parsing metadata.rs's scan uses. This is the same gap
+/// Twitch's push path already covers via a live Get Games call when the
+/// library has no id — Kick's category list drifts (renamed/added/removed)
+/// more than kick_db.json's periodic re-sync can always keep up with, so
+/// without this a game not yet in that cache just never gets pushed at all.
+fn live_kick_category_search(title: &str, token: &str) -> Option<i64> {
+    let client = http().ok()?;
+    let resp = client
+        .get(KICK_CATEGORIES_URL)
+        .query(&[("name", title), ("limit", "1")])
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let json: serde_json::Value = resp.json().ok()?;
+    json["data"][0]["id"].as_i64()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -239,9 +262,15 @@ fn kick_push_once(category_id: i64, token: &str) -> Result<Outcome, String> {
 
 fn push_kick(base_dir: &Path, config: &AppConfig, db: &ForgeDatabase, title: &str) {
     let kick_map = load_kick_map(base_dir);
-    let Some(category_id) = resolve_kick_id(db, &kick_map, title) else {
-        log::info!("[PUSH] Kick: no category id for \"{}\" — skipping", title);
-        return;
+    let category_id = match resolve_kick_id(db, &kick_map, title) {
+        Some(id) => id,
+        None => match live_kick_category_search(title, &config.broadcaster.kick_token) {
+            Some(id) => id,
+            None => {
+                log::info!("[PUSH] Kick: no category id for \"{}\" — skipping", title);
+                return;
+            }
+        },
     };
 
     match kick_push_once(category_id, &config.broadcaster.kick_token) {

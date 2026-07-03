@@ -22,14 +22,22 @@ use std::time::Duration;
 
 use crate::config::{ApiKeys, BroadcasterConfig, ForgeLibraryEntry};
 
-/// Fill empty fields of `existing` from `fetched`. Pure — unit tested below.
+/// Fill empty fields of `existing` from `fetched` — except fields the user
+/// has locked (see ForgeLibraryEntry::locked_fields), which are never
+/// touched even if currently empty. A plain "only if empty" check can't
+/// distinguish "never scanned yet" from "user intentionally cleared this";
+/// locking is what actually makes a manual edit stick. Pure — unit tested
+/// below.
 pub fn merge_entry(
     mut existing: ForgeLibraryEntry,
     fetched: &ForgeLibraryEntry,
 ) -> ForgeLibraryEntry {
     macro_rules! fill {
         ($($f:ident),*) => {$(
-            if existing.$f.is_empty() && !fetched.$f.is_empty() {
+            if existing.$f.is_empty()
+                && !fetched.$f.is_empty()
+                && !existing.locked_fields.iter().any(|f| f == stringify!($f))
+            {
                 existing.$f = fetched.$f.clone();
             }
         )*};
@@ -457,6 +465,27 @@ mod tests {
         assert_eq!(merged.cover_url, "http://sgdb/cover.jpg"); // empty gets filled
         assert_eq!(merged.release_year, "2018");
         assert_eq!(merged.title, "Celeste"); // untouched
+    }
+
+    #[test]
+    fn merge_never_fills_a_locked_field_even_when_empty() {
+        // User cleared cover_url on purpose (e.g. a placeholder image they
+        // didn't want) and locked it — a scan finding a real cover_url must
+        // not silently bring it back.
+        let existing = ForgeLibraryEntry {
+            title: "Celeste".to_string(),
+            cover_url: String::new(),
+            locked_fields: vec!["cover_url".to_string()],
+            ..Default::default()
+        };
+        let fetched = ForgeLibraryEntry {
+            cover_url: "http://sgdb/cover.jpg".to_string(),
+            developer: "RAWG Dev".to_string(),
+            ..Default::default()
+        };
+        let merged = merge_entry(existing, &fetched);
+        assert_eq!(merged.cover_url, ""); // locked — stays empty
+        assert_eq!(merged.developer, "RAWG Dev"); // unlocked field still fills normally
     }
 
     /// Hits the real, unofficial Steam/GOG endpoints — not run in CI (no key

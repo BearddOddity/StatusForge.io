@@ -108,9 +108,34 @@ pub fn save_db(db: &ForgeDatabase) -> Result<(), String> {
     Ok(())
 }
 
+/// Fields metadata::scan() can fill in — the only ones eligible to be
+/// locked by a manual save (title/ids-that-aren't-scan-sourced/executables
+/// don't need locking; nothing auto-overwrites them).
+const SCANNABLE_FIELDS: &[&str] = &[
+    "genre",
+    "release_year",
+    "developer",
+    "publisher",
+    "cover_url",
+    "logo_url",
+    "igdb_id",
+    "rawg_id",
+    "sgdb_id",
+    "steam_id",
+    "gog_id",
+    "twitch_id",
+    "kick_id",
+];
+
 /// Upsert a library entry from an arbitrary `/list` JSON body. Requires `title`.
 /// Maps `custom_release_year`/`custom_developer`/`custom_publisher` onto the
 /// real fields, overlays any ForgeLibraryEntry fields present, preserves the rest.
+///
+/// Every scannable field present in the body gets locked (see
+/// ForgeLibraryEntry::locked_fields) — this is the *manual* save path (the
+/// Library editor's Save Changes / Add Game), so every field the user
+/// reviewed and saved is treated as their call from here on, not something
+/// a later automatic scan should quietly change out from under them.
 pub fn upsert_library_entry(
     db: &mut ForgeDatabase,
     body: &serde_json::Map<String, serde_json::Value>,
@@ -143,9 +168,16 @@ pub fn upsert_library_entry(
         "title".to_string(),
         serde_json::Value::String(title.clone()),
     );
-    let entry: crate::config::ForgeLibraryEntry =
+    let mut entry: crate::config::ForgeLibraryEntry =
         serde_json::from_value(serde_json::Value::Object(obj))
             .map_err(|e| format!("invalid entry fields: {}", e))?;
+
+    for field in SCANNABLE_FIELDS {
+        if body.contains_key(*field) && !entry.locked_fields.iter().any(|f| f == field) {
+            entry.locked_fields.push(field.to_string());
+        }
+    }
+
     db.library.insert(title.clone(), entry);
     Ok(title)
 }
