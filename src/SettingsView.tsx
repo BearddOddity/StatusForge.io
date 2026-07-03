@@ -1059,7 +1059,7 @@ const ROUTING_CATALOG: {
   icon: React.ReactNode;
   color: string;
   connectUrl: string;
-  userFields: { key: string; label: string }[];
+  userFields: { key: string; label: string; hint?: string; optional?: boolean }[];
   managedFields?: { key: string; label: string }[];
 }[] = [
   {
@@ -1078,12 +1078,20 @@ const ROUTING_CATALOG: {
     userFields: [
       { key: "twitch_client", label: "Client ID" },
       { key: "twitch_secret", label: "Client Secret" },
+      {
+        key: "twitch_token",
+        label: "Access Token (Optional)",
+        hint: "Alternate to Client Secret — paste a token here if you generate one yourself (your own OAuth tool/callback). Client ID is still required; Twitch's API needs it on every request regardless of how the token was obtained.",
+        optional: true,
+      },
+      {
+        key: "twitch_broadcaster_id",
+        label: "Broadcaster ID (Optional)",
+        hint: 'Only needed alongside a manually-pasted Access Token — "Connect Twitch" fetches this automatically.',
+        optional: true,
+      },
     ],
-    managedFields: [
-      { key: "twitch_token", label: "Access Token" },
-      { key: "twitch_refresh", label: "Refresh Token" },
-      { key: "twitch_broadcaster_id", label: "Broadcaster ID" },
-    ],
+    managedFields: [{ key: "twitch_refresh", label: "Refresh Token" }],
   },
   {
     key: "kick",
@@ -1100,11 +1108,14 @@ const ROUTING_CATALOG: {
       { key: "kick_client", label: "Client ID" },
       { key: "kick_secret", label: "Client Secret" },
       { key: "kick_channel_id", label: "Channel ID" },
+      {
+        key: "kick_token",
+        label: "Access Token (Optional)",
+        hint: "Alternate to Client ID and Client Secret — paste a token here if you generate one yourself (your own OAuth tool/callback). Kick's API doesn't need either once you have a token.",
+        optional: true,
+      },
     ],
-    managedFields: [
-      { key: "kick_token", label: "Access Token" },
-      { key: "kick_refresh", label: "Refresh Token" },
-    ],
+    managedFields: [{ key: "kick_refresh", label: "Refresh Token" }],
   },
 ];
 
@@ -1700,10 +1711,11 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
             <div className="flex flex-col gap-2">
               {allRouteDisplay.map((entry) => {
                 const isEditing = editingKey === entry.key;
-                const userFilled = entry.userFields.filter(
+                const requiredFields = entry.userFields.filter((f) => !f.optional);
+                const userFilled = requiredFields.filter(
                   (f) => !!bc[f.key as keyof typeof bc]
                 ).length;
-                const userTotal = entry.userFields.length;
+                const userTotal = requiredFields.length;
                 const managedFields =
                   "managedFields" in entry
                     ? ((entry as any).managedFields as { key: string; label: string }[] | undefined)
@@ -1768,12 +1780,21 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                                   {f.label}
                                 </label>
                                 <input
-                                  type={f.key.includes("secret") ? "password" : "text"}
+                                  type={
+                                    f.key.includes("secret") || f.key.includes("token")
+                                      ? "password"
+                                      : "text"
+                                  }
                                   value={(bc[f.key as keyof typeof bc] as string) || ""}
                                   onChange={(e) => setField(f.key, e.target.value)}
                                   placeholder={`Enter ${f.label}`}
                                   className="input-glass"
                                 />
+                                {f.hint && (
+                                  <p className="text-[10px] text-white/20 mt-1 leading-snug">
+                                    {f.hint}
+                                  </p>
+                                )}
                               </div>
                             ))}
                           </div>
