@@ -70,81 +70,21 @@ export default function App() {
       {/* ── Body ───────────────────────────────────────────────────────── */}
       <div className="spark-body">
 
-        {/* ── Now Playing ──────────────────────────────────────────────── */}
+        {/* ── Now Playing + Connection ─────────────────────────────────── */}
         <div className="spark-card">
-          <div className="spark-section-label">Now Playing</div>
-          <div className="spark-now-playing">
-            <div className="spark-cover">
-              <div style={{
-                width: "100%", height: "100%",
-                background: "linear-gradient(135deg, #1a1a2e, #16213e)",
-              }} />
-              {hasGame && <div className="spark-cover-playing" />}
-            </div>
-            <div className="spark-now-info">
-              <span className="spark-now-subtitle">
-                {hasGame ? "Playing" : status?.connected ? "Idling" : "Offline"}
-              </span>
-              <span className="spark-now-title">
-                {hasGame ? status!.current_game!.title : status?.connected ? "Just Chatting" : "Offline"}
-              </span>
-              <span className="spark-now-process">
-                {status?.current_game?.process || (status?.connected ? "No active process" : "Start the engine to begin")}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Status ───────────────────────────────────────────────────── */}
-        <div className="spark-card">
-          <div className="spark-section-label">Status</div>
-
-          {/* Connection */}
-          <div className="spark-status-row" style={{ marginBottom: 8 }}>
-            <div className="spark-status-left">
-              <span
-                className="spark-status-dot"
-                style={{ background: online ? "rgb(52, 199, 89)" : "rgba(255, 255, 255, 0.2)" }}
-              />
-              <span className="spark-status-label">Connection</span>
-            </div>
-            <div className="spark-status-right">
-              <span
-                className="spark-status-dot animate-pulse-dot"
-                style={{
-                  background: online ? "rgb(52, 199, 89)" : "rgba(255, 255, 255, 0.2)",
-                  animationDuration: online ? "2s" : "0s",
-                }}
-              />
-              <span className="spark-status-value">
-                {online ? `Broadcasting to ${status?.hub_name ?? "Hub"}` : "Offline"}
-              </span>
-            </div>
+          <div className="spark-now-info">
+            <span className="spark-now-subtitle">
+              {hasGame ? "Playing" : status?.connected ? "Idling" : "Offline"}
+            </span>
+            <span className="spark-now-title">
+              {hasGame ? status!.current_game!.title : status?.connected ? "Just Chatting" : "Offline"}
+            </span>
           </div>
 
-          {/* Scan interval bar */}
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: 1.2 }}>Scan</span>
-              <span className="spark-status-mono">{status ? timeAgo(status.last_scan) : "—"}</span>
-            </div>
-            <div className="spark-progress-track">
-              <div
-                className="spark-progress-fill"
-                style={{
-                  width: online ? "68%" : "0%",
-                  background: "linear-gradient(to right, rgba(145, 70, 255, 0.6), rgba(145, 70, 255, 0.4))",
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Port */}
-          <div className="spark-status-row">
-            <div className="spark-status-left">
-              <span className="spark-status-label">Port</span>
-            </div>
-            <span className="spark-status-mono">{status?.hub_port ?? 53735}</span>
+          <div className="spark-status-row" style={{ marginTop: 10 }}>
+            <span className="spark-status-label">
+              {online ? `Broadcasting to ${status?.hub_name ?? "Hub"}` : "Not connected"}
+            </span>
           </div>
         </div>
 
@@ -203,14 +143,8 @@ export default function App() {
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <div className="spark-footer">
         <span className="spark-footer-stat">
-          <span
-            className="spark-dot-sm"
-            style={{ background: online ? "rgb(52, 199, 89)" : "rgba(255, 59, 48, 0.6)" }}
-          />
-          {online ? "ONLINE" : "OFFLINE"}
+          Last scan {status ? timeAgo(status.last_scan) : "—"}
         </span>
-        <span className="spark-footer-stat">SCAN {status ? timeAgo(status.last_scan) : "—"}</span>
-        <span className="spark-footer-stat">PORT {status?.hub_port ?? 53735}</span>
         <button
           onClick={async () => {
             try { await invoke("shutdown_scanner"); } catch {}
