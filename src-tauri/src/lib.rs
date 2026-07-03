@@ -189,8 +189,11 @@ fn export_config(payload: ConfigExportPayload) -> Result<serde_json::Value, Stri
 
 #[tauri::command]
 fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
-    // Validate config with typed struct
-    payload.config.validate()
+    // Sanitize (clamp/repair transient UI values like a half-typed PIN or a
+    // cleared number field), then validate what remains.
+    let mut config = payload.config;
+    config.sanitize();
+    config.validate()
         .map_err(|e| format!("Config validation failed: {}", e))?;
 
     let base = app_base_dir()?;
@@ -203,7 +206,7 @@ fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
     };
 
     // Write with atomic temp-file-then-rename
-    let raw = serde_json::to_string_pretty(&payload.config)
+    let raw = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
     let tmp = config_path.with_extension("tmp");
     std::fs::write(&tmp, raw)
