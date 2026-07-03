@@ -37,6 +37,17 @@ import {
   saveSystemPrefs,
 } from "@/systemPrefs";
 
+// Parses + clamps a number input to [min, max], falling back to `fallback`
+// for empty/non-numeric input. The backend engine settings this feeds are
+// unsigned (u64) — an out-of-range value like a typed "-1" would otherwise
+// pass straight through parseInt and get rejected by Tauri's IPC layer as an
+// invalid arg payload instead of being sanitized.
+function clampInt(raw: string, min: number, max: number, fallback: number): number {
+  const n = parseInt(raw, 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 // ─── Engine Sub-tab ─────────────────────────────────────────────────────────
 function EngineSubTab({
   engineStatus,
@@ -716,7 +727,7 @@ function EngineSubTab({
                 min={1}
                 max={60}
                 value={config.engine_settings.scan_interval}
-                onChange={(e) => setEngine("scan_interval", parseInt(e.target.value) || 1)}
+                onChange={(e) => setEngine("scan_interval", clampInt(e.target.value, 1, 60, 1))}
                 className="input-glass font-mono"
               />
             </div>
@@ -729,7 +740,7 @@ function EngineSubTab({
                 min={0}
                 max={120}
                 value={config.engine_settings.grace_period}
-                onChange={(e) => setEngine("grace_period", parseInt(e.target.value) || 0)}
+                onChange={(e) => setEngine("grace_period", clampInt(e.target.value, 0, 120, 0))}
                 className="input-glass font-mono"
               />
             </div>
@@ -742,7 +753,7 @@ function EngineSubTab({
                 min={1}
                 max={60}
                 value={config.engine_settings.widget_poll_rate}
-                onChange={(e) => setEngine("widget_poll_rate", parseInt(e.target.value) || 1)}
+                onChange={(e) => setEngine("widget_poll_rate", clampInt(e.target.value, 1, 60, 1))}
                 className="input-glass font-mono"
               />
             </div>
@@ -755,7 +766,7 @@ function EngineSubTab({
                 min={1}
                 max={300}
                 value={config.engine_settings.widget_fade_timer}
-                onChange={(e) => setEngine("widget_fade_timer", parseInt(e.target.value) || 1)}
+                onChange={(e) => setEngine("widget_fade_timer", clampInt(e.target.value, 1, 300, 1))}
                 className="input-glass font-mono"
               />
             </div>
