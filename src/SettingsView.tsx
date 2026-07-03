@@ -966,26 +966,28 @@ function EngineSubTab({
 }
 
 // ─── Default config fallback for dev mode (when the Tauri backend is not running) ──
+// Deliberately empty/inert — never hardcode real keys, tokens, or IDs here.
+// This is a fallback shown before any real config loads, not a fixture.
 const defaultConfig: AppConfig = {
   api_keys: {
-    steamgrid: "7bbccc9fc8a24808bbf291e09680a287",
-    rawg: "ca51c9c394c84a9393bbc5e7782b4bd6",
+    steamgrid: "",
+    rawg: "",
     igdb_client: "",
     igdb_secret: "",
-    igdb_token: "tccpdz3xa6w94fvxm89g2c0k4is7qn",
+    igdb_token: "",
   },
   broadcaster: {
     routing_mode: "native" as const,
-    twitch_client: "ixed8yr0njzcpq8daetkmxdzcpktre",
-    twitch_secret: "d66u8jfbj6vnj298681basg9c5y180",
-    twitch_token: "gd0g2aijmfbmsyqjqioqyc79krskej",
-    twitch_refresh: "yrdtvtz5cadppd0auqtxu6tmg4j47xcryk1zs348swbbn4iiay",
-    twitch_broadcaster_id: "704830285",
-    kick_client: "01KJEPPVHARF4VQBNCC5DC2XGB",
-    kick_secret: "31e65c778d76924e869a02ea9fc3526315a304ab2c785086ed5788d8bb356909",
-    kick_channel_id: "bearddoddity",
-    kick_token: "M2JLNJVINGUTMZC3NS0ZOGFMLWJKMJITNTHMZWRLODU1ZWJI",
-    kick_refresh: "ZDZKM2I5NZCTYWU3ZI01OWU3LTGYNZKTOTLIODAWNDYXMZI4",
+    twitch_client: "",
+    twitch_secret: "",
+    twitch_token: "",
+    twitch_refresh: "",
+    twitch_broadcaster_id: "",
+    kick_client: "",
+    kick_secret: "",
+    kick_channel_id: "",
+    kick_token: "",
+    kick_refresh: "",
   },
   engine_settings: {
     idle_category: "Just Chatting",
@@ -998,7 +1000,7 @@ const defaultConfig: AppConfig = {
     widget_fade_timer: 15,
     strict_forge_mode: false,
     sb_action_name: "UpdateCategory",
-    widget_token: "KXMDVXdcmYRflUGRieg7Sg",
+    widget_token: "",
     spark_pin: "0000",
     spark_pairing_key: "",
     emulator_detection: true,
