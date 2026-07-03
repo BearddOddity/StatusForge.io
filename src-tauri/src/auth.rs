@@ -318,7 +318,7 @@ async fn handle_twitch_callback(
         ));
     }
 
-    let token_resp = match exchange_twitch_token(&code, client_id, client_secret) {
+    let token_resp = match exchange_twitch_token(&code, client_id, client_secret).await {
         Ok(r) => r,
         Err(e) => return Html(build_popup_response("twitch", false, &e)),
     };
@@ -402,12 +402,12 @@ async fn exchange_kick_token(
     })
 }
 
-fn exchange_twitch_token(
+async fn exchange_twitch_token(
     code: &str,
     client_id: &str,
     client_secret: &str,
 ) -> Result<TokenResponse, String> {
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client error: {}", e))?;
@@ -424,17 +424,19 @@ fn exchange_twitch_token(
         .post(TWITCH_TOKEN_URL)
         .form(&params)
         .send()
+        .await
         .map_err(|e| format!("Twitch token exchange failed: {}", e))?;
 
     if !resp.status().is_success() {
         return Err(format!(
             "Twitch token exchange: {}",
-            resp.text().unwrap_or_default()
+            resp.text().await.unwrap_or_default()
         ));
     }
 
     let json: serde_json::Value = resp
         .json()
+        .await
         .map_err(|e| format!("Twitch token parse error: {}", e))?;
     Ok(TokenResponse {
         access_token: json["access_token"].as_str().unwrap_or("").to_string(),
