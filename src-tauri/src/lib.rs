@@ -1,5 +1,6 @@
 pub mod config;
 mod auth;
+pub mod pusher;
 pub use forge_detection as scanner;
 pub mod metadata;
 pub mod server;
@@ -401,30 +402,18 @@ fn spawn_engine_loop(
                 .map(|c| c.engine_settings.idle_category.clone())
                 .unwrap_or_else(|| "Just Chatting".to_string());
 
-            // Load forge DB
+            // Load full forge DB (listed/delisted for the scanner, library for category push)
             let base = app_base_dir().unwrap_or_default();
             let forge_db_path = base.join("Forge_Database.json");
-            let (listed, delisted, strict) = if let Ok(content) = std::fs::read_to_string(&forge_db_path) {
-                if let Ok(db) = serde_json::from_str::<serde_json::Value>(&content) {
-                    let listed: std::collections::HashMap<String, String> = db
-                        .get("listed_apps")
-                        .and_then(|v| serde_json::from_value(v.clone()).ok())
-                        .unwrap_or_default();
-                    let delisted: Vec<String> = db
-                        .get("delisted_apps")
-                        .and_then(|v| serde_json::from_value(v.clone()).ok())
-                        .unwrap_or_default();
-                    let strict = config
-                        .as_ref()
-                        .map(|c| c.engine_settings.strict_forge_mode)
-                        .unwrap_or(false);
-                    (listed, delisted, strict)
-                } else {
-                    (std::collections::HashMap::new(), vec![], false)
-                }
-            } else {
-                (std::collections::HashMap::new(), vec![], false)
-            };
+            let forge_db: config::ForgeDatabase = std::fs::read_to_string(&forge_db_path)
+                .ok()
+                .and_then(|c| serde_json::from_str(&c).ok())
+                .unwrap_or_default();
+            let strict = config
+                .as_ref()
+                .map(|c| c.engine_settings.strict_forge_mode)
+                .unwrap_or(false);
+            let (listed, delisted) = (forge_db.listed_apps.clone(), forge_db.delisted_apps.clone());
 
             let scanner_config = config
                 .as_ref()
@@ -475,6 +464,11 @@ fn spawn_engine_loop(
                     // Emit event to frontend + push to WS widgets
                     let _ = app_handle.emit("game-detected", &game);
                     state_arc.push_status();
+
+                    // Native category push (edge-triggered: only on new game)
+                    if let Some(cfg) = config.as_ref() {
+                        pusher::push_category(&base, cfg, &forge_db, &game_title);
+                    }
                 }
             } else {
                 if current_game.is_some() {
@@ -507,6 +501,11 @@ fn spawn_engine_loop(
 
                         let _ = app_handle.emit("game-cleared", &idle_category);
                         state_arc.push_status();
+
+                        // Native category push back to the idle category
+                        if let Some(cfg) = config.as_ref() {
+                            pusher::push_category(&base, cfg, &forge_db, &idle_category);
+                        }
                     }
                 }
             }
