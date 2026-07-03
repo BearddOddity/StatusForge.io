@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+      <stop offset="0%" stop-color="#1a1526"/>
+      <stop offset="100%" stop-color="#0d0b12"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <rect x="8" y="8" width="284" height="384" rx="14" fill="none" stroke="#a78bfa" stroke-opacity="0.15" stroke-width="1.5"/>
+  <!-- power glyph -->
+  <g transform="translate(150 170)" stroke="#8b7aa8" stroke-width="9" stroke-linecap="round" fill="none" opacity="0.8">
+    <path d="M -34 -22 A 46 46 0 1 0 34 -22"/>
+    <line x1="0" y1="-52" x2="0" y2="-6"/>
+  </g>
+  <text x="150" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="26" font-weight="700" letter-spacing="6" fill="#c4b5fd" fill-opacity="0.7">OFFLINE</text>
+  <text x="150" y="308" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" letter-spacing="3" fill="#ffffff" fill-opacity="0.25">ENGINE STOPPED</text>
+</svg>
