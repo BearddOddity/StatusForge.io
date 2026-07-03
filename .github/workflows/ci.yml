@@ -69,7 +69,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev xvfb
 
       # Formatting is OS-independent — only needs to run once.
       - name: cargo fmt check (StatusForge)
@@ -85,6 +85,52 @@ jobs:
 
       - name: cargo test (forge-detection)
         run: cargo test --manifest-path forge-detection/Cargo.toml
+
+      # Catches launch-time crashes that unit tests can't (missing runtime
+      # deps, a panic in setup() before any test ever runs) — the debug
+      # binary was already built by `cargo test` above, so this just runs
+      # it and checks it survives a few seconds instead of exiting/crashing.
+      # First run with no Config.json/template on disk falls back to
+      # AppConfig::default() in-memory (see init_app_base_dir in lib.rs), so
+      # a bare checkout is a valid, representative first-run scenario here.
+      - name: Startup smoke test
+        shell: bash
+        working-directory: src-tauri
+        run: |
+          set -e
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            BIN="target/debug/app.exe"
+          else
+            BIN="target/debug/app"
+          fi
+
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            xvfb-run -a "./$BIN" &
+          else
+            "./$BIN" &
+          fi
+          APP_PID=$!
+
+          sleep 5
+
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            echo "App exited within 5s of startup — treating as a crash."
+            find . -name debug.log -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "App stayed alive for 5s — smoke test passed."
+
+          # On Windows, Git Bash's job-control PID ($!) does not map to the
+          # real Win32 process, so a plain `kill` silently no-ops and leaves
+          # the app running. Kill by image name there instead; the runner is
+          # a fresh, isolated VM so this can't collide with anything else.
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            taskkill //F //IM app.exe 2>/dev/null || true
+          else
+            kill "$APP_PID" 2>/dev/null || true
+            wait "$APP_PID" 2>/dev/null || true
+          fi
 
       - name: cargo clippy (StatusForge)
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
