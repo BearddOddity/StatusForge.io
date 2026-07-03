@@ -144,6 +144,11 @@ export interface KeychainStatus {
   count: number;
 }
 
+export interface SystemStats {
+  cpu_percent: number;
+  memory_mb: number;
+}
+
 export interface ExiledApp {
   process: string;
   exiled_at?: string;

@@ -133,6 +133,35 @@ fn get_platform() -> String {
     { "macos".to_string() }
 }
 
+/// Shared `sysinfo::System` for the System Performance panel — a persistent
+/// instance so consecutive polls give sysinfo a real delta to compute CPU%
+/// from (a fresh `System` always reports 0% on its first read).
+pub struct SystemMonitor(pub Mutex<sysinfo::System>);
+
+#[derive(serde::Serialize)]
+struct SystemStats {
+    cpu_percent: f32,
+    memory_mb: u64,
+}
+
+/// Live CPU/memory usage of the StatusForge process itself, for the Status
+/// Room's System Performance panel.
+#[tauri::command]
+fn get_system_stats(monitor: tauri::State<SystemMonitor>) -> Result<SystemStats, String> {
+    let pid = sysinfo::get_current_pid().map_err(|e| e.to_string())?;
+    let mut sys = monitor.0.lock().unwrap();
+    sys.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::Some(&[pid]),
+        true,
+        sysinfo::ProcessRefreshKind::nothing().with_cpu().with_memory(),
+    );
+    let proc = sys.process(pid).ok_or("process not found")?;
+    Ok(SystemStats {
+        cpu_percent: proc.cpu_usage(),
+        memory_mb: proc.memory() / (1024 * 1024),
+    })
+}
+
 /// Engine status for the frontend — built directly from the in-process native
 /// engine state (no HTTP round-trip; the Python sidecar is gone).
 #[tauri::command]
@@ -1096,6 +1125,7 @@ pub fn run() {
         .manage(oauth_state.clone())
         .manage(engine_state.clone())
         .manage(hub_state.clone())
+        .manage(SystemMonitor(Mutex::new(sysinfo::System::new())))
         .setup(move |app| {
             init_app_base_dir(app.handle());
 
@@ -1178,6 +1208,7 @@ pub fn run() {
             set_autostart,
             set_log_level,
             post_webhook,
+            get_system_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
