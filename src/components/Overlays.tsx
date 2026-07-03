@@ -97,15 +97,21 @@ export function OverlayMetadataPanel({
     }
   };
 
-  // Metadata scanning is always a whole-title lookup across every source
-  // (Steam/GOG/RAWG/IGDB/SteamGridDB), not resolvable to a single field, so
-  // every field's search button runs the same scan — but each merges the
-  // result back into the edit buffer immediately so you see it without
-  // closing and reopening the panel.
-  const runScan = async () => {
+  // The underlying scan is always a whole-title lookup across every source
+  // (Steam/GOG/RAWG/IGDB/SteamGridDB) — there's no way to ask an API for
+  // "just the genre" — but a single field's search button should still only
+  // touch that one field, for users who want to pull in one piece of info
+  // without overwriting everything else they've already got set/edited.
+  // Passing no `field` (the sidebar "Scan Metadata" button) applies all of it.
+  const runScan = async (field?: string) => {
     if (!entry?.title) return;
-    const result = await onSearchApis("", entry.title);
-    if (result) {
+    const result = await onSearchApis(field || "", entry.title);
+    if (!result) return;
+    if (field) {
+      if (result[field]) {
+        setEditData((prev) => ({ ...prev, [field]: result[field] }));
+      }
+    } else {
       setEditData((prev) => ({ ...prev, ...result }));
     }
   };
@@ -139,7 +145,7 @@ export function OverlayMetadataPanel({
           >
             {saving ? "Saving..." : "💾 Save Changes"}
           </Btn>
-          <Btn variant="ghost" onClick={runScan} className="w-full justify-center mt-2">
+          <Btn variant="ghost" onClick={() => runScan()} className="w-full justify-center mt-2">
             🔍 Scan Metadata
           </Btn>
           {onExile && (
@@ -204,7 +210,9 @@ export function OverlayMetadataPanel({
                         }))
                       }
                       onSave={() => onSave(editData)}
-                      onSearch={field.key !== "title" && entry.title ? () => runScan() : undefined}
+                      onSearch={
+                        field.key !== "title" && entry.title ? () => runScan(field.key) : undefined
+                      }
                     />
                   ))}
                 </div>
