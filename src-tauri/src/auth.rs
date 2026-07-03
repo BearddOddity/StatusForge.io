@@ -551,6 +551,111 @@ pub fn refresh_twitch_token(config: &AppConfig) -> Result<String, String> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Manual Token Validation — "alternate connection" for users who generate
+// their own access token via an external OAuth tool/callback instead of
+// using our "Connect X" popup. Confirms the token actually works and backs
+// out the identity fields (channel slug / broadcaster ID) the OAuth flow
+// would normally have fetched automatically.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Validates a manually-pasted Kick access token via `GET /public/v1/users`
+/// (also serves as Kick's de facto token-introspection endpoint — a 401
+/// means the token is invalid/expired). Returns (display_name, channel_slug).
+pub async fn validate_kick_token(token: &str) -> Result<(String, String), String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let user_resp = client
+        .get("https://api.kick.com/public/v1/users")
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|e| format!("Kick token validation failed: {}", e))?;
+    if !user_resp.status().is_success() {
+        return Err(format!(
+            "Kick token invalid or expired ({})",
+            user_resp.status()
+        ));
+    }
+    let user_json: serde_json::Value = user_resp
+        .json()
+        .await
+        .map_err(|e| format!("Kick user response parse error: {}", e))?;
+    let name = user_json["data"][0]["name"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    if name.is_empty() {
+        return Err("Kick token has no associated user".to_string());
+    }
+
+    // Best-effort: the channel slug isn't required for a valid connection,
+    // just nice to have for the Channel ID field.
+    let slug = client
+        .get("https://api.kick.com/public/v1/channels")
+        .bearer_auth(token)
+        .send()
+        .await
+        .ok()
+        .filter(|r| r.status().is_success());
+    let slug = match slug {
+        Some(r) => r
+            .json::<serde_json::Value>()
+            .await
+            .ok()
+            .and_then(|j| j["data"][0]["slug"].as_str().map(str::to_string))
+            .unwrap_or_default(),
+        None => String::new(),
+    };
+
+    Ok((name, slug))
+}
+
+/// Validates a manually-pasted Twitch access token via `GET /helix/users`.
+/// Client ID is still required — Twitch's API needs it on every request
+/// regardless of how the token was obtained. Returns (display_name, user_id).
+pub async fn validate_twitch_token(
+    token: &str,
+    client_id: &str,
+) -> Result<(String, String), String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let resp = client
+        .get(TWITCH_USERS_URL)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Client-Id", client_id)
+        .send()
+        .await
+        .map_err(|e| format!("Twitch token validation failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Twitch token invalid or expired ({})",
+            resp.status()
+        ));
+    }
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Twitch user response parse error: {}", e))?;
+    let id = json["data"][0]["id"].as_str().unwrap_or("").to_string();
+    let display_name = json["data"][0]["display_name"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    if id.is_empty() {
+        return Err("No Twitch user found for this token".to_string());
+    }
+    Ok((display_name, id))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Kick Category Database Sync
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -1061,6 +1061,49 @@ fn twitch_refresh_token() -> Result<String, String> {
     Ok(new_token)
 }
 
+/// Validates a manually-pasted Kick access token (the "alternate to Connect
+/// Kick" path) and backfills kick_channel_id from the connected channel's
+/// slug. Returns the connected user's display name for a success toast.
+#[tauri::command]
+async fn kick_validate_token() -> Result<String, String> {
+    let base_dir = app_base_dir()?;
+    let config = auth::load_config_at(&base_dir)?;
+    let token = config.broadcaster.kick_token.clone();
+    if token.is_empty() {
+        return Err("No Kick access token to validate".to_string());
+    }
+    let (name, slug) = auth::validate_kick_token(&token).await?;
+    if !slug.is_empty() {
+        let mut updated = config;
+        updated.broadcaster.kick_channel_id = slug;
+        auth::save_config_at(&base_dir, &updated)?;
+    }
+    Ok(name)
+}
+
+/// Validates a manually-pasted Twitch access token (the "alternate to
+/// Connect Twitch" path) and backfills twitch_broadcaster_id, which
+/// pusher.rs requires alongside the token for category pushes to work.
+/// Returns the connected user's display name for a success toast.
+#[tauri::command]
+async fn twitch_validate_token() -> Result<String, String> {
+    let base_dir = app_base_dir()?;
+    let config = auth::load_config_at(&base_dir)?;
+    let token = config.broadcaster.twitch_token.clone();
+    let client_id = config.broadcaster.twitch_client.clone();
+    if token.is_empty() {
+        return Err("No Twitch access token to validate".to_string());
+    }
+    if client_id.is_empty() {
+        return Err("Twitch Client ID is required to validate a token".to_string());
+    }
+    let (name, broadcaster_id) = auth::validate_twitch_token(&token, &client_id).await?;
+    let mut updated = config;
+    updated.broadcaster.twitch_broadcaster_id = broadcaster_id;
+    auth::save_config_at(&base_dir, &updated)?;
+    Ok(name)
+}
+
 /// Manually trigger Kick category database sync.
 #[tauri::command]
 async fn sync_kick_db() -> Result<String, String> {
@@ -1420,6 +1463,8 @@ pub fn run() {
             twitch_login,
             kick_refresh_token,
             twitch_refresh_token,
+            kick_validate_token,
+            twitch_validate_token,
             sync_kick_db,
             rotate_widget_token,
             exile_app,

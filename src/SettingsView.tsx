@@ -1131,6 +1131,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
   const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(
     null
   );
+  const [validatingPlatform, setValidatingPlatform] = useState<string | null>(null);
   const floatingRef = useRef<HTMLDivElement>(null);
   const skipSave = useRef(false);
 
@@ -1321,6 +1322,30 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
     });
     if (editingKey === entry.key) setEditingKey(null);
     toast("Integration removed — save to confirm", "info");
+  };
+
+  // If a manually-pasted access token is already present, validate it
+  // directly instead of launching the OAuth popup — that's the whole point
+  // of the "Access Token (Optional)" field as an alternate connection path.
+  const connectOrValidate = async (entry: (typeof ROUTING_CATALOG)[number]) => {
+    const tokenKey = `${entry.key}_token`;
+    const hasManualToken = !!bc[tokenKey as keyof typeof bc];
+    if (!hasManualToken) {
+      setOauthModal({ platform: entry.key as "twitch" | "kick", url: entry.connectUrl });
+      return;
+    }
+
+    setValidatingPlatform(entry.key);
+    const cmd = entry.key === "kick" ? "kick_validate_token" : "twitch_validate_token";
+    const res = await tauriApi(cmd);
+    setValidatingPlatform(null);
+
+    if (res && typeof res === "object" && "error" in res) {
+      toast(`${entry.label} token invalid: ${(res as { error: string }).error}`, "error");
+      return;
+    }
+    toast(`Connected to ${entry.label} as ${res}`, "success");
+    loadConfig();
   };
 
   // ── Floating card ─────────────────────────────────
@@ -1799,19 +1824,24 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                             ))}
                           </div>
 
-                          {entry.connectUrl && (
-                            <button
-                              onClick={() =>
-                                setOauthModal({
-                                  platform: entry.key as "twitch" | "kick",
-                                  url: entry.connectUrl,
-                                })
-                              }
-                              className="btn-cta"
-                            >
-                              🔗 Connect {entry.label}
-                            </button>
-                          )}
+                          {entry.connectUrl &&
+                            (() => {
+                              const hasManualToken = !!bc[`${entry.key}_token` as keyof typeof bc];
+                              const isValidating = validatingPlatform === entry.key;
+                              return (
+                                <button
+                                  onClick={() => connectOrValidate(entry)}
+                                  disabled={isValidating}
+                                  className="btn-cta"
+                                >
+                                  {isValidating
+                                    ? "Verifying…"
+                                    : hasManualToken
+                                      ? `✓ Verify ${entry.label} Token`
+                                      : `🔗 Connect ${entry.label}`}
+                                </button>
+                              );
+                            })()}
 
                           {managedFields && managedFields.length > 0 && (
                             <div className="flex flex-col gap-2.5 mt-1 pt-2.5 border-t border-white/[0.06]">
