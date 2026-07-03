@@ -4,6 +4,7 @@ import { tauriApi } from "@/hooks/useTauriApi";
 import { Card, Btn, FieldSection } from "@/components/ui";
 
 const idleCover = "/just%20chatting.png";
+const offlineCover = "/offline.svg";
 
 const overlays = [
   { id: "hl", label: "Horizontal Left", file: "Horizontal_Left.html", icon: "◀", preview: "" },
@@ -75,6 +76,8 @@ export default function DashboardView({
   };
 
   const isPlaying = engineStatus.is_playing;
+  const placeholderCover = engineStatus.running ? idleCover : offlineCover;
+  const title = isPlaying ? engineStatus.game_title : engineStatus.running ? "Just Chatting" : "Offline";
 
   return (
     <div>
@@ -88,15 +91,15 @@ export default function DashboardView({
             {isPlaying && <div className="absolute inset-0 rounded-2xl border border-purple-500/30 pointer-events-none z-10" />}
             <div className="w-full h-full" style={{ animation: isPlaying ? "var(--user-cover-breathe, cover-breathe 8s ease-in-out infinite)" : "none" }}>
               <img
-                src={engineStatus.cover_url || idleCover}
-                alt={engineStatus.game_title || "Just Chatting"}
+                src={isPlaying ? engineStatus.cover_url || placeholderCover : placeholderCover}
+                alt={title}
                 className="w-full h-full object-cover"
                 crossOrigin="anonymous"
                 onError={(e) => {
                   const img = e.target as HTMLImageElement;
                   if (!img.dataset.fallback) {
                     img.dataset.fallback = "1";
-                    img.src = idleCover;
+                    img.src = placeholderCover;
                   } else if (!img.dataset.placeholder) {
                     img.dataset.placeholder = "1";
                     img.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 400'%3E%3Crect fill='%23111' width='300' height='400'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23333' font-size='48'%3E🎮%3C/text%3E%3C/svg%3E";
@@ -112,7 +115,7 @@ export default function DashboardView({
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-xl leading-tight truncate text-white">
-              {isPlaying ? engineStatus.game_title : "Just Chatting"}
+              {title}
             </h3>
             <div className="flex items-center gap-2 mt-3">
               {engineStatus.running ? (
