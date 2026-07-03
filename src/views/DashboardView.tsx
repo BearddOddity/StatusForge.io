@@ -260,7 +260,6 @@ export default function DashboardView({
                 src={isPlaying ? engineStatus.cover_url || placeholderCover : placeholderCover}
                 alt={title}
                 className="w-full h-full object-cover"
-                crossOrigin="anonymous"
                 onError={(e) => {
                   const img = e.target as HTMLImageElement;
                   if (!img.dataset.fallback) {
