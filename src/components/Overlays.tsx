@@ -15,6 +15,7 @@ interface OverlayMetadataPanelProps {
         developer: string;
         publisher: string;
         cover_url: string;
+        logo_url: string;
         steam_id: string;
         igdb_id: string;
         rawg_id: string;
@@ -46,7 +47,10 @@ const FIELD_SECTIONS = [
   {
     title: "Cover",
     icon: "🖼️",
-    fields: [{ key: "cover_url", label: "Cover URL" }],
+    fields: [
+      { key: "cover_url", label: "Cover URL" },
+      { key: "logo_url", label: "Logo URL" },
+    ],
   },
   {
     title: "External IDs",
@@ -82,6 +86,7 @@ export function OverlayMetadataPanel({
         developer: entry.developer || "",
         publisher: entry.publisher || "",
         cover_url: entry.cover_url || "",
+        logo_url: entry.logo_url || "",
         steam_id: entry.steam_id || "",
         igdb_id: entry.igdb_id || "",
         rawg_id: entry.rawg_id || "",

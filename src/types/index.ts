@@ -103,6 +103,7 @@ export interface ForgeLibraryEntry {
   developer: string;
   publisher: string;
   cover_url: string;
+  logo_url: string;
   twitch_id: string;
   kick_id: string;
   igdb_id: string;
