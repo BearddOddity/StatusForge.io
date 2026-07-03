@@ -546,4 +546,37 @@ mod tests {
             .validate()
             .unwrap_or_else(|e| panic!("Config.json.template fails validate(): {}", e));
     }
+
+    /// Regression guard for a real bug: the template previously shipped
+    /// literal placeholder text ("YOUR_IGDB_CLIENT_ID", etc.) for every
+    /// credential field. Those are non-empty strings, so the frontend's
+    /// "is this integration configured" checks (which key off presence/
+    /// truthiness, not literal validity) treated every API key and routing
+    /// integration as already active on a fresh install — before the user
+    /// had touched the "+ Add" flow at all. Credential fields must bootstrap
+    /// empty so skip_serializing_if keeps them absent until the user adds one.
+    #[test]
+    fn config_template_credentials_are_empty() {
+        let template_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../Config.json.template");
+        let content = std::fs::read_to_string(&template_path).unwrap();
+        let config: AppConfig = serde_json::from_str(&content).unwrap();
+
+        assert_eq!(config.api_keys.steamgrid, "");
+        assert_eq!(config.api_keys.rawg, "");
+        assert_eq!(config.api_keys.igdb_client, "");
+        assert_eq!(config.api_keys.igdb_secret, "");
+        assert_eq!(config.api_keys.igdb_token, "");
+
+        assert_eq!(config.broadcaster.twitch_client, "");
+        assert_eq!(config.broadcaster.twitch_secret, "");
+        assert_eq!(config.broadcaster.twitch_token, "");
+        assert_eq!(config.broadcaster.twitch_refresh, "");
+        assert_eq!(config.broadcaster.twitch_broadcaster_id, "");
+        assert_eq!(config.broadcaster.kick_client, "");
+        assert_eq!(config.broadcaster.kick_secret, "");
+        assert_eq!(config.broadcaster.kick_channel_id, "");
+        assert_eq!(config.broadcaster.kick_token, "");
+        assert_eq!(config.broadcaster.kick_refresh, "");
+    }
 }
