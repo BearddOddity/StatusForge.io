@@ -490,6 +490,30 @@ fn spawn_engine_loop(
                     if let Some(cfg) = config.as_ref() {
                         pusher::push_category(&base, cfg, &forge_db, &game_title);
                     }
+
+                    // Auto-populate the Library with newly-seen games (bare
+                    // entry — scan_metadata / the Library UI fill in the rest
+                    // later) so detections show up without a manual add.
+                    // Reload fresh rather than reusing `forge_db` above to
+                    // avoid clobbering a concurrent write from the axum server.
+                    match server::load_db() {
+                        Ok(mut db) => {
+                            if !db.library.contains_key(&game_title) {
+                                db.library.insert(
+                                    game_title.clone(),
+                                    config::ForgeLibraryEntry {
+                                        title: game_title.clone(),
+                                        executables: game.process.clone(),
+                                        ..Default::default()
+                                    },
+                                );
+                                if let Err(e) = server::save_db(&db) {
+                                    log::warn!("[NATIVE] Failed to save new library entry: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => log::warn!("[NATIVE] Failed to load Forge DB for library upsert: {}", e),
+                    }
                 }
             } else {
                 if current_game.is_some() {
