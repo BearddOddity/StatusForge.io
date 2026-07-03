@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { EngineStatusData } from "@/types";
+import { loadSystemPrefs } from "@/systemPrefs";
 
 interface WSMessage {
   event: "init" | "update" | "error";
@@ -38,7 +39,11 @@ export function useWebSocket(token: string) {
 
       ws.onclose = () => {
         setConnected(false);
-        reconnectRef.current = setTimeout(() => connect(wsToken), 3000);
+        // System pref: "Auto-Reconnect WebSocket" — read at drop time so a
+        // toggle takes effect without remounting the hook.
+        if (loadSystemPrefs().wsAutoReconnect) {
+          reconnectRef.current = setTimeout(() => connect(wsToken), 3000);
+        }
       };
 
       ws.onerror = () => ws.close();

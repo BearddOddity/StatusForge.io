@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig, EngineStatus, KeychainStatus } from "@/types";
+import { loadSystemPrefs } from "@/systemPrefs";
 
 
 export async function tauriApi(
@@ -46,7 +47,11 @@ export async function fetchConfig(): Promise<AppConfig | null> {
 }
 
 export async function saveConfig(config: AppConfig): Promise<string> {
-  const res = await tauriApi("import_config", { config });
+  // backup: keep a Config.json.bak of the prior file (System > Automatic Backups)
+  const res = await tauriApi("import_config", {
+    config,
+    backup: loadSystemPrefs().configBackupEnabled,
+  });
   if (typeof res === "string") return res;
   // Surface the real backend error (e.g. validation failure) instead of a
   // generic message, so the user knows why the save was rejected.

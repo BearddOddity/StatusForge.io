@@ -1051,3 +1051,12 @@ input[type="range"]::-moz-range-thumb {
   padding: 24px;
   margin-bottom: 20px;
 }
+
+/* ── Hardware acceleration OFF (System tab): drop heavy animation work ────── */
+.no-hwaccel *,
+.no-hwaccel *::before,
+.no-hwaccel *::after {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+}

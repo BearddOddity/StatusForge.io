@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import appIcon from "../icons/icon.png";
 import type { EngineStatus, ViewId } from "@/types";
-import { fetchEngineStatus, fetchWidgetToken } from "@/hooks/useTauriApi";
+import { fetchEngineStatus, fetchWidgetToken, tauriApi } from "@/hooks/useTauriApi";
+import { loadSystemPrefs, applySystemPrefs } from "@/systemPrefs";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToasts, ToastContainer } from "@/components/Toast";
 import DashboardView from "@/views/DashboardView";
@@ -155,6 +163,67 @@ function App() {
   // mount so it works even before the user visits the Settings > Theme tab.
   useEffect(() => {
     try { applyThemePrefs(loadThemePrefs()); } catch {}
+  }, []);
+
+  // System prefs boot wiring: hardware-accel class, log level, engine autostart.
+  useEffect(() => {
+    const prefs = loadSystemPrefs();
+    applySystemPrefs(prefs);
+    tauriApi("set_log_level", { level: prefs.logLevel });
+    if (prefs.autoStartEngine) {
+      tauriApi("start_native_engine_loop").then(() => fetchStatus());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Minimize to tray: intercept window close and hide instead when enabled.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    getCurrentWindow()
+      .onCloseRequested((event) => {
+        if (loadSystemPrefs().minimizeToTray) {
+          event.preventDefault();
+          getCurrentWindow().hide();
+        }
+      })
+      .then((u) => { unlisten = u; })
+      .catch(() => {});
+    return () => unlisten?.();
+  }, []);
+
+  // Desktop notifications + custom webhook relay on engine events.
+  useEffect(() => {
+    const notify = async (title: string, body: string) => {
+      try {
+        let granted = await isPermissionGranted();
+        if (!granted) granted = (await requestPermission()) === "granted";
+        if (granted) sendNotification({ title, body });
+      } catch {}
+    };
+    const webhook = (event: string, title: string, platform?: string) => {
+      const p = loadSystemPrefs();
+      if (p.customWebhookEnabled && /^https?:\/\//i.test(p.customWebhookUrl)) {
+        tauriApi("post_webhook", { url: p.customWebhookUrl, event, title, platform });
+      }
+    };
+    const subs = [
+      listen<{ title: string; platform?: string }>("game-detected", (e) => {
+        const p = loadSystemPrefs();
+        const title = e.payload?.title ?? "";
+        if (p.showNotifications && p.notifyOnGameDetect) {
+          notify("Game detected", title);
+        }
+        webhook("game-detected", title, e.payload?.platform);
+      }),
+      listen<string>("game-cleared", (e) => {
+        const p = loadSystemPrefs();
+        if (p.showNotifications && p.notifyOnStreamEvents) {
+          notify("Category reset", `Back to ${e.payload}`);
+        }
+        webhook("game-cleared", e.payload);
+      }),
+    ];
+    return () => { subs.forEach((s) => s.then((u) => u()).catch(() => {})); };
   }, []);
 
   return (
