@@ -188,6 +188,11 @@ pub struct ForgeLibraryEntry {
     pub publisher: String,
     #[serde(default)]
     pub cover_url: String,
+    /// Transparent PNG game logo (SteamGridDB /logos), distinct from the
+    /// portrait/landscape cover art in cover_url — meant for overlaying on
+    /// top of other art, not as a standalone thumbnail.
+    #[serde(default)]
+    pub logo_url: String,
     #[serde(default)]
     pub twitch_id: String,
     #[serde(default)]

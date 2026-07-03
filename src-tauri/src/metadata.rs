@@ -40,6 +40,7 @@ pub fn merge_entry(
         developer,
         publisher,
         cover_url,
+        logo_url,
         igdb_id,
         rawg_id,
         sgdb_id,
@@ -101,11 +102,12 @@ pub async fn scan(
 
     if !keys.steamgrid.is_empty() {
         match fetch_sgdb(&client, title, &keys.steamgrid).await {
-            Ok((id, cover)) => {
+            Ok((id, cover, logo)) => {
                 fetched.sgdb_id = id;
                 if !cover.is_empty() {
                     fetched.cover_url = cover; // SGDB cover preferred over RAWG/IGDB
                 }
+                fetched.logo_url = logo;
             }
             Err(e) => log::warn!("[META] SteamGridDB failed: {}", e),
         }
@@ -395,12 +397,13 @@ async fn fetch_kick_id(
     }
 }
 
-/// Returns (sgdb_id, cover_url) — cover may be empty if no 600x900 grid exists.
+/// Returns (sgdb_id, cover_url, logo_url) — cover/logo may be empty if
+/// SteamGridDB has no 600x900 grid / no logo for this game.
 async fn fetch_sgdb(
     client: &reqwest::Client,
     title: &str,
     key: &str,
-) -> Result<(String, String), String> {
+) -> Result<(String, String, String), String> {
     let search_url = format!(
         "https://www.steamgriddb.com/api/v2/search/autocomplete/{}",
         urlencoding::encode(title)
@@ -416,7 +419,19 @@ async fn fetch_sgdb(
     );
     let grids = get_json(client.get(&grids_url).bearer_auth(key)).await?;
     let cover = grids["data"][0]["url"].as_str().unwrap_or("").to_string();
-    Ok((id.to_string(), cover))
+
+    // Logos (transparent PNG game logos, distinct from grids/covers) —
+    // best-effort: a missing logo shouldn't fail the whole SGDB fetch.
+    let logos_url = format!("https://www.steamgriddb.com/api/v2/logos/game/{}", id);
+    let logo = match get_json(client.get(&logos_url).bearer_auth(key)).await {
+        Ok(logos) => logos["data"][0]["url"].as_str().unwrap_or("").to_string(),
+        Err(e) => {
+            log::warn!("[META] SteamGridDB logo lookup failed: {}", e);
+            String::new()
+        }
+    };
+
+    Ok((id.to_string(), cover, logo))
 }
 
 #[cfg(test)]
