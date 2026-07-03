@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { Toast as ToastItem, ToastType } from "@/types";
+import { tauriApi } from "@/hooks/useTauriApi";
 
 // ─── Toast hook ───────────────────────────────────────────────────────────────
 
@@ -11,6 +12,9 @@ export function useToasts() {
     const id = ++idRef.current;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
+    // Mirror into debug.log so the Dev Tools terminal shows every toast, not
+    // just whichever one happened to be on screen when you looked.
+    tauriApi("log_frontend_toast", { message, level: type });
   }, []);
 
   return { toasts, add };
