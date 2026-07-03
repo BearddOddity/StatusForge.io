@@ -122,7 +122,7 @@ function EngineSubTab({
     ).join("");
     setEngine("widget_token", token);
     setWidgetToken(token);
-    toast("Widget token regenerated — save to apply", "info");
+    toast("Overlay token regenerated — save to apply", "info");
   };
 
   return (
@@ -130,7 +130,7 @@ function EngineSubTab({
       {/* Control Panel */}
       <CollapsibleSection
         title="Control Panel"
-        description="View engine status and manage the widget token."
+        description="View engine status and manage the overlay token."
         icon="⚡"
         defaultOpen={true}
         badge={
@@ -163,7 +163,7 @@ function EngineSubTab({
         </p>
         <div className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/5 rounded-xl">
           <p className="text-white/60 text-xs flex-1">
-            Widget Token:{" "}
+            Overlay Token:{" "}
             <code className="bg-black/40 px-1.5 py-0.5 rounded font-mono text-white/90">
               {widgetToken}
             </code>
@@ -797,7 +797,7 @@ function EngineSubTab({
             </div>
             <div>
               <label className="block text-[11px] uppercase tracking-wider text-white/50 mb-1.5">
-                Widget Poll Rate (s)
+                Overlay Poll Rate (s)
               </label>
               <input
                 type="number"
@@ -810,7 +810,7 @@ function EngineSubTab({
             </div>
             <div>
               <label className="block text-[11px] uppercase tracking-wider text-white/50 mb-1.5">
-                Widget Fade Timer (s)
+                Overlay Fade Timer (s)
               </label>
               <input
                 type="number"

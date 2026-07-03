@@ -59,7 +59,7 @@ export default function EngineConfigView({
           </Btn>
         </div>
         <p className="text-white/60 text-xs">
-          Widget Token: <code className="bg-black/30 px-1.5 py-0.5 rounded">{widgetToken}</code>
+          Overlay Token: <code className="bg-black/30 px-1.5 py-0.5 rounded">{widgetToken}</code>
         </p>
       </Card>
 
