@@ -6,10 +6,34 @@ import { Card, Btn, FieldSection } from "@/components/ui";
 const idleCover = "/just%20chatting.png";
 const offlineCover = "/offline.svg";
 
+// width/height are each overlay's actual rendered size (from its own CSS),
+// used to scale the live iframe preview down to fit the picker card without
+// distorting it.
 const overlays = [
-  { id: "hl", label: "Horizontal Left", file: "Horizontal_Left.html", icon: "◀", preview: "" },
-  { id: "hr", label: "Horizontal Right", file: "Horizontal_Right.html", icon: "▶", preview: "" },
-  { id: "vt", label: "Vertical", file: "Vertical.html", icon: "▼", preview: "" },
+  {
+    id: "hl",
+    label: "Horizontal Left",
+    file: "Horizontal_Left.html",
+    icon: "◀",
+    width: 850,
+    height: 480,
+  },
+  {
+    id: "hr",
+    label: "Horizontal Right",
+    file: "Horizontal_Right.html",
+    icon: "▶",
+    width: 850,
+    height: 480,
+  },
+  {
+    id: "vt",
+    label: "Vertical",
+    file: "Vertical.html",
+    icon: "▼",
+    width: 360,
+    height: 620,
+  },
 ];
 
 const platformDefs = [
@@ -552,16 +576,24 @@ export default function DashboardView({
                         className={`shrink-0 w-[260px] transition-all duration-300 ${a ? "scale-100 opacity-100" : "scale-75 opacity-30 pointer-events-none absolute"}`}
                       >
                         <div
-                          className={`rounded-xl overflow-hidden border transition-all duration-300 ${a ? "border-purple-500/50 shadow-lg shadow-purple-500/15" : "border-white/10"}`}
+                          className={`relative w-full h-[150px] rounded-xl overflow-hidden border bg-[#0a0a12] transition-all duration-300 ${a ? "border-purple-500/50 shadow-lg shadow-purple-500/15" : "border-white/10"}`}
                         >
-                          {o.preview ? (
-                            <img
-                              src={o.preview}
-                              alt={o.label}
-                              className="w-full h-[150px] object-cover"
+                          {widgetToken ? (
+                            <iframe
+                              key={o.id}
+                              src={`http://127.0.0.1:53735/forge-widget/${widgetToken}/${o.file}`}
+                              title={`${o.label} preview`}
+                              tabIndex={-1}
+                              className="pointer-events-none absolute top-0 left-0 border-0"
+                              style={{
+                                width: `${o.width}px`,
+                                height: `${o.height}px`,
+                                transform: `scale(${260 / o.width})`,
+                                transformOrigin: "top left",
+                              }}
                             />
                           ) : (
-                            <div className="w-full h-[150px] bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center">
+                            <div className="w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center">
                               <div className="text-center px-4">
                                 <div className="text-xl mb-1.5">{o.icon}</div>
                                 <span className="text-white/50 text-[11px] font-medium">
