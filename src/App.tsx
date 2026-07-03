@@ -5,10 +5,13 @@ import { fetchEngineStatus, fetchWidgetToken } from "@/hooks/useTauriApi";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToasts, ToastContainer } from "@/components/Toast";
 import DashboardView from "@/views/DashboardView";
-import EngineConfigView from "@/views/EngineConfigView";
-import ApiKeysView from "@/views/ApiKeysView";
-import RoutingView from "@/views/RoutingView";
 import LibraryView from "@/LibraryView";
+import {
+  THEME_PREFS_EVENT,
+  loadThemePrefs,
+  saveThemePrefs,
+  applyThemePrefs,
+} from "@/theme";
 import SettingsView from "@/SettingsView";
 import DevView from "@/dev/DevView";
 
@@ -127,42 +130,31 @@ function App() {
     dev: <DevView />,
   }), [engineStatus, wsConnected, toast, fetchStatus, devUnlocked]);
 
-  const [sidebarIconOnly, setSidebarIconOnly] = useState(() => {
-    try {
-      const stored = localStorage.getItem("statusforge_system_prefs");
-      return stored ? JSON.parse(stored).sidebarIconOnly ?? false : false;
-    } catch { return false; }
-  });
+  // Sidebar collapse state lives in the theme prefs ("Sidebar Icons Only" in
+  // Settings > Theme). Sync both ways: the Theme tab fires THEME_PREFS_EVENT
+  // after saving, and the sidebar collapse button writes back to the prefs.
+  const [sidebarIconOnly, setSidebarIconOnly] = useState(
+    () => loadThemePrefs().sidebarIconOnly
+  );
 
   useEffect(() => {
-    const handler = (e: StorageEvent) => {
-      if (e.key === "statusforge_system_prefs" && e.newValue) {
-        try { setSidebarIconOnly(JSON.parse(e.newValue).sidebarIconOnly ?? false); } catch {}
-      }
-    };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
+    const handler = () => setSidebarIconOnly(loadThemePrefs().sidebarIconOnly);
+    window.addEventListener(THEME_PREFS_EVENT, handler);
+    return () => window.removeEventListener(THEME_PREFS_EVENT, handler);
   }, []);
 
-  // Apply saved theme (background, colors, etc.) on mount so it works
-  // even before the user visits the Settings > Theme tab.
+  const toggleSidebar = useCallback(() => {
+    setSidebarIconOnly((v: boolean) => {
+      const next = !v;
+      try { saveThemePrefs({ ...loadThemePrefs(), sidebarIconOnly: next }); } catch {}
+      return next;
+    });
+  }, []);
+
+  // Apply the full saved theme (colors, background, animations, effects) on
+  // mount so it works even before the user visits the Settings > Theme tab.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("statusforge_theme_prefs");
-      if (!stored) return;
-      const prefs = JSON.parse(stored);
-      const root = document.documentElement;
-      if (prefs.accentColor) root.style.setProperty("--user-accent", prefs.accentColor);
-      if (prefs.bgColor) root.style.setProperty("--user-bg", prefs.bgColor);
-      root.style.setProperty("--user-bg-opacity", String((prefs.bgOpacity ?? 100) / 100));
-      root.style.setProperty("--user-bg-blur", `${prefs.bgBlur ?? 0}px`);
-      root.style.setProperty("--user-bg-image", prefs.bgImage ? `url(${prefs.bgImage})` : "none");
-      root.style.setProperty("--user-panel-opacity", String((prefs.panelOpacity ?? 30) / 100));
-      root.style.setProperty("--user-font-scale", String((prefs.fontScale ?? 100) / 100));
-      const radius = prefs.borderRadius === "sharp" ? "2px" : prefs.borderRadius === "soft" ? "8px" : "16px";
-      root.style.setProperty("--user-radius", radius);
-      root.style.setProperty("--user-density", prefs.density === "compact" ? "0.75rem" : prefs.density === "spacious" ? "1.5rem" : "1rem");
-    } catch {}
+    try { applyThemePrefs(loadThemePrefs()); } catch {}
   }, []);
 
   return (
@@ -180,7 +172,7 @@ function App() {
 
         <button
           className="nav-item cursor-pointer"
-          onClick={() => setSidebarIconOnly((v: boolean) => !v)}
+          onClick={toggleSidebar}
           title={sidebarIconOnly ? "Expand sidebar" : "Collapse sidebar"}
         >
           <span className="nav-item-icon">
