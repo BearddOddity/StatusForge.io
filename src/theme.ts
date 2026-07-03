@@ -11,7 +11,11 @@ export interface ThemePrefs {
   panelOpacity: number;
   borderRadius: "sharp" | "soft" | "rounded";
   fontScale: number;
-  density: "compact" | "default" | "spacious";
+  /** Google Fonts family name, or "Montserrat" for the bundled (offline) default. */
+  fontFamily: string;
+  /** Base body text weight — headings/labels with their own explicit weight
+   *  classes are unaffected, same as fontFamily's cascade. */
+  fontWeight: 400 | 500 | 600 | 700 | 800 | 900;
   sidebarIconOnly: boolean;
   animationsEnabled: boolean;
   reducedMotion: boolean;
@@ -37,7 +41,8 @@ export const defaultThemePrefs: ThemePrefs = {
   panelOpacity: 30,
   borderRadius: "rounded",
   fontScale: 100,
-  density: "default",
+  fontFamily: "Montserrat",
+  fontWeight: 400,
   sidebarIconOnly: false,
   animationsEnabled: true,
   reducedMotion: false,
@@ -72,6 +77,42 @@ export function saveThemePrefs(prefs: ThemePrefs) {
   window.dispatchEvent(new Event(THEME_PREFS_EVENT));
 }
 
+// Google Fonts <link> element id — reused/updated in place rather than
+// re-appended, so switching fonts doesn't leak stylesheet tags.
+const GOOGLE_FONT_LINK_ID = "sf-google-font-link";
+
+/**
+ * Loads a custom Google Font by family name via a <link> tag. "Montserrat"
+ * (the bundled default) skips this entirely — it's always available offline
+ * via the @font-face rules in index.css. An invalid/unreachable family name
+ * just means Google's stylesheet defines no matching @font-face, so the
+ * font-family fallback chain in index.css's `body` rule quietly lands back
+ * on Montserrat — no special error handling needed for that case.
+ */
+function loadGoogleFont(family: string) {
+  const trimmed = family.trim();
+  const existing = document.getElementById(GOOGLE_FONT_LINK_ID) as HTMLLinkElement | null;
+
+  if (!trimmed || trimmed.toLowerCase() === "montserrat") {
+    existing?.remove();
+    return;
+  }
+
+  const href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(trimmed).replace(/%20/g, "+")}:wght@400;500;600;700;800;900&display=swap`;
+  if (existing) {
+    if (existing.dataset.family === trimmed) return; // already loaded
+    existing.href = href;
+    existing.dataset.family = trimmed;
+  } else {
+    const link = document.createElement("link");
+    link.id = GOOGLE_FONT_LINK_ID;
+    link.rel = "stylesheet";
+    link.href = href;
+    link.dataset.family = trimmed;
+    document.head.appendChild(link);
+  }
+}
+
 export function applyThemePrefs(prefs: ThemePrefs) {
   const root = document.documentElement;
   root.style.setProperty("--user-accent", prefs.accentColor);
@@ -81,8 +122,10 @@ export function applyThemePrefs(prefs: ThemePrefs) {
   root.style.setProperty("--user-bg-image", prefs.bgImage ? `url(${prefs.bgImage})` : "none");
   root.style.setProperty("--user-panel-opacity", String(prefs.panelOpacity / 100));
   root.style.setProperty("--user-font-scale", String(prefs.fontScale / 100));
+  root.style.setProperty("--user-font-family", `"${(prefs.fontFamily || "Montserrat").trim()}"`);
+  root.style.setProperty("--user-font-weight", String(prefs.fontWeight || 400));
+  loadGoogleFont(prefs.fontFamily || "Montserrat");
   root.style.setProperty("--user-radius", prefs.borderRadius === "sharp" ? "2px" : prefs.borderRadius === "soft" ? "8px" : "16px");
-  root.style.setProperty("--user-density", prefs.density === "compact" ? "0.75rem" : prefs.density === "spacious" ? "1.5rem" : "1rem");
   const animOff = !prefs.animationsEnabled || prefs.reducedMotion;
   root.style.setProperty("--user-anim-duration", animOff ? "0s" : "unset");
   root.style.setProperty("--user-reduced-motion", prefs.reducedMotion ? "true" : "false");
