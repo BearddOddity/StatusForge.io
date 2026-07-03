@@ -1,22 +1,22 @@
 {
   "api_keys": {
-    "igdb_client": "YOUR_IGDB_CLIENT_ID",
-    "igdb_secret": "YOUR_IGDB_SECRET",
+    "igdb_client": "",
+    "igdb_secret": "",
     "igdb_token": "",
-    "rawg": "YOUR_RAWG_API_KEY",
-    "steamgrid": "YOUR_STEAMGRID_API_KEY"
+    "rawg": "",
+    "steamgrid": ""
   },
   "broadcaster": {
-    "kick_channel_id": "YOUR_KICK_CHANNEL_ID",
-    "kick_client": "YOUR_KICK_CLIENT_ID",
+    "kick_channel_id": "",
+    "kick_client": "",
     "kick_refresh": "",
-    "kick_secret": "YOUR_KICK_SECRET",
+    "kick_secret": "",
     "kick_token": "",
     "routing_mode": "native",
-    "twitch_broadcaster_id": "YOUR_TWITCH_BROADCASTER_ID",
-    "twitch_client": "YOUR_TWITCH_CLIENT_ID",
+    "twitch_broadcaster_id": "",
+    "twitch_client": "",
     "twitch_refresh": "",
-    "twitch_secret": "YOUR_TWITCH_SECRET",
+    "twitch_secret": "",
     "twitch_token": ""
   },
   "engine_settings": {

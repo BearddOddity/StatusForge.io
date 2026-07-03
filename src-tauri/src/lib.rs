@@ -41,19 +41,42 @@ fn init_app_base_dir(app: &tauri::AppHandle) {
     };
 
     // First run: bootstrap Config.json from the bundled template.
+    //
+    // Parsed through AppConfig and re-serialized rather than a raw file copy:
+    // ApiKeys/BroadcasterConfig fields use skip_serializing_if = "String::is_empty"
+    // specifically so an unset credential is *absent* from the JSON (which is
+    // what the frontend's "is this integration active" checks key off of) —
+    // a byte-for-byte copy would bypass that entirely and ship whatever the
+    // template's raw text happens to contain (e.g. a literal "" or leftover
+    // placeholder value) as if the key were already present.
     let config_path = base.join("Config.json");
     if !config_path.exists() {
         let template = base.join("Config.json.template");
         if template.exists() {
-            if let Err(e) = std::fs::copy(&template, &config_path) {
-                log::warn!("Failed to bootstrap Config.json from template: {}", e);
-            } else {
-                log::info!("Bootstrapped Config.json from template");
-                // The template ships a placeholder widget token; give each fresh
-                // install a unique one so overlay widgets authenticate.
-                if let Err(e) = auth::rotate_widget_token(&base) {
-                    log::warn!("Failed to generate initial widget token: {}", e);
+            let bootstrapped = std::fs::read_to_string(&template)
+                .map_err(|e| format!("read template: {}", e))
+                .and_then(|content| {
+                    serde_json::from_str::<AppConfig>(&content)
+                        .map_err(|e| format!("parse template: {}", e))
+                })
+                .and_then(|config| {
+                    serde_json::to_string_pretty(&config)
+                        .map_err(|e| format!("serialize config: {}", e))
+                })
+                .and_then(|json| {
+                    std::fs::write(&config_path, json)
+                        .map_err(|e| format!("write Config.json: {}", e))
+                });
+            match bootstrapped {
+                Ok(()) => {
+                    log::info!("Bootstrapped Config.json from template");
+                    // The template ships a placeholder widget token; give each fresh
+                    // install a unique one so overlay widgets authenticate.
+                    if let Err(e) = auth::rotate_widget_token(&base) {
+                        log::warn!("Failed to generate initial widget token: {}", e);
+                    }
                 }
+                Err(e) => log::warn!("Failed to bootstrap Config.json from template: {}", e),
             }
         }
     }
