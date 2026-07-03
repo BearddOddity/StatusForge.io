@@ -97,9 +97,17 @@ fn build_popup_response(platform: &str, success: bool, error_msg: &str) -> Strin
         format!("{} Connection Failed", capitalize(platform))
     };
     let icon = if success { "&#10003;" } else { "&#10007;" };
-    let bg = if success { "rgba(76,175,80,0.12)" } else { "rgba(244,67,54,0.12)" };
+    let bg = if success {
+        "rgba(76,175,80,0.12)"
+    } else {
+        "rgba(244,67,54,0.12)"
+    };
     let fg = if success { "#4caf50" } else { "#f44336" };
-    let border = if success { "rgba(76,175,80,0.2)" } else { "rgba(244,67,54,0.2)" };
+    let border = if success {
+        "rgba(76,175,80,0.2)"
+    } else {
+        "rgba(244,67,54,0.2)"
+    };
     let msg = if success {
         "You can close this window."
     } else {
@@ -142,8 +150,15 @@ try{{window.opener&&window.opener.postMessage({payload},"{origin}")}}catch(e){{}
 setTimeout(function(){{window.close()}},1500);
 </script>
 </body></html>"#,
-        bg = bg, fg = fg, border = border, icon = icon, title = title, msg = msg,
-        detail = detail, payload = payload, origin = WEBVIEW_ORIGIN,
+        bg = bg,
+        fg = fg,
+        border = border,
+        icon = icon,
+        title = title,
+        msg = msg,
+        detail = detail,
+        payload = payload,
+        origin = WEBVIEW_ORIGIN,
     )
 }
 
@@ -196,7 +211,11 @@ pub async fn oauth_callback(
     let code = match params.code {
         Some(c) if !c.is_empty() => c,
         _ => {
-            return Html(build_popup_response(&platform, false, "No authorization code received"));
+            return Html(build_popup_response(
+                &platform,
+                false,
+                "No authorization code received",
+            ));
         }
     };
 
@@ -211,7 +230,9 @@ pub async fn oauth_callback(
     };
 
     match platform.as_str() {
-        "kick" => handle_kick_callback(code, params.state, &mut config, &base_dir, &oauth_state).await,
+        "kick" => {
+            handle_kick_callback(code, params.state, &mut config, &base_dir, &oauth_state).await
+        }
         "twitch" => handle_twitch_callback(code, &mut config, &base_dir).await,
         other => Html(build_popup_response(other, false, "Unknown platform")),
     }
@@ -231,23 +252,38 @@ async fn handle_kick_callback(
     };
     let pkce = match pkce {
         Some(p) => p,
-        None => return Html(build_popup_response("kick", false, "No PKCE state — possible CSRF")),
+        None => {
+            return Html(build_popup_response(
+                "kick",
+                false,
+                "No PKCE state — possible CSRF",
+            ))
+        }
     };
     if state.as_ref() != Some(&pkce.state) {
-        return Html(build_popup_response("kick", false, "State mismatch — possible CSRF"));
+        return Html(build_popup_response(
+            "kick",
+            false,
+            "State mismatch — possible CSRF",
+        ));
     }
 
     let client_id = &config.broadcaster.kick_client;
     let client_secret = &config.broadcaster.kick_secret;
     if client_id.is_empty() || client_secret.is_empty() {
-        return Html(build_popup_response("kick", false, "Kick client_id or secret not configured"));
+        return Html(build_popup_response(
+            "kick",
+            false,
+            "Kick client_id or secret not configured",
+        ));
     }
 
     // Exchange code for tokens
-    let token_resp = match exchange_kick_token(&code, client_id, client_secret, &pkce.verifier).await {
-        Ok(r) => r,
-        Err(e) => return Html(build_popup_response("kick", false, &e)),
-    };
+    let token_resp =
+        match exchange_kick_token(&code, client_id, client_secret, &pkce.verifier).await {
+            Ok(r) => r,
+            Err(e) => return Html(build_popup_response("kick", false, &e)),
+        };
 
     config.broadcaster.kick_token = token_resp.access_token.clone();
     config.broadcaster.kick_refresh = token_resp.refresh_token.clone().unwrap_or_default();
@@ -275,7 +311,11 @@ async fn handle_twitch_callback(
     let client_id = &config.broadcaster.twitch_client;
     let client_secret = &config.broadcaster.twitch_secret;
     if client_id.is_empty() || client_secret.is_empty() {
-        return Html(build_popup_response("twitch", false, "Twitch client_id or secret not configured"));
+        return Html(build_popup_response(
+            "twitch",
+            false,
+            "Twitch client_id or secret not configured",
+        ));
     }
 
     let token_resp = match exchange_twitch_token(&code, client_id, client_secret) {
@@ -345,10 +385,16 @@ async fn exchange_kick_token(
         .map_err(|e| format!("Kick token exchange failed: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Kick token exchange: {}", resp.text().await.unwrap_or_default()));
+        return Err(format!(
+            "Kick token exchange: {}",
+            resp.text().await.unwrap_or_default()
+        ));
     }
 
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Kick token parse error: {}", e))?;
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Kick token parse error: {}", e))?;
     Ok(TokenResponse {
         access_token: json["access_token"].as_str().unwrap_or("").to_string(),
         refresh_token: json["refresh_token"].as_str().map(|s| s.to_string()),
@@ -381,10 +427,15 @@ fn exchange_twitch_token(
         .map_err(|e| format!("Twitch token exchange failed: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Twitch token exchange: {}", resp.text().unwrap_or_default()));
+        return Err(format!(
+            "Twitch token exchange: {}",
+            resp.text().unwrap_or_default()
+        ));
     }
 
-    let json: serde_json::Value = resp.json().map_err(|e| format!("Twitch token parse error: {}", e))?;
+    let json: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Twitch token parse error: {}", e))?;
     Ok(TokenResponse {
         access_token: json["access_token"].as_str().unwrap_or("").to_string(),
         refresh_token: json["refresh_token"].as_str().map(|s| s.to_string()),
@@ -392,7 +443,10 @@ fn exchange_twitch_token(
     })
 }
 
-async fn fetch_twitch_broadcaster_id(access_token: &str, client_id: &str) -> Result<String, String> {
+async fn fetch_twitch_broadcaster_id(
+    access_token: &str,
+    client_id: &str,
+) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
@@ -410,7 +464,10 @@ async fn fetch_twitch_broadcaster_id(access_token: &str, client_id: &str) -> Res
         return Err(format!("Twitch users request returned {}", resp.status()));
     }
 
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Twitch users parse error: {}", e))?;
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Twitch users parse error: {}", e))?;
     Ok(json["data"][0]["id"].as_str().unwrap_or("").to_string())
 }
 
@@ -448,7 +505,9 @@ pub fn refresh_kick_token(config: &AppConfig) -> Result<String, String> {
         return Err(format!("Kick refresh: {}", resp.text().unwrap_or_default()));
     }
 
-    let json: serde_json::Value = resp.json().map_err(|e| format!("Kick refresh parse error: {}", e))?;
+    let json: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Kick refresh parse error: {}", e))?;
     Ok(json["access_token"].as_str().unwrap_or("").to_string())
 }
 
@@ -479,10 +538,15 @@ pub fn refresh_twitch_token(config: &AppConfig) -> Result<String, String> {
         .map_err(|e| format!("Twitch refresh failed: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Twitch refresh: {}", resp.text().unwrap_or_default()));
+        return Err(format!(
+            "Twitch refresh: {}",
+            resp.text().unwrap_or_default()
+        ));
     }
 
-    let json: serde_json::Value = resp.json().map_err(|e| format!("Twitch refresh parse error: {}", e))?;
+    let json: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Twitch refresh parse error: {}", e))?;
     Ok(json["access_token"].as_str().unwrap_or("").to_string())
 }
 
@@ -490,7 +554,10 @@ pub fn refresh_twitch_token(config: &AppConfig) -> Result<String, String> {
 // Kick Category Database Sync
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub async fn sync_kick_database(access_token: &str, base_dir: &std::path::Path) -> Result<(), String> {
+pub async fn sync_kick_database(
+    access_token: &str,
+    base_dir: &std::path::Path,
+) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
@@ -508,10 +575,17 @@ pub async fn sync_kick_database(access_token: &str, base_dir: &std::path::Path) 
         return Err(format!("Kick categories returned {}", resp.status()));
     }
 
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Kick categories parse error: {}", e))?;
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Kick categories parse error: {}", e))?;
 
     let categories: Vec<serde_json::Value> = match &json {
-        serde_json::Value::Object(m) => m.get("data").and_then(|d| d.as_array()).cloned().unwrap_or_default(),
+        serde_json::Value::Object(m) => m
+            .get("data")
+            .and_then(|d| d.as_array())
+            .cloned()
+            .unwrap_or_default(),
         serde_json::Value::Array(a) => a.clone(),
         _ => Vec::new(),
     };
@@ -528,8 +602,12 @@ pub async fn sync_kick_database(access_token: &str, base_dir: &std::path::Path) 
         let json_str = serde_json::to_string_pretty(&kick_map)
             .map_err(|e| format!("Kick DB serialize error: {}", e))?;
         let tmp = kick_db_path.with_extension("tmp");
-        tokio::fs::write(&tmp, json_str).await.map_err(|e| format!("Kick DB write error: {}", e))?;
-        tokio::fs::rename(&tmp, &kick_db_path).await.map_err(|e| format!("Kick DB rename error: {}", e))?;
+        tokio::fs::write(&tmp, json_str)
+            .await
+            .map_err(|e| format!("Kick DB write error: {}", e))?;
+        tokio::fs::rename(&tmp, &kick_db_path)
+            .await
+            .map_err(|e| format!("Kick DB rename error: {}", e))?;
         log::info!("[AUTH] Kick database synced: {} categories", kick_map.len());
     }
 

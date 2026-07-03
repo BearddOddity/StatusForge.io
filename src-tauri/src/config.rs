@@ -276,10 +276,13 @@ fn default_sb_action_name() -> String {
 fn default_widget_token() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    (0..16).map(|_| {
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        CHARSET[rng.gen_range(0..CHARSET.len())] as char
-    }).collect()
+    (0..16)
+        .map(|_| {
+            const CHARSET: &[u8] =
+                b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            CHARSET[rng.gen_range(0..CHARSET.len())] as char
+        })
+        .collect()
 }
 fn default_spark_pin() -> String {
     "0000".to_string()
@@ -357,7 +360,9 @@ impl AppConfig {
         if self.engine_settings.widget_fade_timer == 0 {
             errors.push("widget_fade_timer must be > 0".to_string());
         }
-        if self.engine_settings.confidence_threshold < 0.0 || self.engine_settings.confidence_threshold > 1.0 {
+        if self.engine_settings.confidence_threshold < 0.0
+            || self.engine_settings.confidence_threshold > 1.0
+        {
             errors.push("confidence_threshold must be between 0.0 and 1.0".to_string());
         }
         if self.engine_settings.ram_threshold > 100 {
@@ -369,7 +374,13 @@ impl AppConfig {
         if self.engine_settings.sb_action_name.len() > 100 {
             errors.push("sb_action_name too long (max 100 chars)".to_string());
         }
-        if self.engine_settings.spark_pin.len() != 4 || !self.engine_settings.spark_pin.chars().all(|c| c.is_ascii_digit()) {
+        if self.engine_settings.spark_pin.len() != 4
+            || !self
+                .engine_settings
+                .spark_pin
+                .chars()
+                .all(|c| c.is_ascii_digit())
+        {
             errors.push("spark_pin must be 4 digits".to_string());
         }
 
@@ -407,15 +418,21 @@ impl AppConfig {
         self.engine_settings.scan_interval = self.engine_settings.scan_interval.clamp(2, 300);
         self.engine_settings.grace_period = self.engine_settings.grace_period.clamp(0, 300);
         self.engine_settings.widget_poll_rate = self.engine_settings.widget_poll_rate.clamp(1, 60);
-        self.engine_settings.widget_fade_timer = self.engine_settings.widget_fade_timer.clamp(1, 300);
-        self.engine_settings.confidence_threshold = self.engine_settings.confidence_threshold.clamp(0.0, 1.0);
+        self.engine_settings.widget_fade_timer =
+            self.engine_settings.widget_fade_timer.clamp(1, 300);
+        self.engine_settings.confidence_threshold =
+            self.engine_settings.confidence_threshold.clamp(0.0, 1.0);
         self.engine_settings.ram_threshold = self.engine_settings.ram_threshold.clamp(0, 100);
 
         // Truncate strings
         self.engine_settings.idle_category.truncate(100);
         self.engine_settings.sb_action_name.truncate(100);
         if self.engine_settings.spark_pin.len() != 4
-            || !self.engine_settings.spark_pin.chars().all(|c| c.is_ascii_digit())
+            || !self
+                .engine_settings
+                .spark_pin
+                .chars()
+                .all(|c| c.is_ascii_digit())
         {
             self.engine_settings.spark_pin = "0000".to_string();
         }

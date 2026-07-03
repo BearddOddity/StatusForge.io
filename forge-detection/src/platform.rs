@@ -26,9 +26,8 @@ pub struct ActiveWindow {
 pub fn get_active_window() -> Option<ActiveWindow> {
     use windows::Win32::Foundation::RECT;
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowTextLengthW,
-        GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, GWL_STYLE, WS_BORDER,
-        WS_CAPTION,
+        GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
+        GetWindowThreadProcessId, IsWindowVisible, GWL_STYLE, WS_BORDER, WS_CAPTION,
     };
 
     unsafe {
@@ -209,10 +208,8 @@ mod macos {
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGPreflightScreenCaptureAccess() -> bool;
-        fn CGRectMakeWithDictionaryRepresentation(
-            dict: CFDictionaryRef,
-            rect: *mut CGRect,
-        ) -> bool;
+        fn CGRectMakeWithDictionaryRepresentation(dict: CFDictionaryRef, rect: *mut CGRect)
+            -> bool;
     }
 
     /// True when the app has the Screen Recording permission (required to read
@@ -243,7 +240,8 @@ mod macos {
             kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
             kCGNullWindowID,
         )?;
-        let info: CFArray<CFType> = unsafe { CFArray::wrap_under_get_rule(info.as_concrete_TypeRef()) };
+        let info: CFArray<CFType> =
+            unsafe { CFArray::wrap_under_get_rule(info.as_concrete_TypeRef()) };
 
         let key_pid = CFString::from_static_string("kCGWindowOwnerPID");
         let key_name = CFString::from_static_string("kCGWindowName");
@@ -252,8 +250,9 @@ mod macos {
 
         // The window list is front-to-back; take the first layer-0 window for our pid.
         for item in info.iter() {
-            let dict: CFDictionary<CFString, CFType> =
-                unsafe { CFDictionary::wrap_under_get_rule(item.as_CFTypeRef() as CFDictionaryRef) };
+            let dict: CFDictionary<CFString, CFType> = unsafe {
+                CFDictionary::wrap_under_get_rule(item.as_CFTypeRef() as CFDictionaryRef)
+            };
 
             let owner_pid = dict
                 .find(&key_pid)
@@ -310,7 +309,8 @@ mod macos {
 pub fn get_active_window() -> Option<ActiveWindow> {
     let pid = macos::frontmost_app_pid()?;
 
-    let (title, rect) = macos::front_window_for_pid(pid).unwrap_or((String::new(), Default::default()));
+    let (title, rect) =
+        macos::front_window_for_pid(pid).unwrap_or((String::new(), Default::default()));
 
     let (disp_w, disp_h) = macos::main_display_size();
     let (x, y, w, h) = (
@@ -338,8 +338,7 @@ pub fn get_active_window() -> Option<ActiveWindow> {
 #[cfg(target_os = "macos")]
 pub fn read_steam_running_app_id() -> Option<u32> {
     let home = std::env::var_os("HOME")?;
-    let path = std::path::Path::new(&home)
-        .join("Library/Application Support/Steam/registry.vdf");
+    let path = std::path::Path::new(&home).join("Library/Application Support/Steam/registry.vdf");
     parse_registry_vdf_running_app_id(&std::fs::read_to_string(path).ok()?)
 }
 
@@ -411,6 +410,9 @@ mod tests {
             parse_registry_vdf_running_app_id("\"RunningAppID\"\t\t\"0\""),
             Some(0)
         );
-        assert_eq!(parse_registry_vdf_running_app_id("\"language\" \"english\""), None);
+        assert_eq!(
+            parse_registry_vdf_running_app_id("\"language\" \"english\""),
+            None
+        );
     }
 }

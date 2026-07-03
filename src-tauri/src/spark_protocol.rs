@@ -92,13 +92,15 @@ fn canonical_string(hb: &Heartbeat) -> String {
         hb.process.as_deref().unwrap_or(""),
         hb.pin,
         hb.command,
-        hb.timestamp.map(|t| format!("{:.3}", t)).unwrap_or_default(),
+        hb.timestamp
+            .map(|t| format!("{:.3}", t))
+            .unwrap_or_default(),
     )
 }
 
 fn compute_hmac(hb: &Heartbeat, secret: &str) -> String {
-    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts any key length");
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
     mac.update(canonical_string(hb).as_bytes());
     hex_encode(&mac.finalize().into_bytes())
 }
@@ -143,8 +145,7 @@ pub fn validate_heartbeat(
     expected_pin: &str,
     pairing_key: &str,
 ) -> Result<Heartbeat, HeartbeatError> {
-    let hb: Heartbeat =
-        serde_json::from_slice(data).map_err(|_| HeartbeatError::NotAHeartbeat)?;
+    let hb: Heartbeat = serde_json::from_slice(data).map_err(|_| HeartbeatError::NotAHeartbeat)?;
     if hb.app != "StatusForge_Spark" || hb.command != "heartbeat" {
         return Err(HeartbeatError::NotAHeartbeat);
     }
@@ -160,10 +161,9 @@ pub fn validate_heartbeat(
         return Err(HeartbeatError::MissingSignature);
     };
     // Verify via the hmac crate's constant-time comparison.
-    let mut mac = Hmac::<Sha256>::new_from_slice(
-        shared_secret(expected_pin, pairing_key).as_bytes(),
-    )
-    .expect("HMAC accepts any key length");
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(shared_secret(expected_pin, pairing_key).as_bytes())
+            .expect("HMAC accepts any key length");
     mac.update(canonical_string(&hb).as_bytes());
     let sig_bytes = hex_decode(sig).ok_or(HeartbeatError::BadSignature)?;
     if mac.verify_slice(&sig_bytes).is_err() {
@@ -188,7 +188,13 @@ mod tests {
 
     #[test]
     fn signed_heartbeat_roundtrip() {
-        let hb = build_heartbeat("GAMING-PC", Some("ELDEN RING"), Some("eldenring.exe"), "4242", "key");
+        let hb = build_heartbeat(
+            "GAMING-PC",
+            Some("ELDEN RING"),
+            Some("eldenring.exe"),
+            "4242",
+            "key",
+        );
         let bytes = serde_json::to_vec(&hb).unwrap();
         let out = validate_heartbeat(&bytes, "4242", "key").unwrap();
         assert_eq!(out.game.as_deref(), Some("ELDEN RING"));

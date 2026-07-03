@@ -14,7 +14,10 @@ use std::time::Duration;
 use crate::config::{ApiKeys, ForgeLibraryEntry};
 
 /// Fill empty fields of `existing` from `fetched`. Pure — unit tested below.
-pub fn merge_entry(mut existing: ForgeLibraryEntry, fetched: &ForgeLibraryEntry) -> ForgeLibraryEntry {
+pub fn merge_entry(
+    mut existing: ForgeLibraryEntry,
+    fetched: &ForgeLibraryEntry,
+) -> ForgeLibraryEntry {
     macro_rules! fill {
         ($($f:ident),*) => {$(
             if existing.$f.is_empty() && !fetched.$f.is_empty() {
@@ -22,7 +25,16 @@ pub fn merge_entry(mut existing: ForgeLibraryEntry, fetched: &ForgeLibraryEntry)
             }
         )*};
     }
-    fill!(genre, release_year, developer, publisher, cover_url, igdb_id, rawg_id, sgdb_id);
+    fill!(
+        genre,
+        release_year,
+        developer,
+        publisher,
+        cover_url,
+        igdb_id,
+        rawg_id,
+        sgdb_id
+    );
     existing
 }
 
@@ -49,7 +61,8 @@ pub async fn scan(title: &str, keys: &ApiKeys, existing: ForgeLibraryEntry) -> F
         }
     }
 
-    if !keys.igdb_client.is_empty() && (!keys.igdb_token.is_empty() || !keys.igdb_secret.is_empty()) {
+    if !keys.igdb_client.is_empty() && (!keys.igdb_token.is_empty() || !keys.igdb_secret.is_empty())
+    {
         match fetch_igdb(&client, title, keys).await {
             Ok(e) => fetched = merge_entry(fetched, &e),
             Err(e) => log::warn!("[META] IGDB failed: {}", e),
@@ -95,10 +108,21 @@ async fn fetch_rawg(
     let json = get_json(client.get(&url)).await?;
     let g = json["results"].get(0).ok_or("no RAWG results")?;
     Ok(ForgeLibraryEntry {
-        release_year: g["released"].as_str().unwrap_or("").chars().take(4).collect(),
+        release_year: g["released"]
+            .as_str()
+            .unwrap_or("")
+            .chars()
+            .take(4)
+            .collect(),
         genre: g["genres"][0]["name"].as_str().unwrap_or("").to_string(),
-        developer: g["developers"][0]["name"].as_str().unwrap_or("").to_string(),
-        publisher: g["publishers"][0]["name"].as_str().unwrap_or("").to_string(),
+        developer: g["developers"][0]["name"]
+            .as_str()
+            .unwrap_or("")
+            .to_string(),
+        publisher: g["publishers"][0]["name"]
+            .as_str()
+            .unwrap_or("")
+            .to_string(),
         cover_url: g["background_image"].as_str().unwrap_or("").to_string(),
         rawg_id: g["id"].as_u64().map(|v| v.to_string()).unwrap_or_default(),
         ..Default::default()
@@ -177,7 +201,12 @@ async fn fetch_igdb(
 
     let cover_url = g["cover"]["image_id"]
         .as_str()
-        .map(|id| format!("https://images.igdb.com/igdb/image/upload/t_cover_big/{}.jpg", id))
+        .map(|id| {
+            format!(
+                "https://images.igdb.com/igdb/image/upload/t_cover_big/{}.jpg",
+                id
+            )
+        })
         .unwrap_or_default();
 
     Ok(ForgeLibraryEntry {
@@ -202,7 +231,9 @@ async fn fetch_sgdb(
         urlencoding::encode(title)
     );
     let json = get_json(client.get(&search_url).bearer_auth(key)).await?;
-    let id = json["data"][0]["id"].as_u64().ok_or("no SteamGridDB results")?;
+    let id = json["data"][0]["id"]
+        .as_u64()
+        .ok_or("no SteamGridDB results")?;
 
     let grids_url = format!(
         "https://www.steamgriddb.com/api/v2/grids/game/{}?dimensions=600x900",

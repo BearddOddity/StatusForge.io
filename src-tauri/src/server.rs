@@ -93,7 +93,8 @@ pub fn load_db() -> Result<ForgeDatabase, String> {
     }
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read Forge_Database.json: {}", e))?;
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse Forge_Database.json: {}", e))
+    serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse Forge_Database.json: {}", e))
 }
 
 /// Atomic write (temp + rename), same as the Config.json save path.
@@ -138,7 +139,10 @@ pub fn upsert_library_entry(
         };
         obj.insert(key.to_string(), v.clone());
     }
-    obj.insert("title".to_string(), serde_json::Value::String(title.clone()));
+    obj.insert(
+        "title".to_string(),
+        serde_json::Value::String(title.clone()),
+    );
     let entry: crate::config::ForgeLibraryEntry =
         serde_json::from_value(serde_json::Value::Object(obj))
             .map_err(|e| format!("invalid entry fields: {}", e))?;
@@ -158,7 +162,9 @@ async fn forge_full_handler(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     check_token(&headers, q.token.as_deref())?;
     let db = load_db().map_err(internal)?;
-    Ok(Json(serde_json::to_value(db.library).map_err(|e| internal(e.to_string()))?))
+    Ok(Json(
+        serde_json::to_value(db.library).map_err(|e| internal(e.to_string()))?,
+    ))
 }
 
 async fn exiled_apps_handler(
@@ -212,7 +218,9 @@ async fn export_meta_handler(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     check_token(&headers, q.token.as_deref())?;
     let db = load_db().map_err(internal)?;
-    Ok(Json(serde_json::to_value(db).map_err(|e| internal(e.to_string()))?))
+    Ok(Json(
+        serde_json::to_value(db).map_err(|e| internal(e.to_string()))?,
+    ))
 }
 
 async fn import_meta_handler(
@@ -249,16 +257,16 @@ async fn scan_metadata_handler(
     let merged = crate::metadata::scan(&title, &keys, existing).await;
     db.library.insert(title, merged.clone());
     save_db(&db).map_err(internal)?;
-    Ok(Json(serde_json::to_value(merged).map_err(|e| internal(e.to_string()))?))
+    Ok(Json(
+        serde_json::to_value(merged).map_err(|e| internal(e.to_string()))?,
+    ))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Browser-initiated OAuth logins (mirror the kick_login/twitch_login commands)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async fn kick_login_handler(
-    State(state): State<ServerState>,
-) -> Result<Redirect, StatusCode> {
+async fn kick_login_handler(State(state): State<ServerState>) -> Result<Redirect, StatusCode> {
     let config = load_config().ok_or_else(|| internal("Config.json unavailable".into()))?;
     let client_id = config.broadcaster.kick_client;
     if client_id.is_empty() {
@@ -287,7 +295,9 @@ async fn twitch_login_handler() -> Result<Redirect, StatusCode> {
     if client_id.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    Ok(Redirect::temporary(&crate::auth::build_twitch_auth_url(&client_id)))
+    Ok(Redirect::temporary(&crate::auth::build_twitch_auth_url(
+        &client_id,
+    )))
 }
 
 /// Build the status payload the overlays consume — game info from the native
@@ -322,7 +332,11 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
                         .and_then(|e| e.as_object())
                     {
                         let s = |k: &str| {
-                            entry.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string()
+                            entry
+                                .get(k)
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string()
                         };
                         genre = s("genre");
                         developer = s("developer");
