@@ -80,11 +80,38 @@ fn read_pairing() -> (String, String) {
     }
 }
 
+/// Best-effort: load config + Forge DB and push the idle category. Used
+/// when a SPARK-sourced game clears, mirroring the native loop's
+/// grace-period-expired path. Never errors — logs and gives up quietly,
+/// same as every other pusher call site.
+fn push_idle_category(base: &std::path::Path) {
+    let Ok(config) = crate::auth::load_config_at(base) else {
+        return;
+    };
+    let forge_db: crate::config::ForgeDatabase =
+        std::fs::read_to_string(base.join("Forge_Database.json"))
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default();
+    crate::pusher::push_category(
+        base,
+        &config,
+        &forge_db,
+        &config.engine_settings.idle_category,
+    );
+}
+
 /// Apply a validated heartbeat to the shared engine state so overlays and the
 /// frontend update exactly as with local detection.
+///
+/// SPARK only detects and forwards — no game database, no metadata, no
+/// platform pushes on its side. This app is what finds metadata and pushes
+/// categories, so a SPARK-sourced detection gets funneled through the same
+/// `on_game_detected` a local detection uses (needs a real AppHandle, so
+/// this is skipped in the unit tests that pass `None`).
 pub fn apply_heartbeat(
     hub: &HubState,
-    engine: &NativeEngineState,
+    engine: &Arc<NativeEngineState>,
     hb: &spark_protocol::Heartbeat,
     app_handle: Option<&tauri::AppHandle>,
 ) {
@@ -120,6 +147,19 @@ pub fn apply_heartbeat(
             *engine.start_time.lock().unwrap() = now_secs();
             if let Some(app) = app_handle {
                 let _ = app.emit("game-detected", &detection);
+
+                if let Ok(base) = crate::app_base_dir() {
+                    if let Ok(config) = crate::auth::load_config_at(&base) {
+                        crate::on_game_detected(
+                            &base,
+                            &config,
+                            &detection.title,
+                            &detection.process,
+                            engine,
+                            app,
+                        );
+                    }
+                }
             }
         }
         (None, _) => {
@@ -139,6 +179,9 @@ pub fn apply_heartbeat(
                 if let Some(app) = app_handle {
                     let _ = app.emit("game-cleared", "SPARK idle");
                 }
+                if let Ok(base) = crate::app_base_dir() {
+                    push_idle_category(&base);
+                }
             }
         }
     }
@@ -149,7 +192,7 @@ pub fn apply_heartbeat(
 /// Pure enough for the in-process dual-PC integration test.
 pub fn handle_packet(
     hub: &HubState,
-    engine: &NativeEngineState,
+    engine: &Arc<NativeEngineState>,
     data: &[u8],
     pin: &str,
     pairing_key: &str,
