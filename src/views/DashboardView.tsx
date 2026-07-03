@@ -12,7 +12,7 @@ const overlays = [
   { id: "vt", label: "Vertical", file: "Vertical.html", icon: "▼", preview: "" },
 ];
 
-const dummyToken = "kN2x9mYpQ7vB3wR8";
+const dummyToken = "kN2x9mYpQ7vB3wR8"; // gitleaks:allow — fake placeholder for the overlay-URL preview, not a real token
 
 const platformDefs = [
   {

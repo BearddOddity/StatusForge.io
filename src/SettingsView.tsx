@@ -966,26 +966,28 @@ function EngineSubTab({
 }
 
 // ─── Default config fallback for dev mode (when the Tauri backend is not running) ──
+// Deliberately empty/inert — never hardcode real keys, tokens, or IDs here.
+// This is a fallback shown before any real config loads, not a fixture.
 const defaultConfig: AppConfig = {
   api_keys: {
-    steamgrid: "***REMOVED***",
-    rawg: "***REMOVED***",
+    steamgrid: "",
+    rawg: "",
     igdb_client: "",
     igdb_secret: "",
-    igdb_token: "***REMOVED***",
+    igdb_token: "",
   },
   broadcaster: {
     routing_mode: "native" as const,
-    twitch_client: "***REMOVED***",
-    twitch_secret: "***REMOVED***",
-    twitch_token: "***REMOVED***",
-    twitch_refresh: "***REMOVED***",
-    twitch_broadcaster_id: "704830285",
-    kick_client: "***REMOVED***",
-    kick_secret: "***REMOVED***",
-    kick_channel_id: "bearddoddity",
-    kick_token: "***REMOVED***",
-    kick_refresh: "***REMOVED***",
+    twitch_client: "",
+    twitch_secret: "",
+    twitch_token: "",
+    twitch_refresh: "",
+    twitch_broadcaster_id: "",
+    kick_client: "",
+    kick_secret: "",
+    kick_channel_id: "",
+    kick_token: "",
+    kick_refresh: "",
   },
   engine_settings: {
     idle_category: "Just Chatting",
@@ -998,7 +1000,7 @@ const defaultConfig: AppConfig = {
     widget_fade_timer: 15,
     strict_forge_mode: false,
     sb_action_name: "UpdateCategory",
-    widget_token: "***REMOVED***",
+    widget_token: "",
     spark_pin: "0000",
     spark_pairing_key: "",
     emulator_detection: true,
