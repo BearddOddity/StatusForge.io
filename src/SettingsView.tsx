@@ -2287,21 +2287,7 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
-              <span className="text-xs text-white/75 font-medium">Developer Tools</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Toggle inspect element and dev console
-              </p>
-            </div>
-            <button
-              onClick={() => tauriApi("open_devtools")}
-              className="text-[10px] px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20"
-            >
-              Open DevTools
-            </button>
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Dev Tools Tab</span>
+              <span className="text-xs text-white/75 font-medium">Dev Tools</span>
               <p className="text-[10px] text-white/35 mt-0.5">
                 Show the Dev Tools sidebar tab (log terminal + diagnostics)
               </p>
