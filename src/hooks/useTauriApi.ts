@@ -47,7 +47,11 @@ export async function fetchConfig(): Promise<AppConfig | null> {
 
 export async function saveConfig(config: AppConfig): Promise<string> {
   const res = await tauriApi("import_config", { config });
-  return typeof res === "string" ? res : "Failed to save";
+  if (typeof res === "string") return res;
+  // Surface the real backend error (e.g. validation failure) instead of a
+  // generic message, so the user knows why the save was rejected.
+  const err = res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
+  return err ? `Failed to save: ${err}` : "Failed to save";
 }
 
 export async function getDetectionMode(): Promise<string> {

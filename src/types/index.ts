@@ -56,6 +56,7 @@ export interface EngineSettings {
   widget_token: string;
   // Spark / dual-PC
   spark_pin: string;
+  spark_pairing_key: string;
   // Detection pipeline
   emulator_detection: boolean;
   ram_threshold: number;
