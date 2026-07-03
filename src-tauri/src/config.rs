@@ -18,19 +18,26 @@ pub struct AppConfig {
     pub broadcaster: BroadcasterConfig,
 }
 
-/// API keys for external services
+/// API keys for external services.
+///
+/// Every field omits itself from serialized output when empty
+/// (`skip_serializing_if`). Without this, a key the user "removes" in the UI
+/// (which just clears the JS object's property locally) would round-trip
+/// through export_config as `{ "steamgrid": "" }` — present, just empty —
+/// and the frontend's active-key check (`Object.keys(...)`) would see it as
+/// still configured, making the removal silently not stick across a reload.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(default)]
 pub struct ApiKeys {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub steamgrid: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub rawg: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub igdb_client: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub igdb_secret: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub igdb_token: String,
 }
 
@@ -127,31 +134,33 @@ impl Default for EngineSettings {
 // selector was removed. Old configs containing a `detection` section or an
 // `engine_settings.detection_mode` field still parse: unknown keys are ignored.
 
-/// Broadcaster/platform configuration
+/// Broadcaster/platform configuration. Same skip-empty-on-serialize reasoning
+/// as `ApiKeys` — removing a routing integration must actually make it
+/// disappear from the exported config, not just report an empty string.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(default)]
 pub struct BroadcasterConfig {
     #[serde(default = "default_routing_mode")]
     pub routing_mode: RoutingMode,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub twitch_client: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub twitch_secret: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub twitch_token: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub twitch_refresh: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub twitch_broadcaster_id: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub kick_client: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub kick_secret: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub kick_channel_id: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub kick_token: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub kick_refresh: String,
 }
 
@@ -364,14 +373,12 @@ impl AppConfig {
             errors.push("spark_pin must be 4 digits".to_string());
         }
 
-        // Broadcaster validation — native routing needs at least one platform
-        // client (Twitch-only or Kick-only setups are valid).
-        if self.broadcaster.routing_mode == RoutingMode::Native
-            && self.broadcaster.twitch_client.is_empty()
-            && self.broadcaster.kick_client.is_empty()
-        {
-            errors.push("native routing requires a Twitch or Kick client id".to_string());
-        }
+        // No "at least one platform client" rule here on purpose: pusher.rs's
+        // push_category already no-ops safely when both tokens are empty, so
+        // this isn't protecting anything at runtime — it was actively
+        // rejecting the save when a user removed their last integration,
+        // making the removal silently fail and the old data reappear next
+        // session.
 
         // API keys - just length checks
         if self.api_keys.steamgrid.len() > 200 {
@@ -474,10 +481,13 @@ mod tests {
     }
 
     #[test]
-    fn native_routing_needs_at_least_one_client() {
+    fn native_routing_allows_any_number_of_clients() {
+        // Removing your last configured platform (leaving native routing with
+        // zero clients) must be a valid, savable state — pusher.rs already
+        // no-ops safely at runtime, so this isn't a real invariant to enforce.
         let mut c = AppConfig::default();
         c.broadcaster.routing_mode = RoutingMode::Native;
-        assert!(c.validate().is_err(), "no clients should fail");
+        assert!(c.validate().is_ok(), "zero clients should pass");
         c.broadcaster.twitch_client = "abc".into();
         assert!(c.validate().is_ok(), "twitch-only should pass");
         c.broadcaster.twitch_client.clear();
