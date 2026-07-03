@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig, EngineStatus, KeychainStatus } from "@/types";
+import type { AppConfig, EngineStatus, KeychainStatus, SystemStats } from "@/types";
 import { loadSystemPrefs } from "@/systemPrefs";
 
 
@@ -57,6 +57,14 @@ export async function saveConfig(config: AppConfig): Promise<string> {
   // generic message, so the user knows why the save was rejected.
   const err = res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
   return err ? `Failed to save: ${err}` : "Failed to save";
+}
+
+export async function getSystemStats(): Promise<SystemStats | null> {
+  const res = await tauriApi("get_system_stats");
+  if (res && typeof res === "object" && !("error" in res)) {
+    return res as SystemStats;
+  }
+  return null;
 }
 
 export async function getDetectionMode(): Promise<string> {
