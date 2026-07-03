@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -9,7 +9,7 @@ import {
 import appIcon from "../icons/icon.png";
 import type { EngineStatus, ViewId } from "@/types";
 import { fetchEngineStatus, fetchWidgetToken, tauriApi } from "@/hooks/useTauriApi";
-import { loadSystemPrefs, applySystemPrefs } from "@/systemPrefs";
+import { loadSystemPrefs, applySystemPrefs, SYSTEM_PREFS_EVENT } from "@/systemPrefs";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToasts, ToastContainer } from "@/components/Toast";
 import DashboardView from "@/views/DashboardView";
@@ -26,24 +26,24 @@ import DevView from "@/dev/DevView";
 function App() {
   const [currentView, setCurrentView] = useState<ViewId>("dashboard");
   const [appVersion] = useState("0.5.0");
-  const [devUnlocked, setDevUnlocked] = useState(false);
-  const devClickRef = useRef(0);
-  const devTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toasts, add: toast } = useToasts();
 
-  const handleDevUnlock = useCallback(() => {
-    devClickRef.current += 1;
-    if (devTimerRef.current) clearTimeout(devTimerRef.current);
-    devTimerRef.current = setTimeout(() => {
-      devClickRef.current = 0;
-    }, 3000);
-    if (devClickRef.current >= 7) {
-      setDevUnlocked(true);
-      devClickRef.current = 0;
-      if (devTimerRef.current) clearTimeout(devTimerRef.current);
-      toast("🔓 Dev Tools unlocked", "info");
-    }
-  }, [toast]);
+  // Dev Tools sidebar tab visibility is a persisted System setting (Settings >
+  // System > Developer Tools > "Dev Tools Tab"), not a hidden unlock gesture.
+  const [showDevTools, setShowDevTools] = useState(
+    () => loadSystemPrefs().showDevTools
+  );
+
+  useEffect(() => {
+    const handler = () => setShowDevTools(loadSystemPrefs().showDevTools);
+    window.addEventListener(SYSTEM_PREFS_EVENT, handler);
+    return () => window.removeEventListener(SYSTEM_PREFS_EVENT, handler);
+  }, []);
+
+  // If the tab is hidden while it's the active view, fall back to the dashboard.
+  useEffect(() => {
+    if (currentView === "dev" && !showDevTools) setCurrentView("dashboard");
+  }, [currentView, showDevTools]);
 
   const [engineStatus, setEngineStatus] = useState<EngineStatus>({
     running: false,
@@ -131,12 +131,11 @@ function App() {
         engineStatus={engineStatus}
         onRefresh={fetchStatus}
         toast={toast}
-        devUnlocked={devUnlocked}
       />
     ),
     library: <LibraryView toast={toast} />,
     dev: <DevView />,
-  }), [engineStatus, wsConnected, toast, fetchStatus, devUnlocked]);
+  }), [engineStatus, wsConnected, toast, fetchStatus]);
 
   // Sidebar collapse state lives in the theme prefs ("Sidebar Icons Only" in
   // Settings > Theme). Sync both ways: the Theme tab fires THEME_PREFS_EVENT
@@ -258,7 +257,7 @@ function App() {
         <NavButton id="library" label="Library" icon="📚" />
         <NavButton id="settings" label="Settings" icon="⚙️" />
 
-        {devUnlocked && (
+        {showDevTools && (
           <NavButton id="dev" label="Dev Tools" icon="🛠" />
         )}
 

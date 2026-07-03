@@ -22,6 +22,7 @@ export interface SystemPrefs {
   // (latest.json). Feed this into per-channel manifests once signing/releases
   // publish them.
   updateChannel: "stable" | "beta" | "closed-beta";
+  showDevTools: boolean;
 }
 
 export const defaultSystemPrefs: SystemPrefs = {
@@ -39,9 +40,11 @@ export const defaultSystemPrefs: SystemPrefs = {
   customWebhookUrl: "",
   wsAutoReconnect: true,
   updateChannel: "stable",
+  showDevTools: false,
 };
 
 export const SYSTEM_PREFS_KEY = "statusforge_system_prefs";
+export const SYSTEM_PREFS_EVENT = "sf-system-prefs-changed";
 
 export function loadSystemPrefs(): SystemPrefs {
   try {
@@ -57,6 +60,7 @@ export function saveSystemPrefs(prefs: SystemPrefs) {
     localStorage.setItem(SYSTEM_PREFS_KEY, JSON.stringify(prefs));
   } catch {}
   applySystemPrefs(prefs);
+  window.dispatchEvent(new Event(SYSTEM_PREFS_EVENT));
 }
 
 // Hardware accel can't be toggled on a live WebView2 process, so "off" honestly
