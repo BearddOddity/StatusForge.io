@@ -1755,7 +1755,7 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         defaultOpen={true}
         badge={
           <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold">
-            StatusForge v1.0.8
+            StatusForge v0.5.0
           </span>
         }
       >
@@ -1790,12 +1790,6 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
             className="px-4 py-2 rounded-lg text-xs font-semibold bg-white/[0.04] border border-white/10 text-white/70 hover:bg-white/[0.08] hover:text-white/90 transition-all cursor-pointer"
           >
             Refresh Info
-          </button>
-          <button
-            onClick={() => toast("JSON configuration exported", "success")}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-white/[0.04] border border-white/10 text-white/70 hover:bg-white/[0.08] hover:text-white/90 transition-all cursor-pointer"
-          >
-            Export Config
           </button>
         </div>
       </CollapsibleSection>
@@ -2322,7 +2316,7 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
 
 const ACCENT_PRESETS: { name: string; color: string; bg: string }[] = [
   { name: "Twitch Purple", color: "#9146FF", bg: "#080212" },
-  { name: "Kick Green", color: "#00e676", bg: "#021208" },
+  { name: "Kick Green", color: "#53FC18", bg: "#0a1403" },
   { name: "Electric Blue", color: "#3b82f6", bg: "#030818" },
   { name: "Crimson", color: "#ef4444", bg: "#120303" },
   { name: "Amber", color: "#f59e0b", bg: "#120e02" },
@@ -2404,8 +2398,6 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
 
   const radiusLabel = (r: ThemePrefs["borderRadius"]) =>
     r === "sharp" ? "Sharp (2px)" : r === "soft" ? "Soft (8px)" : "Rounded (16px)";
-  const densityLabel = (d: ThemePrefs["density"]) =>
-    d === "compact" ? "Compact" : d === "spacious" ? "Spacious" : "Default";
 
   return (
     <div>
@@ -2888,11 +2880,68 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
             <span>75% — compact</span>
             <span>125% — generous</span>
           </div>
-          <div className="mt-3 bg-white/[0.02] border border-white/5 rounded-xl px-4 py-2.5">
-            <p style={{ fontSize: `${prefs.fontScale}%` }} className="text-white/60 truncate font-sans">
-              Preview: StatusForge game evaluation engines are ready.
+        </div>
+
+        {/* Font Family */}
+        <div className="border-t border-white/[0.03] pt-4 mt-5">
+          <div className="flex items-center justify-between mb-1.5">
+            <div>
+              <span className="text-xs text-white/75 font-medium">Font Family</span>
+              <p className="text-[10px] text-white/35 mt-0.5">
+                Type any Google Fonts family name — fetched on demand. Leave as
+                "Montserrat" to use the bundled default (works offline).
+              </p>
+            </div>
+          </div>
+          <input
+            type="text"
+            value={prefs.fontFamily}
+            onChange={(e) => set("fontFamily", e.target.value)}
+            placeholder="Montserrat"
+            className="input-glass"
+          />
+          {prefs.fontFamily.trim() && prefs.fontFamily.trim().toLowerCase() !== "montserrat" && (
+            <p className="text-[10px] text-white/25 mt-1.5">
+              If "{prefs.fontFamily.trim()}" isn't a real Google Fonts family, the
+              UI quietly falls back to Montserrat.
+            </p>
+          )}
+        </div>
+
+        {/* Font Weight */}
+        <div className="flex items-center justify-between border-t border-white/[0.03] pt-4 mt-5">
+          <div>
+            <span className="text-xs text-white/75 font-medium">Font Weight</span>
+            <p className="text-[10px] text-white/35 mt-0.5">
+              Base body text weight — headings keep their own weight
             </p>
           </div>
+          <GlassSelect
+            value={String(prefs.fontWeight)}
+            options={[
+              { value: "400", label: "Regular (400)" },
+              { value: "500", label: "Medium (500)" },
+              { value: "600", label: "Semibold (600)" },
+              { value: "700", label: "Bold (700)" },
+              { value: "800", label: "Extra Bold (800)" },
+              { value: "900", label: "Black (900)" },
+            ]}
+            onChange={(v) => set("fontWeight", parseInt(v) as ThemePrefs["fontWeight"])}
+          />
+        </div>
+
+        {/* One shared preview for scale + family + weight together */}
+        <div className="mt-5 bg-white/[0.02] border border-white/5 rounded-xl px-4 py-2.5">
+          <p
+            style={{
+              fontSize: `${prefs.fontScale}%`,
+              fontFamily: `"${prefs.fontFamily.trim() || "Montserrat"}"`,
+              fontWeight: prefs.fontWeight,
+            }}
+            className="text-white/60 truncate"
+          >
+            Preview: StatusForge game evaluation engines are ready.
+          </p>
         </div>
       </CollapsibleSection>
 
@@ -2956,47 +3005,6 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
               ▸ Simple
             </button>
           )}
-        </div>
-      </CollapsibleSection>
-
-      {/* Layout */}
-      <CollapsibleSection
-        title="Layout & Density"
-        description="Switch default spacing densitites and toggle sidebar layout profiles."
-        icon="📏"
-        badge={
-          <span className="text-[10px] bg-white/5 border border-white/5 text-white/50 px-2 py-0.5 rounded font-mono font-medium">
-            Density: {prefs.density}
-          </span>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Spacing Density</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Set overall element padding and row gap sizes
-              </p>
-            </div>
-            <GlassSelect
-              value={prefs.density}
-              options={[
-                { value: "compact", label: densityLabel("compact") },
-                { value: "default", label: densityLabel("default") },
-                { value: "spacious", label: densityLabel("spacious") },
-              ]}
-              onChange={(v) => set("density", v as any)}
-            />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Sidebar Icons Only</span>
-              <p className="text-[10px] text-white/35 mt-0.5 font-sans">
-                Condense sidebar navigation tabs, hiding text labels
-              </p>
-            </div>
-            <Toggle on={prefs.sidebarIconOnly} onToggle={() => set("sidebarIconOnly", !prefs.sidebarIconOnly)} />
-          </div>
         </div>
       </CollapsibleSection>
 

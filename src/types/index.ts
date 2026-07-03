@@ -154,17 +154,3 @@ export interface ExiledApp {
   exiled_at?: string;
 }
 
-export interface ThemeSettings {
-  accentColor: string;
-  bgColor: string;
-  bgOpacity: number;
-  bgBlur: number;
-  bgImage: string;
-  panelOpacity: number;
-  borderRadius: "sharp" | "soft" | "rounded";
-  fontScale: number;
-  animationsEnabled: boolean;
-  holoEffects: boolean;
-  density: "compact" | "default" | "spacious";
-  sidebarIconOnly: boolean;
-}
