@@ -30,6 +30,12 @@ import {
   saveThemePrefs,
   applyThemePrefs,
 } from "@/theme";
+import {
+  type SystemPrefs,
+  defaultSystemPrefs,
+  loadSystemPrefs,
+  saveSystemPrefs,
+} from "@/systemPrefs";
 
 // ─── Engine Sub-tab ─────────────────────────────────────────────────────────
 function EngineSubTab({
@@ -1789,43 +1795,8 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
 }
 
 // ─── System Sub-tab ───────────────────────────────────────────────────────────
-interface SystemPrefs {
-  autoStartEngine: boolean;
-  minimizeToTray: boolean;
-  launchOnLogin: boolean;
-  hardwareAccel: boolean;
-  showNotifications: boolean;
-  notifyOnGameDetect: boolean;
-  notifyOnStreamEvents: boolean;
-  logLevel: "error" | "warn" | "info" | "debug";
-  language: string;
-  configBackupEnabled: boolean;
-  steamRichPresence: boolean;
-  discordRichPresence: boolean;
-  customWebhookEnabled: boolean;
-  customWebhookUrl: string;
-  wsAutoReconnect: boolean;
-  updateChannel: "stable" | "beta" | "closed-beta";
-}
-
-const defaultSystemPrefs: SystemPrefs = {
-  autoStartEngine: false,
-  minimizeToTray: true,
-  launchOnLogin: false,
-  hardwareAccel: true,
-  showNotifications: true,
-  notifyOnGameDetect: true,
-  notifyOnStreamEvents: false,
-  logLevel: "info",
-  language: "en",
-  configBackupEnabled: true,
-  steamRichPresence: false,
-  discordRichPresence: false,
-  customWebhookEnabled: false,
-  customWebhookUrl: "",
-  wsAutoReconnect: true,
-  updateChannel: "stable",
-};
+// SystemPrefs interface/defaults/apply live in src/systemPrefs.ts (shared with
+// App.tsx boot wiring and useWebSocket).
 
 function AdvancedAnimations({
   prefs,
@@ -1996,14 +1967,7 @@ function AdvancedAnimations({
 }
 
 function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg: string, type?: ToastType) => void; config: AppConfig | null; setConfig: React.Dispatch<React.SetStateAction<AppConfig | null>>; onSaveConfig: (section: string) => Promise<void> }) {
-  const [prefs, setPrefs] = useState<SystemPrefs>(() => {
-    try {
-      const stored = localStorage.getItem("statusforge_system_prefs");
-      return stored ? { ...defaultSystemPrefs, ...JSON.parse(stored) } : defaultSystemPrefs;
-    } catch {
-      return defaultSystemPrefs;
-    }
-  });
+  const [prefs, setPrefs] = useState<SystemPrefs>(loadSystemPrefs);
   const [showAnimAdvanced, setShowAnimAdvanced] = useState(false);
   const skipSave = useRef(false);
 
@@ -2039,9 +2003,10 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
   useEffect(() => {
     if (skipSave.current) return;
     const timer = setTimeout(() => {
-      try {
-        localStorage.setItem("statusforge_system_prefs", JSON.stringify(prefs));
-      } catch {}
+      // Persists + applies (hardware-accel class); log level goes to the
+      // Rust logger immediately.
+      saveSystemPrefs(prefs);
+      tauriApi("set_log_level", { level: prefs.logLevel });
     }, 300);
     return () => clearTimeout(timer);
   }, [prefs]);
@@ -2072,11 +2037,7 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
     prefs.notifyOnGameDetect,
     prefs.notifyOnStreamEvents,
   ].filter(Boolean).length;
-  const integrationsCount = [
-    prefs.steamRichPresence,
-    prefs.discordRichPresence,
-    prefs.customWebhookEnabled,
-  ].filter(Boolean).length;
+  const integrationsCount = [prefs.customWebhookEnabled].filter(Boolean).length;
 
   return (
     <div>
@@ -2194,35 +2155,17 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
 
       {/* Integrations */}
       <CollapsibleSection
-        title="Integrations & Rich Presence"
-        description="Publish your live status and games directly into Steam, Discord, or webhooks."
+        title="Integrations"
+        description="Publish live status events to a custom webhook."
         icon="🎮"
         badge={
           <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold">
-            {integrationsCount} / 3 Hooked
+            {integrationsCount} / 1 Hooked
           </span>
         }
       >
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Steam Rich Presence</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Modify friends list status on active Steam account via the engine API
-              </p>
-            </div>
-            <Toggle on={prefs.steamRichPresence} onToggle={() => toggle("steamRichPresence")} />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Discord Rich Presence</span>
-              <p className="text-[10px] text-white/35 mt-0.5 font-sans">
-                Automatically display current game in your Discord user status profile card
-              </p>
-            </div>
-            <Toggle on={prefs.discordRichPresence} onToggle={() => toggle("discordRichPresence")} />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
               <span className="text-xs text-white/75 font-medium">Custom Webhook Relay</span>
               <p className="text-[10px] text-white/35 mt-0.5">
@@ -2348,7 +2291,7 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
             <div>
               <span className="text-xs text-white/75 font-medium">Automatic Backups</span>
               <p className="text-[10px] text-white/35 mt-0.5">
-                Preserve up to 5 prior backups of Config.json before writing updates
+                Keep a Config.json.bak copy of the prior config before writing updates
               </p>
             </div>
             <Toggle on={prefs.configBackupEnabled} onToggle={() => toggle("configBackupEnabled")} />
