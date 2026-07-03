@@ -680,8 +680,7 @@ mod tests {
     #[test]
     fn filter_bypass_skips_exiles() {
         let mut s = scout_with(&[], &[], false);
-        let mut cfg = ScannerConfig::default();
-        cfg.process_filter_bypass = true;
+        let cfg = ScannerConfig { process_filter_bypass: true, ..Default::default() };
         s.update_forge_knowledge(HashMap::new(), vec![], false, cfg);
         // steam.exe survives the gauntlet with bypass on, and fullscreen +
         // title + RAM pushes it over the confidence threshold.
