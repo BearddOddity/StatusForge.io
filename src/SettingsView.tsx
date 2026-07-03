@@ -24,6 +24,12 @@ import {
   EditRemoveButtons,
 } from "@/components/SettingsComponents";
 import OAuthConnectModal from "@/components/OAuthConnectModal";
+import {
+  type ThemePrefs,
+  loadThemePrefs,
+  saveThemePrefs,
+  applyThemePrefs,
+} from "@/theme";
 
 // ─── Engine Sub-tab ─────────────────────────────────────────────────────────
 function EngineSubTab({
@@ -48,7 +54,9 @@ function EngineSubTab({
   const loadConfig = useCallback(async () => {
     skipSave.current = true;
     const res = await tauriApi("export_config");
-    if (res && typeof res === "object" && !("error" in res)) {
+    // A fresh install (no Config.json yet) returns {} — fall back to defaults
+    // so section accesses (engine_settings, api_keys, …) never crash.
+    if (res && typeof res === "object" && !("error" in res) && "engine_settings" in res) {
       setConfig(res as AppConfig);
     } else {
       setConfig(defaultConfig);
@@ -740,10 +748,10 @@ function EngineSubTab({
               </label>
               <input
                 type="number"
-                min={0}
-                max={600}
+                min={1}
+                max={300}
                 value={config.engine_settings.widget_fade_timer}
-                onChange={(e) => setEngine("widget_fade_timer", parseInt(e.target.value) || 0)}
+                onChange={(e) => setEngine("widget_fade_timer", parseInt(e.target.value) || 1)}
                 className="input-glass font-mono"
               />
             </div>
@@ -927,6 +935,7 @@ const defaultConfig: AppConfig = {
     sb_action_name: "UpdateCategory",
     widget_token: "***REMOVED***",
     spark_pin: "0000",
+    spark_pairing_key: "",
     emulator_detection: true,
     ram_threshold: 80,
     process_filter_bypass: false,
@@ -1042,7 +1051,9 @@ function ApiRoutingSubTab({
   const loadConfig = useCallback(async () => {
     skipSave.current = true;
     const res = await tauriApi("export_config");
-    if (res && typeof res === "object" && !("error" in res)) {
+    // A fresh install (no Config.json yet) returns {} — fall back to defaults
+    // so section accesses (engine_settings, api_keys, …) never crash.
+    if (res && typeof res === "object" && !("error" in res) && "engine_settings" in res) {
       setConfig(res as AppConfig);
     } else {
       setConfig(defaultConfig);
@@ -2004,6 +2015,27 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
     setPrefs((prev) => ({ ...prev, [key]: value }));
   };
 
+  // "Launch on Login" is backed by the OS autostart entry, not localStorage —
+  // read the real state on mount and write it via set_autostart on toggle.
+  useEffect(() => {
+    tauriApi("get_autostart")
+      .then((v) => {
+        if (typeof v === "boolean") setPrefs((p) => ({ ...p, launchOnLogin: v }));
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleLaunchOnLogin = async () => {
+    const next = !prefs.launchOnLogin;
+    const res = await tauriApi("set_autostart", { enabled: next });
+    if (res && typeof res === "object" && "error" in res) {
+      toast(`Autostart failed: ${(res as { error: string }).error}`, "error");
+      return;
+    }
+    set("launchOnLogin", next);
+    toast(next ? "StatusForge will start on login" : "Autostart disabled", "success");
+  };
+
   useEffect(() => {
     if (skipSave.current) return;
     const timer = setTimeout(() => {
@@ -2067,7 +2099,7 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
                 Automatically run StatusForge on user log-in
               </p>
             </div>
-            <Toggle on={prefs.launchOnLogin} onToggle={() => toggle("launchOnLogin")} />
+            <Toggle on={prefs.launchOnLogin} onToggle={toggleLaunchOnLogin} />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
@@ -2333,57 +2365,8 @@ function SystemSubTab({ toast, config, setConfig, onSaveConfig }: { toast: (msg:
 }
 
 // ─── Theme prefs ──────────────────────────────────────────────────────────────
-interface ThemePrefs {
-  accentColor: string;
-  bgColor: string;
-  bgOpacity: number;
-  bgBlur: number;
-  bgImage: string;
-  panelOpacity: number;
-  borderRadius: "sharp" | "soft" | "rounded";
-  fontScale: number;
-  density: "compact" | "default" | "spacious";
-  sidebarIconOnly: boolean;
-  animationsEnabled: boolean;
-  reducedMotion: boolean;
-  transitionSpeed: "instant" | "fast" | "normal" | "slow";
-  coverBreathe: boolean;
-  coverGlint: boolean;
-  cardHoverLift: boolean;
-  cardGlint: boolean;
-  holoEffects: boolean;
-  statusPulse: boolean;
-  toastAnimations: boolean;
-  modalAnimations: boolean;
-  progressBarAnimation: boolean;
-  buttonHoverEffects: boolean;
-}
-
-const defaultThemePrefs: ThemePrefs = {
-  accentColor: "#9146FF",
-  bgColor: "#050505",
-  bgOpacity: 100,
-  bgBlur: 0,
-  bgImage: "",
-  panelOpacity: 30,
-  borderRadius: "rounded",
-  fontScale: 100,
-  density: "default",
-  sidebarIconOnly: false,
-  animationsEnabled: true,
-  reducedMotion: false,
-  transitionSpeed: "normal",
-  coverBreathe: true,
-  coverGlint: true,
-  cardHoverLift: true,
-  cardGlint: true,
-  holoEffects: true,
-  statusPulse: true,
-  toastAnimations: true,
-  modalAnimations: true,
-  progressBarAnimation: true,
-  buttonHoverEffects: true,
-};
+// Storage + CSS application live in src/theme.ts (shared with App.tsx so the
+// full theme applies on boot, not just after visiting this tab).
 
 const ACCENT_PRESETS: { name: string; color: string; bg: string }[] = [
   { name: "Twitch Purple", color: "#9146FF", bg: "#080212" },
@@ -2444,14 +2427,7 @@ function compressImage(file: File, maxSize = 1920, quality = 0.85): Promise<stri
 
 // ─── Theme Sub-tab ────────────────────────────────────────────────────────────
 function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
-  const [prefs, setPrefs] = useState<ThemePrefs>(() => {
-    try {
-      const stored = localStorage.getItem("statusforge_theme_prefs");
-      return stored ? { ...defaultThemePrefs, ...JSON.parse(stored) } : defaultThemePrefs;
-    } catch {
-      return defaultThemePrefs;
-    }
-  });
+  const [prefs, setPrefs] = useState<ThemePrefs>(loadThemePrefs);
   const [showAnimAdvanced, setShowAnimAdvanced] = useState(false);
   const skipSave = useRef(false);
 
@@ -2459,39 +2435,12 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
     setPrefs((prev) => ({ ...prev, [key]: value }));
   };
 
-  const themeStyle = (prefs: ThemePrefs) => {
-    const root = document.documentElement;
-    root.style.setProperty("--user-accent", prefs.accentColor);
-    root.style.setProperty("--user-bg", prefs.bgColor);
-    root.style.setProperty("--user-bg-opacity", String(prefs.bgOpacity / 100));
-    root.style.setProperty("--user-bg-blur", `${prefs.bgBlur}px`);
-    root.style.setProperty("--user-bg-image", prefs.bgImage ? `url(${prefs.bgImage})` : "none");
-    root.style.setProperty("--user-panel-opacity", String(prefs.panelOpacity / 100));
-    root.style.setProperty("--user-font-scale", String(prefs.fontScale / 100));
-    root.style.setProperty("--user-radius", prefs.borderRadius === "sharp" ? "2px" : prefs.borderRadius === "soft" ? "8px" : "16px");
-    root.style.setProperty("--user-density", prefs.density === "compact" ? "0.75rem" : prefs.density === "spacious" ? "1.5rem" : "1rem");
-    const animOff = !prefs.animationsEnabled || prefs.reducedMotion;
-    root.style.setProperty("--user-anim-duration", animOff ? "0s" : "unset");
-    root.style.setProperty("--user-reduced-motion", prefs.reducedMotion ? "true" : "false");
-    root.style.setProperty("--user-transition-speed", animOff ? "0s" : { instant: "0s", fast: "0.1s", normal: "0.2s", slow: "0.4s" }[prefs.transitionSpeed]);
-    root.style.setProperty("--user-cover-breathe", prefs.coverBreathe && !animOff ? "unset" : "none");
-    root.style.setProperty("--user-cover-glint", prefs.coverGlint && !animOff ? "unset" : "none");
-    root.style.setProperty("--user-card-lift", prefs.cardHoverLift && !animOff ? "unset" : "none");
-    root.style.setProperty("--user-card-glint", prefs.cardGlint && !animOff ? "unset" : "none");
-    root.style.setProperty("--user-holo-opacity", prefs.holoEffects && !animOff ? "1" : "0");
-    root.style.setProperty("--user-status-pulse", prefs.statusPulse && !animOff ? "unset" : "none");
-    root.style.setProperty("--user-toast-anim", prefs.toastAnimations && !animOff ? "unset" : "none");
-    root.style.setProperty("--user-modal-anim", prefs.modalAnimations && !animOff ? "unset" : "none");
-    root.style.setProperty("--user-progress-anim", prefs.progressBarAnimation && !animOff ? "unset" : "none");
-    root.style.setProperty("--user-btn-hover", prefs.buttonHoverEffects && !animOff ? "unset" : "none");
-  };
-
   useEffect(() => {
     if (skipSave.current) return;
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem("statusforge_theme_prefs", JSON.stringify(prefs));
-        themeStyle(prefs);
+        saveThemePrefs(prefs);
+        applyThemePrefs(prefs);
       } catch {
         if (prefs.bgImage.startsWith("data:") && prefs.bgImage.length > 4 * 1024 * 1024) {
           toast("Background image too large for storage. Try a smaller image.", "error");
@@ -3121,7 +3070,9 @@ export default function SettingsView({
 
   const loadConfig = useCallback(async () => {
     const res = await tauriApi("export_config");
-    if (res && typeof res === "object" && !("error" in res)) {
+    // A fresh install (no Config.json yet) returns {} — fall back to defaults
+    // so section accesses (engine_settings, api_keys, …) never crash.
+    if (res && typeof res === "object" && !("error" in res) && "engine_settings" in res) {
       setConfig(res as AppConfig);
     } else {
       setConfig(defaultConfig);
