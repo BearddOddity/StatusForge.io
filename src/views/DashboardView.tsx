@@ -34,6 +34,14 @@ const overlays = [
     width: 360,
     height: 620,
   },
+  {
+    id: "lg",
+    label: "Logo Only",
+    file: "Logo.html",
+    icon: "◆",
+    width: 560,
+    height: 280,
+  },
 ];
 
 const platformDefs = [
@@ -130,6 +138,7 @@ export default function DashboardView({
   const [layout, setLayout] = useState("Horizontal_Left.html");
   const [overlayPickerOpen, setOverlayPickerOpen] = useState(false);
   const [overlayIndex, setOverlayIndex] = useState(0);
+  const [overlayViewMode, setOverlayViewMode] = useState<"grid" | "carousel">("grid");
   const overlayPickerRef = useRef<HTMLDivElement>(null);
 
   const [widgetToken, setWidgetToken] = useState("");
@@ -545,103 +554,173 @@ export default function DashboardView({
         <div className="modal-backdrop" onClick={() => setOverlayPickerOpen(false)}>
           <div
             ref={overlayPickerRef}
-            className="modal-panel w-[90vw] max-w-[700px]"
+            className="modal-panel w-[92vw] max-w-[900px]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between">
               <p className="text-white font-semibold text-sm">Select Overlay</p>
-              <button
-                onClick={() => setOverlayPickerOpen(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/[0.04] border border-white/10 text-white/40 hover:text-white/80 hover:bg-white/[0.08] transition-all cursor-pointer text-xs"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-5">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() =>
-                    setOverlayIndex((p) => (p - 1 + overlays.length) % overlays.length)
-                  }
-                  className="shrink-0 w-9 h-9 flex items-center justify-center bg-black/50 border border-white/10 rounded-full text-white/60 hover:text-white transition-all cursor-pointer text-sm"
-                >
-                  ‹
-                </button>
-                <div className="flex-1 flex justify-center">
-                  {overlays.map((o, i) => {
-                    const a = i === overlayIndex;
-                    return (
-                      <div
-                        key={o.id}
-                        className={`shrink-0 w-[260px] transition-all duration-300 ${a ? "scale-100 opacity-100" : "scale-75 opacity-30 pointer-events-none absolute"}`}
-                      >
-                        <div
-                          className={`relative w-full h-[150px] rounded-xl overflow-hidden border bg-[#0a0a12] transition-all duration-300 ${a ? "border-purple-500/50 shadow-lg shadow-purple-500/15" : "border-white/10"}`}
-                        >
-                          {widgetToken ? (
-                            <iframe
-                              key={o.id}
-                              src={`http://127.0.0.1:53735/forge-widget/${widgetToken}/${o.file}`}
-                              title={`${o.label} preview`}
-                              tabIndex={-1}
-                              className="pointer-events-none absolute top-0 left-0 border-0"
-                              style={{
-                                width: `${o.width}px`,
-                                height: `${o.height}px`,
-                                transform: `scale(${260 / o.width})`,
-                                transformOrigin: "top left",
-                              }}
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center">
-                              <div className="text-center px-4">
-                                <div className="text-xl mb-1.5">{o.icon}</div>
-                                <span className="text-white/50 text-[11px] font-medium">
-                                  {o.label}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-center mt-1.5">
-                          <span
-                            className={`text-[11px] font-medium ${a ? "text-white/90" : "text-white/30"}`}
-                          >
-                            {o.label}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-black/30 border border-white/10 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setOverlayViewMode("grid")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                      overlayViewMode === "grid"
+                        ? "bg-purple-500/25 text-purple-200"
+                        : "text-white/40 hover:text-white/70"
+                    }`}
+                  >
+                    ▦ Grid
+                  </button>
+                  <button
+                    onClick={() => setOverlayViewMode("carousel")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                      overlayViewMode === "carousel"
+                        ? "bg-purple-500/25 text-purple-200"
+                        : "text-white/40 hover:text-white/70"
+                    }`}
+                  >
+                    ⇄ Carousel
+                  </button>
                 </div>
                 <button
-                  onClick={() => setOverlayIndex((p) => (p + 1) % overlays.length)}
-                  className="shrink-0 w-9 h-9 flex items-center justify-center bg-black/50 border border-white/10 rounded-full text-white/60 hover:text-white transition-all cursor-pointer text-sm"
+                  onClick={() => setOverlayPickerOpen(false)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/[0.04] border border-white/10 text-white/40 hover:text-white/80 hover:bg-white/[0.08] transition-all cursor-pointer text-xs"
                 >
-                  ›
+                  ✕
                 </button>
               </div>
-              <div className="flex justify-center gap-1.5 mt-3">
-                {overlays.map((_, i) => (
+            </div>
+
+            {overlayViewMode === "grid" ? (
+              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {overlays.map((o) => (
                   <button
-                    key={i}
-                    onClick={() => setOverlayIndex(i)}
-                    className={`h-1.5 rounded-full transition-all cursor-pointer ${i === overlayIndex ? "bg-purple-500 w-4" : "bg-white/20 w-1.5 hover:bg-white/40"}`}
-                  />
+                    key={o.id}
+                    onClick={() => {
+                      setLayout(o.file);
+                      addOverlayUrl(o.file, o.label);
+                      setOverlayPickerOpen(false);
+                    }}
+                    className="group text-left cursor-pointer"
+                  >
+                    <div className="relative w-full h-[220px] rounded-2xl overflow-hidden border border-white/10 bg-[#0a0a12] transition-all duration-200 group-hover:border-purple-500/50 group-hover:shadow-lg group-hover:shadow-purple-500/15">
+                      {widgetToken ? (
+                        <iframe
+                          src={`http://127.0.0.1:53735/forge-widget/${widgetToken}/${o.file}`}
+                          title={`${o.label} preview`}
+                          tabIndex={-1}
+                          className="pointer-events-none absolute top-1/2 left-1/2 border-0"
+                          style={{
+                            width: `${o.width}px`,
+                            height: `${o.height}px`,
+                            transform: `translate(-50%, -50%) scale(${Math.min(400 / o.width, 220 / o.height)})`,
+                            transformOrigin: "center",
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center">
+                          <div className="text-3xl">{o.icon}</div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-2 px-1">
+                      <span className="text-[13px] font-medium text-white/80 group-hover:text-white transition-colors">
+                        {o.label}
+                      </span>
+                      <span className="text-[11px] text-purple-300/0 group-hover:text-purple-300/90 transition-colors">
+                        Use →
+                      </span>
+                    </div>
+                  </button>
                 ))}
               </div>
-              <div className="flex justify-center mt-4">
-                <Btn
-                  onClick={() => {
-                    setLayout(overlays[overlayIndex].file);
-                    addOverlayUrl(overlays[overlayIndex].file, overlays[overlayIndex].label);
-                    setOverlayPickerOpen(false);
-                  }}
-                >
-                  Use {overlays[overlayIndex].label}
-                </Btn>
+            ) : (
+              <div className="p-5">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() =>
+                      setOverlayIndex((p) => (p - 1 + overlays.length) % overlays.length)
+                    }
+                    className="shrink-0 w-10 h-10 flex items-center justify-center bg-black/50 border border-white/10 rounded-full text-white/60 hover:text-white transition-all cursor-pointer text-base"
+                  >
+                    ‹
+                  </button>
+                  <div className="flex-1 flex justify-center relative h-[240px]">
+                    {overlays.map((o, i) => {
+                      const a = i === overlayIndex;
+                      return (
+                        <div
+                          key={o.id}
+                          className={`shrink-0 w-[380px] transition-all duration-300 ${a ? "scale-100 opacity-100" : "scale-75 opacity-0 pointer-events-none absolute"}`}
+                        >
+                          <div
+                            className={`relative w-full h-[220px] rounded-2xl overflow-hidden border bg-[#0a0a12] transition-all duration-300 ${a ? "border-purple-500/50 shadow-lg shadow-purple-500/15" : "border-white/10"}`}
+                          >
+                            {widgetToken ? (
+                              <iframe
+                                key={o.id}
+                                src={`http://127.0.0.1:53735/forge-widget/${widgetToken}/${o.file}`}
+                                title={`${o.label} preview`}
+                                tabIndex={-1}
+                                className="pointer-events-none absolute top-1/2 left-1/2 border-0"
+                                style={{
+                                  width: `${o.width}px`,
+                                  height: `${o.height}px`,
+                                  transform: `translate(-50%, -50%) scale(${Math.min(380 / o.width, 220 / o.height)})`,
+                                  transformOrigin: "center",
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] flex items-center justify-center">
+                                <div className="text-center px-4">
+                                  <div className="text-2xl mb-1.5">{o.icon}</div>
+                                  <span className="text-white/50 text-xs font-medium">
+                                    {o.label}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-center mt-2">
+                            <span
+                              className={`text-[13px] font-medium ${a ? "text-white/90" : "text-white/30"}`}
+                            >
+                              {o.label}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={() => setOverlayIndex((p) => (p + 1) % overlays.length)}
+                    className="shrink-0 w-10 h-10 flex items-center justify-center bg-black/50 border border-white/10 rounded-full text-white/60 hover:text-white transition-all cursor-pointer text-base"
+                  >
+                    ›
+                  </button>
+                </div>
+                <div className="flex justify-center gap-1.5 mt-3">
+                  {overlays.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setOverlayIndex(i)}
+                      className={`h-1.5 rounded-full transition-all cursor-pointer ${i === overlayIndex ? "bg-purple-500 w-4" : "bg-white/20 w-1.5 hover:bg-white/40"}`}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-center mt-4">
+                  <Btn
+                    onClick={() => {
+                      setLayout(overlays[overlayIndex].file);
+                      addOverlayUrl(overlays[overlayIndex].file, overlays[overlayIndex].label);
+                      setOverlayPickerOpen(false);
+                    }}
+                  >
+                    Use {overlays[overlayIndex].label}
+                  </Btn>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
