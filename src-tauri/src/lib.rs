@@ -897,6 +897,46 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
     Ok(enabled)
 }
 
+#[cfg(test)]
+mod config_command_tests {
+    use super::*;
+
+    /// End-to-end persistence check through the real Tauri command functions:
+    /// import_config sanitizes + validates + writes Config.json atomically,
+    /// export_config reads the same values back.
+    #[test]
+    fn import_then_export_round_trips_settings() {
+        let dir = std::env::temp_dir().join(format!("sf-config-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir = std::fs::canonicalize(&dir).unwrap();
+        let _ = APP_BASE_DIR.set(dir);
+        let base = APP_BASE_DIR.get().unwrap().clone();
+
+        let mut config = config::AppConfig::default();
+        config.engine_settings.widget_poll_rate = 4;
+        config.engine_settings.idle_category = "Art".into();
+        config.engine_settings.spark_pin = "12".into(); // half-typed → sanitized to 0000
+        config.api_keys.rawg = "rawg-key".into();
+        config.broadcaster.routing_mode = config::RoutingMode::Native;
+        config.broadcaster.twitch_client = "twitch-only".into(); // kick empty must still save
+
+        let msg = import_config(ConfigImportPayload { config, path: None }).unwrap();
+        assert_eq!(msg, "Config saved successfully");
+        assert!(base.join("Config.json").exists());
+
+        let out = export_config(ConfigExportPayload { path: None }).unwrap();
+        let es = &out["engine_settings"];
+        assert_eq!(es["widget_poll_rate"], 4);
+        assert_eq!(es["idle_category"], "Art");
+        assert_eq!(es["spark_pin"], "0000");
+        assert_eq!(out["api_keys"]["rawg"], "rawg-key");
+        assert_eq!(out["broadcaster"]["routing_mode"], "native");
+        assert_eq!(out["broadcaster"]["twitch_client"], "twitch-only");
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Entry Point
 // ═══════════════════════════════════════════════════════════════════════════════
