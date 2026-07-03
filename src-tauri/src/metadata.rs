@@ -11,13 +11,16 @@
 //! - SteamGridDB: preferred 600x900 cover, sgdb_id (needs key; overrides the
 //!   cover_url from every other source once fetched, since it's a
 //!   purpose-built cover-art database)
+//! - Twitch/Kick: category IDs looked up live by title (needs an active
+//!   connection to that platform — Client ID + token), not fetched from a
+//!   metadata database at all
 //!
 //! Merge strategy: only EMPTY fields of the existing entry are filled, so
 //! user-set/custom values always win.
 
 use std::time::Duration;
 
-use crate::config::{ApiKeys, ForgeLibraryEntry};
+use crate::config::{ApiKeys, BroadcasterConfig, ForgeLibraryEntry};
 
 /// Fill empty fields of `existing` from `fetched`. Pure — unit tested below.
 pub fn merge_entry(
@@ -41,13 +44,20 @@ pub fn merge_entry(
         rawg_id,
         sgdb_id,
         steam_id,
-        gog_id
+        gog_id,
+        twitch_id,
+        kick_id
     );
     existing
 }
 
 /// Scan all configured sources for `title` and merge the results into `existing`.
-pub async fn scan(title: &str, keys: &ApiKeys, existing: ForgeLibraryEntry) -> ForgeLibraryEntry {
+pub async fn scan(
+    title: &str,
+    keys: &ApiKeys,
+    broadcaster: &BroadcasterConfig,
+    existing: ForgeLibraryEntry,
+) -> ForgeLibraryEntry {
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
@@ -98,6 +108,29 @@ pub async fn scan(title: &str, keys: &ApiKeys, existing: ForgeLibraryEntry) -> F
                 }
             }
             Err(e) => log::warn!("[META] SteamGridDB failed: {}", e),
+        }
+    }
+
+    // Not metadata sources — these look up each platform's *category* ID by
+    // title, which only works while actually connected to that platform.
+    if !broadcaster.twitch_client.is_empty() && !broadcaster.twitch_token.is_empty() {
+        match fetch_twitch_id(
+            &client,
+            title,
+            &broadcaster.twitch_client,
+            &broadcaster.twitch_token,
+        )
+        .await
+        {
+            Ok(id) => fetched.twitch_id = id,
+            Err(e) => log::warn!("[META] Twitch category lookup failed: {}", e),
+        }
+    }
+
+    if !broadcaster.kick_token.is_empty() {
+        match fetch_kick_id(&client, title, &broadcaster.kick_token).await {
+            Ok(id) => fetched.kick_id = id,
+            Err(e) => log::warn!("[META] Kick category lookup failed: {}", e),
         }
     }
 
@@ -315,6 +348,51 @@ async fn fetch_gog(client: &reqwest::Client, title: &str) -> Result<ForgeLibrary
         gog_id: p["id"].as_str().unwrap_or("").to_string(),
         ..Default::default()
     })
+}
+
+/// Twitch category id for `title`, via Helix's Get Games (same lookup
+/// pusher.rs falls back to at push-time when the library has no id yet).
+async fn fetch_twitch_id(
+    client: &reqwest::Client,
+    title: &str,
+    client_id: &str,
+    token: &str,
+) -> Result<String, String> {
+    let json = get_json(
+        client
+            .get("https://api.twitch.tv/helix/games")
+            .query(&[("name", title)])
+            .header("Client-Id", client_id)
+            .header("Authorization", format!("Bearer {}", token)),
+    )
+    .await?;
+    let id = json["data"][0]["id"].as_str().unwrap_or("").to_string();
+    if id.is_empty() {
+        return Err("no Twitch game found for this title".to_string());
+    }
+    Ok(id)
+}
+
+/// Kick category id for `title`, via the public categories search (the
+/// `name` filter on /public/v2/categories) — no key needed beyond a valid
+/// user token, since this endpoint's security scheme accepts any token type.
+async fn fetch_kick_id(
+    client: &reqwest::Client,
+    title: &str,
+    token: &str,
+) -> Result<String, String> {
+    let json = get_json(
+        client
+            .get("https://api.kick.com/public/v2/categories")
+            .query(&[("name", title), ("limit", "1")])
+            .bearer_auth(token),
+    )
+    .await?;
+    let id = json["data"][0]["id"].as_u64();
+    match id {
+        Some(id) => Ok(id.to_string()),
+        None => Err("no Kick category found for this title".to_string()),
+    }
 }
 
 /// Returns (sgdb_id, cover_url) — cover may be empty if no 600x900 grid exists.
