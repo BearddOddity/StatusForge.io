@@ -1,10 +1,16 @@
 //! External game-metadata scan for `/api/scan-metadata`.
 //!
-//! Sources (each skipped unless its API key is configured, and skipped on any
-//! network failure — a scan never hard-fails):
-//! - RAWG        → year, genre, developer, publisher, cover, rawg_id
-//! - IGDB        → same via apicalypse (Twitch app token fetched if needed), igdb_id
-//! - SteamGridDB → preferred 600x900 cover, sgdb_id
+//! Sources, queried in this order (each skipped on any network failure or
+//! missing key — a scan never hard-fails):
+//! - RAWG: year, genre, developer, publisher, cover, rawg_id (needs key)
+//! - IGDB: same via apicalypse (Twitch app token fetched if needed), igdb_id
+//!   (needs key)
+//! - Steam: year, genre, developer, publisher, cover, steam_id — public
+//!   storefront endpoints (store.steampowered.com), no key needed
+//! - GOG: same via the public catalog.gog.com search, gog_id, no key needed
+//! - SteamGridDB: preferred 600x900 cover, sgdb_id (needs key; overrides the
+//!   cover_url from every other source once fetched, since it's a
+//!   purpose-built cover-art database)
 //!
 //! Merge strategy: only EMPTY fields of the existing entry are filled, so
 //! user-set/custom values always win.
@@ -33,7 +39,9 @@ pub fn merge_entry(
         cover_url,
         igdb_id,
         rawg_id,
-        sgdb_id
+        sgdb_id,
+        steam_id,
+        gog_id
     );
     existing
 }
@@ -67,6 +75,18 @@ pub async fn scan(title: &str, keys: &ApiKeys, existing: ForgeLibraryEntry) -> F
             Ok(e) => fetched = merge_entry(fetched, &e),
             Err(e) => log::warn!("[META] IGDB failed: {}", e),
         }
+    }
+
+    // Steam and GOG use each store's own public storefront/catalog endpoints —
+    // no API key required, so these always run (unlike RAWG/IGDB/SGDB above).
+    match fetch_steam(&client, title).await {
+        Ok(e) => fetched = merge_entry(fetched, &e),
+        Err(e) => log::warn!("[META] Steam failed: {}", e),
+    }
+
+    match fetch_gog(&client, title).await {
+        Ok(e) => fetched = merge_entry(fetched, &e),
+        Err(e) => log::warn!("[META] GOG failed: {}", e),
     }
 
     if !keys.steamgrid.is_empty() {
@@ -220,6 +240,83 @@ async fn fetch_igdb(
     })
 }
 
+/// Steam's own storefront endpoints (store.steampowered.com) — public, no API
+/// key. Two calls: an unofficial-but-widely-used search endpoint to resolve
+/// the title to an appid, then the appdetails endpoint for the actual data.
+async fn fetch_steam(client: &reqwest::Client, title: &str) -> Result<ForgeLibraryEntry, String> {
+    let search_url = format!(
+        "https://store.steampowered.com/api/storesearch/?term={}&l=english&cc=US",
+        urlencoding::encode(title)
+    );
+    let search_json = get_json(client.get(&search_url)).await?;
+    let appid = search_json["items"][0]["id"]
+        .as_u64()
+        .ok_or("no Steam search results")?;
+
+    let details_url = format!(
+        "https://store.steampowered.com/api/appdetails?appids={}",
+        appid
+    );
+    let details_json = get_json(client.get(&details_url)).await?;
+    let entry = &details_json[appid.to_string()];
+    if !entry["success"].as_bool().unwrap_or(false) {
+        return Err(format!(
+            "Steam appdetails returned success=false for {}",
+            appid
+        ));
+    }
+    let data = &entry["data"];
+
+    // "25 Jan, 2018" -> "2018"; unreleased titles have a non-numeric last
+    // token (e.g. "Coming soon"), which correctly falls through to empty.
+    let release_year = data["release_date"]["date"]
+        .as_str()
+        .and_then(|d| d.split(' ').next_back())
+        .filter(|y| y.len() == 4 && y.chars().all(|c| c.is_ascii_digit()))
+        .unwrap_or("")
+        .to_string();
+
+    Ok(ForgeLibraryEntry {
+        genre: data["genres"][0]["description"]
+            .as_str()
+            .unwrap_or("")
+            .to_string(),
+        release_year,
+        developer: data["developers"][0].as_str().unwrap_or("").to_string(),
+        publisher: data["publishers"][0].as_str().unwrap_or("").to_string(),
+        cover_url: data["header_image"].as_str().unwrap_or("").to_string(),
+        steam_id: appid.to_string(),
+        ..Default::default()
+    })
+}
+
+/// GOG's public catalog search (catalog.gog.com) — no API key required.
+async fn fetch_gog(client: &reqwest::Client, title: &str) -> Result<ForgeLibraryEntry, String> {
+    let url = format!(
+        "https://catalog.gog.com/v1/catalog?limit=1&query=like:{}",
+        urlencoding::encode(title)
+    );
+    let json = get_json(client.get(&url)).await?;
+    let p = json["products"].get(0).ok_or("no GOG results")?;
+
+    // "2015.05.19" -> "2015"
+    let release_year = p["releaseDate"]
+        .as_str()
+        .filter(|d| d.len() >= 4)
+        .map(|d| d[..4].to_string())
+        .unwrap_or_default();
+
+    Ok(ForgeLibraryEntry {
+        genre: p["genres"][0]["name"].as_str().unwrap_or("").to_string(),
+        release_year,
+        developer: p["developers"][0].as_str().unwrap_or("").to_string(),
+        publisher: p["publishers"][0].as_str().unwrap_or("").to_string(),
+        cover_url: p["coverVertical"].as_str().unwrap_or("").to_string(),
+        gog_id: p["id"].as_str().unwrap_or("").to_string(),
+        ..Default::default()
+    })
+}
+
 /// Returns (sgdb_id, cover_url) — cover may be empty if no 600x900 grid exists.
 async fn fetch_sgdb(
     client: &reqwest::Client,
@@ -267,5 +364,29 @@ mod tests {
         assert_eq!(merged.cover_url, "http://sgdb/cover.jpg"); // empty gets filled
         assert_eq!(merged.release_year, "2018");
         assert_eq!(merged.title, "Celeste"); // untouched
+    }
+
+    /// Hits the real, unofficial Steam/GOG endpoints — not run in CI (no key
+    /// needed, but these are undocumented APIs that could change shape).
+    /// Run manually with `cargo test -- --ignored` to sanity-check them.
+    #[tokio::test]
+    #[ignore]
+    async fn steam_and_gog_fetch_real_data_for_known_title() {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap();
+
+        let steam = fetch_steam(&client, "Celeste").await.unwrap();
+        assert_eq!(steam.developer, "Maddy Makes Games Inc.");
+        assert_eq!(steam.release_year, "2018");
+        assert!(!steam.steam_id.is_empty());
+        assert!(!steam.cover_url.is_empty());
+
+        let gog = fetch_gog(&client, "The Witcher 3").await.unwrap();
+        assert_eq!(gog.developer, "CD PROJEKT RED");
+        assert_eq!(gog.release_year, "2015");
+        assert!(!gog.gog_id.is_empty());
+        assert!(!gog.cover_url.is_empty());
     }
 }
