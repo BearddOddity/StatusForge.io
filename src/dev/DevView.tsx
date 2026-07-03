@@ -168,7 +168,7 @@ const HUMANIZE: { re: RegExp; msg: (m: RegExpMatchArray) => string }[] = [
   {
     re: /Failed to generate initial widget token/,
     msg: () =>
-      `⚠ Couldn't create a widget security token — overlays may not connect until you regenerate it in Settings → Engine.`,
+      `⚠ Couldn't create an overlay security token — overlays may not connect until you regenerate it in Settings → Engine.`,
   },
 ];
 
