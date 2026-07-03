@@ -2,12 +2,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { EngineStatusData } from "@/types";
 import { loadSystemPrefs } from "@/systemPrefs";
 
-interface WSMessage {
-  event: "init" | "update" | "error";
-  payload?: EngineStatusData;
-  message?: string;
-}
-
 export function useWebSocket(token: string) {
   const [connected, setConnected] = useState(false);
   const [data, setData] = useState<EngineStatusData | null>(null);
@@ -25,10 +19,11 @@ export function useWebSocket(token: string) {
 
     ws.onmessage = (event: MessageEvent) => {
       try {
-        const msg: WSMessage = JSON.parse(event.data);
-        if ((msg.event === "update" || msg.event === "init") && msg.payload) {
-          setData(msg.payload);
-        }
+        // ws_push_loop (server.rs) sends build_status()'s JSON directly —
+        // no {event, payload} envelope — both on connect and on every
+        // subsequent change.
+        const status: EngineStatusData = JSON.parse(event.data);
+        setData(status);
       } catch {
         /* ignore parse errors */
       }
