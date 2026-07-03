@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import type { EngineStatus, ToastType, SystemStats } from "@/types";
-import { tauriApi, getKeychainStatus, getSystemStats } from "@/hooks/useTauriApi";
+import { tauriApi, getKeychainStatus, getSystemStats, fetchWidgetToken } from "@/hooks/useTauriApi";
 import { Card, Btn, FieldSection } from "@/components/ui";
 
 const idleCover = "/just%20chatting.png";
@@ -11,8 +11,6 @@ const overlays = [
   { id: "hr", label: "Horizontal Right", file: "Horizontal_Right.html", icon: "▶", preview: "" },
   { id: "vt", label: "Vertical", file: "Vertical.html", icon: "▼", preview: "" },
 ];
-
-const dummyToken = "kN2x9mYpQ7vB3wR8"; // gitleaks:allow — fake placeholder for the overlay-URL preview, not a real token
 
 const platformDefs = [
   {
@@ -110,6 +108,17 @@ export default function DashboardView({
   const [overlayIndex, setOverlayIndex] = useState(0);
   const overlayPickerRef = useRef<HTMLDivElement>(null);
 
+  const [widgetToken, setWidgetToken] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    fetchWidgetToken().then((t) => {
+      if (!cancelled) setWidgetToken(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Platform Connections: real config/keychain state, not the widget WS link.
   const [platforms, setPlatforms] = useState<PlatformConnections>(disconnectedPlatforms);
   const [sparkPaired, setSparkPaired] = useState<{ hostname: string } | null>(null);
@@ -162,7 +171,11 @@ export default function DashboardView({
   }, []);
 
   const addOverlayUrl = (file: string, label: string) => {
-    const url = `http://127.0.0.1:53735/forge-widget/${dummyToken}/${file}`;
+    if (!widgetToken) {
+      toast("Overlay token not loaded yet — try again in a moment", "error");
+      return;
+    }
+    const url = `http://127.0.0.1:53735/forge-widget/${widgetToken}/${file}`;
     const id = `overlay-${overlayIdCounter}`;
     setOverlayUrls((prev) => [...prev, { id, url, label }]);
     setOverlayIdCounter((c) => c + 1);

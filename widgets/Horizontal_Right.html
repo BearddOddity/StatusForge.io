@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>BearddOddity Horizontal Left Widget</title>
+<title>BearddOddity Horizontal Right Widget</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=swap');
   body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; display: flex; justify-content: center; align-items: center; -webkit-font-smoothing: antialiased; }
-  .widget-container { width: 850px; display: flex; flex-direction: row; align-items: flex-end; font-family: 'Montserrat', sans-serif; position: relative; opacity: 0; transition: opacity 1s ease-in-out; }
+  .widget-container { width: 850px; display: flex; flex-direction: row-reverse; align-items: flex-end; font-family: 'Montserrat', sans-serif; position: relative; opacity: 0; transition: opacity 1s ease-in-out; }
   .game-art { width: 330px; height: 450px; background-size: cover; background-position: center; border-radius: 60px; z-index: 3; position: relative; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 10px 10px 40px rgba(0,0,0,0.8); flex-shrink: 0; background-color: #111; }
   .game-art::after { content: ""; position: absolute; top: -50%; left: -60%; width: 30%; height: 200%; background: rgba(255, 255, 255, 0.15); transform: rotate(35deg); animation: glossShine 7s infinite ease-in-out; }
   @keyframes glossShine { 0% { left: -100%; } 15% { left: 150%; } 100% { left: 150%; } }
-  .info-box { width: 520px; min-height: 180px; position: relative; margin-left: -100px; margin-bottom: 30px; border-radius: 35px; z-index: 1; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 10px 10px 30px rgba(0,0,0,0.6); overflow: hidden; }
-  .info-content { position: relative; padding: 25px 40px 25px 120px; text-align: left; display: flex; flex-direction: column; justify-content: center; }
+  .info-box { width: 520px; min-height: 180px; position: relative; margin-right: -100px; margin-bottom: 30px; border-radius: 35px; z-index: 1; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 10px 10px 30px rgba(0,0,0,0.6); overflow: hidden; }
+  .info-content { position: relative; padding: 25px 120px 25px 40px; text-align: right; display: flex; flex-direction: column; justify-content: center; }
   .metallic-text { background: linear-gradient(to bottom, #ffffff 0%, #dcdcdc 50%, #ffffff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.8)); display: inline-block; }
-  .game-title { font-weight: 900; margin-bottom: 8px; line-height: 1.1; font-size: 26px; letter-spacing: -0.5px; word-wrap: break-word; }
+  .game-title { font-weight: 900; margin-bottom: 8px; line-height: 1.1; font-size: 26px; letter-spacing: -0.5px; }
   .slider-stage { position: relative; height: 60px; overflow: hidden; width: 100%; }
   .slider-track { position: absolute; width: 100%; animation: slideData 16s infinite ease-in-out; }
   @keyframes slideData {
@@ -23,7 +23,7 @@
       75%, 95% { transform: translateY(-180px); }
       100% { transform: translateY(0); }
   }
-  .slide-item { height: 60px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+  .slide-item { height: 60px; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; }
   .label-text { font-weight: 800; text-transform: uppercase; letter-spacing: 2px; font-size: 13px; margin-bottom: 2px; color: rgba(255, 255, 255, 0.5); }
   .data-text { font-weight: 800; font-size: 19px; line-height: 1.1; }
 </style>
@@ -154,7 +154,7 @@
             document.getElementById("g").innerText = "OFFLINE";
             document.getElementById("p").innerText = "ENGINE DISCONNECTED";
             var cover = document.getElementById("a");
-            cover.style.backgroundImage = "url('http://localhost:9090/icon.png')";
+            cover.style.backgroundImage = "url('icon.png')";
             cover.style.backgroundSize = "224px 224px";
             cover.style.backgroundRepeat = "no-repeat";
             cover.style.backgroundPosition = "center 40%";

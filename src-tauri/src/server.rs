@@ -425,6 +425,48 @@ async fn health_handler() -> StatusCode {
     StatusCode::OK
 }
 
+/// Serves an overlay widget file (HTML + its assets) gated by the real
+/// `widget_token`, at the URL the frontend's Overlay Generator hands out
+/// (`/forge-widget/{token}/{file}`). Unlike `check_token`, a missing/wrong
+/// token is always rejected here — an OBS browser-source URL is the one
+/// widget surface meant to leave the machine (pasted into streaming
+/// software, screen-shared, etc.), so it doesn't get the loopback-implies-
+/// trusted pass that `/status`/`/settings` get.
+async fn forge_widget_handler(
+    axum::extract::Path((token, file)): axum::extract::Path<(String, String)>,
+) -> Result<axum::response::Response, StatusCode> {
+    let expected = load_config()
+        .map(|c| c.engine_settings.widget_token)
+        .unwrap_or_default();
+    if expected.is_empty() || token != expected {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    if file.contains('/') || file.contains('\\') || file.contains("..") {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let widgets_dir = crate::app_base_dir()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .join("widgets");
+    let path = widgets_dir.join(&file);
+    crate::assert_path_in_base(&path, &widgets_dir).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    let mime = match path.extension().and_then(|e| e.to_str()) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("svg") => "image/svg+xml",
+        Some("js") => "text/javascript; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        _ => "application/octet-stream",
+    };
+    Ok(([(axum::http::header::CONTENT_TYPE, mime)], bytes).into_response())
+}
+
 fn build_router(state: ServerState) -> Router {
     let widgets_dir = crate::app_base_dir()
         .map(|b| b.join("widgets"))
@@ -435,6 +477,7 @@ fn build_router(state: ServerState) -> Router {
         .route("/settings", get(settings_handler))
         .route("/ws", get(ws_handler))
         .route("/health", get(health_handler))
+        .route("/forge-widget/{token}/{file}", get(forge_widget_handler))
         .route("/api/forge-full", get(forge_full_handler))
         .route("/api/exiled-apps", get(exiled_apps_handler))
         .route("/list", post(list_handler))
