@@ -250,11 +250,12 @@ async fn scan_metadata_handler(
     if title.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let keys = load_config().map(|c| c.api_keys).unwrap_or_default();
+    let config = load_config().unwrap_or_default();
     let mut db = load_db().map_err(internal)?;
     let mut existing = db.library.get(&title).cloned().unwrap_or_default();
     existing.title = title.clone();
-    let merged = crate::metadata::scan(&title, &keys, existing).await;
+    let merged =
+        crate::metadata::scan(&title, &config.api_keys, &config.broadcaster, existing).await;
     db.library.insert(title, merged.clone());
     save_db(&db).map_err(internal)?;
     Ok(Json(

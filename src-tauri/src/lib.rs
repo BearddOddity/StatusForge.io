@@ -727,7 +727,7 @@ fn spawn_engine_loop(
                     // enriched genre/developer/cover in the same detection
                     // event, not on some later manual "scan metadata" click.
                     if needs_metadata {
-                        if let Some(keys) = config.as_ref().map(|c| c.api_keys.clone()) {
+                        if let Some(cfg) = config.as_ref().cloned() {
                             let title = game_title.clone();
                             let state_for_scan = state_arc.clone();
                             let app_for_scan = app_handle.clone();
@@ -739,7 +739,13 @@ fn spawn_engine_loop(
                                         title: title.clone(),
                                         ..Default::default()
                                     });
-                                let merged = metadata::scan(&title, &keys, existing).await;
+                                let merged = metadata::scan(
+                                    &title,
+                                    &cfg.api_keys,
+                                    &cfg.broadcaster,
+                                    existing,
+                                )
+                                .await;
                                 match server::load_db() {
                                     Ok(mut db) => {
                                         db.library.insert(title.clone(), merged);
