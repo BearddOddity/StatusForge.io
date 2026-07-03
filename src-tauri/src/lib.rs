@@ -680,11 +680,12 @@ fn spawn_engine_loop(
                     }
 
                     // Auto-populate the Library with newly-seen games (bare
-                    // entry — scan_metadata / the Library UI fill in the rest
-                    // later) so detections show up without a manual add.
+                    // entry — metadata is filled in below, same detection
+                    // event, not a separate manual step) so detections show
+                    // up without a manual add.
                     // Reload fresh rather than reusing `forge_db` above to
                     // avoid clobbering a concurrent write from the axum server.
-                    match server::load_db() {
+                    let needs_metadata = match server::load_db() {
                         Ok(mut db) => {
                             if !db.library.contains_key(&game_title) {
                                 db.library.insert(
@@ -699,9 +700,65 @@ fn spawn_engine_loop(
                                     log::warn!("[NATIVE] Failed to save new library entry: {}", e);
                                 }
                             }
+                            // Covers both the freshly-inserted case and an
+                            // older bare entry from before this existed.
+                            db.library
+                                .get(&game_title)
+                                .map(|e| {
+                                    e.genre.is_empty()
+                                        && e.developer.is_empty()
+                                        && e.cover_url.is_empty()
+                                })
+                                .unwrap_or(false)
                         }
                         Err(e) => {
-                            log::warn!("[NATIVE] Failed to load Forge DB for library upsert: {}", e)
+                            log::warn!(
+                                "[NATIVE] Failed to load Forge DB for library upsert: {}",
+                                e
+                            );
+                            false
+                        }
+                    };
+
+                    // Metadata scan is network I/O — fire in the background
+                    // on the app's async runtime rather than blocking this
+                    // detection loop's own thread. Once it resolves, save it
+                    // and re-push status so the overlay/widgets pick up the
+                    // enriched genre/developer/cover in the same detection
+                    // event, not on some later manual "scan metadata" click.
+                    if needs_metadata {
+                        if let Some(keys) = config.as_ref().map(|c| c.api_keys.clone()) {
+                            let title = game_title.clone();
+                            let state_for_scan = state_arc.clone();
+                            let app_for_scan = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let existing = server::load_db()
+                                    .ok()
+                                    .and_then(|db| db.library.get(&title).cloned())
+                                    .unwrap_or_else(|| config::ForgeLibraryEntry {
+                                        title: title.clone(),
+                                        ..Default::default()
+                                    });
+                                let merged = metadata::scan(&title, &keys, existing).await;
+                                match server::load_db() {
+                                    Ok(mut db) => {
+                                        db.library.insert(title.clone(), merged);
+                                        if let Err(e) = server::save_db(&db) {
+                                            log::warn!(
+                                                "[NATIVE] Failed to save scanned metadata: {}",
+                                                e
+                                            );
+                                        } else {
+                                            state_for_scan.push_status();
+                                            let _ = app_for_scan.emit("library-updated", &title);
+                                        }
+                                    }
+                                    Err(e) => log::warn!(
+                                        "[NATIVE] Failed to reload Forge DB after metadata scan: {}",
+                                        e
+                                    ),
+                                }
+                            });
                         }
                     }
                 }
