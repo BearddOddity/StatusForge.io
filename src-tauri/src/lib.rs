@@ -143,12 +143,60 @@ fn get_platform() -> String {
     }
 }
 
-/// Shared `sysinfo::System` for the System Performance panel — a persistent
-/// instance so consecutive polls give sysinfo a real delta to compute CPU%
-/// from (a fresh `System` always reports 0% on its first read).
-pub struct SystemMonitor(pub Mutex<sysinfo::System>);
+/// How often we'll actually ask sysinfo to recompute CPU usage. sysinfo's
+/// `cpu_usage()` is a delta since the PID's last refresh — polling it again
+/// too soon (e.g. the frontend's immediate on-mount call, moments after
+/// setup() primed the baseline) divides a small-but-real chunk of CPU time
+/// by a tiny elapsed window, producing spurious spikes well over 100%
+/// (sysinfo reports per-core, so 2 busy threads alone reads as ~200%).
+/// Below this threshold we just return the last cached reading instead.
+const CPU_REFRESH_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(900);
 
-#[derive(serde::Serialize)]
+struct SystemMonitorInner {
+    sys: sysinfo::System,
+    last_refresh: Option<std::time::Instant>,
+    last_stats: SystemStats,
+}
+
+/// Shared, debounced `sysinfo::System` for the System Performance panel.
+pub struct SystemMonitor(Mutex<SystemMonitorInner>);
+
+impl Default for SystemMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SystemMonitor {
+    pub fn new() -> Self {
+        Self(Mutex::new(SystemMonitorInner {
+            sys: sysinfo::System::new(),
+            last_refresh: None,
+            last_stats: SystemStats {
+                cpu_percent: 0.0,
+                memory_mb: 0,
+            },
+        }))
+    }
+
+    /// Refreshes now regardless of `CPU_REFRESH_MIN_INTERVAL` — used once at
+    /// startup to move the CPU-usage baseline from "process exec()" to
+    /// "app finished initializing," so the frontend's first real poll isn't
+    /// diffed against the whole cold-start burst.
+    fn prime(&self) {
+        if let Ok(pid) = sysinfo::get_current_pid() {
+            let mut inner = self.0.lock().unwrap();
+            inner.sys.refresh_processes_specifics(
+                sysinfo::ProcessesToUpdate::Some(&[pid]),
+                true,
+                sysinfo::ProcessRefreshKind::nothing().with_cpu(),
+            );
+            inner.last_refresh = Some(std::time::Instant::now());
+        }
+    }
+}
+
+#[derive(serde::Serialize, Clone)]
 struct SystemStats {
     cpu_percent: f32,
     memory_mb: u64,
@@ -159,19 +207,30 @@ struct SystemStats {
 #[tauri::command]
 fn get_system_stats(monitor: tauri::State<SystemMonitor>) -> Result<SystemStats, String> {
     let pid = sysinfo::get_current_pid().map_err(|e| e.to_string())?;
-    let mut sys = monitor.0.lock().unwrap();
-    sys.refresh_processes_specifics(
-        sysinfo::ProcessesToUpdate::Some(&[pid]),
-        true,
-        sysinfo::ProcessRefreshKind::nothing()
-            .with_cpu()
-            .with_memory(),
-    );
-    let proc = sys.process(pid).ok_or("process not found")?;
-    Ok(SystemStats {
-        cpu_percent: proc.cpu_usage(),
-        memory_mb: proc.memory() / (1024 * 1024),
-    })
+    let mut inner = monitor.0.lock().unwrap();
+
+    let should_refresh = match inner.last_refresh {
+        Some(t) => t.elapsed() >= CPU_REFRESH_MIN_INTERVAL,
+        None => true,
+    };
+
+    if should_refresh {
+        inner.sys.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::Some(&[pid]),
+            true,
+            sysinfo::ProcessRefreshKind::nothing()
+                .with_cpu()
+                .with_memory(),
+        );
+        inner.last_refresh = Some(std::time::Instant::now());
+        let proc = inner.sys.process(pid).ok_or("process not found")?;
+        inner.last_stats = SystemStats {
+            cpu_percent: proc.cpu_usage(),
+            memory_mb: proc.memory() / (1024 * 1024),
+        };
+    }
+
+    Ok(inner.last_stats.clone())
 }
 
 /// Engine status for the frontend — built directly from the in-process native
@@ -1247,7 +1306,7 @@ pub fn run() {
         .manage(oauth_state.clone())
         .manage(engine_state.clone())
         .manage(hub_state.clone())
-        .manage(SystemMonitor(Mutex::new(sysinfo::System::new())))
+        .manage(SystemMonitor::new())
         .setup(move |app| {
             init_app_base_dir(app.handle());
 
@@ -1305,6 +1364,10 @@ pub fn run() {
                     log::error!("[SERVER] Failed to start widget/OAuth server: {}", e);
                 }
             });
+
+            // Prime the CPU-usage baseline now, not on the frontend's first
+            // poll — see SystemMonitor's doc comment for why.
+            app.state::<SystemMonitor>().prime();
 
             Ok(())
         })
