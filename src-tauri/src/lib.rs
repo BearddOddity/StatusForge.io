@@ -466,17 +466,21 @@ fn spawn_engine_loop(
                         game.platform
                     );
 
-                    let mut cg = state_arc.current_game.lock().unwrap();
-                    *cg = Some(game.clone());
-                    let mut proc = state_arc.current_process.lock().unwrap();
-                    *proc = game.process.clone();
-                    let mut playing = state_arc.is_playing.lock().unwrap();
-                    *playing = true;
-                    let mut st = state_arc.start_time.lock().unwrap();
-                    *st = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs_f64();
+                    // Scope the guards so every lock is RELEASED before
+                    // push_status() below — build_status() re-locks these same
+                    // mutexes, and std Mutex is non-reentrant. Holding them
+                    // across push_status() self-deadlocks this thread, which
+                    // then wedges every Tauri command that touches engine
+                    // state and freezes the whole app (AppHangB1).
+                    {
+                        *state_arc.current_game.lock().unwrap() = Some(game.clone());
+                        *state_arc.current_process.lock().unwrap() = game.process.clone();
+                        *state_arc.is_playing.lock().unwrap() = true;
+                        *state_arc.start_time.lock().unwrap() = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs_f64();
+                    }
 
                     // Emit event to frontend + push to WS widgets
                     let _ = app_handle.emit("game-detected", &game);
@@ -507,14 +511,14 @@ fn spawn_engine_loop(
                         current_game = None;
                         lost_focus_time = None;
 
-                        let mut cg = state_arc.current_game.lock().unwrap();
-                        *cg = None;
-                        let mut proc = state_arc.current_process.lock().unwrap();
-                        *proc = String::new();
-                        let mut playing = state_arc.is_playing.lock().unwrap();
-                        *playing = false;
-                        let mut st = state_arc.start_time.lock().unwrap();
-                        *st = 0.0;
+                        // Same as the NEW GAME branch: drop every guard before
+                        // push_status() re-locks these mutexes (deadlock otherwise).
+                        {
+                            *state_arc.current_game.lock().unwrap() = None;
+                            *state_arc.current_process.lock().unwrap() = String::new();
+                            *state_arc.is_playing.lock().unwrap() = false;
+                            *state_arc.start_time.lock().unwrap() = 0.0;
+                        }
 
                         let _ = app_handle.emit("game-cleared", &idle_category);
                         state_arc.push_status();
