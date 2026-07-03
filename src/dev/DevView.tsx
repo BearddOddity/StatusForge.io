@@ -57,6 +57,92 @@ function levelColor(line: string): string {
   return "text-white/40";
 }
 
+// ─── Plain-language log interpreter ─────────────────────────────────────────────
+// Classifies a raw debug.log line and, where we recognise it, rewrites it into a
+// sentence a non-developer can act on. Unknown lines fall back to the raw text.
+
+type LogLevel = "error" | "warn" | "info" | "debug";
+
+function lineLevel(line: string): LogLevel {
+  const l = line.toLowerCase();
+  if (l.includes("[error]") || l.includes("fatal") || l.includes("panic")) return "error";
+  // Real problems that log at WARN, plus generic failure words.
+  if (
+    l.includes("[warn]") ||
+    l.includes("failed") ||
+    l.includes("unauthorized") ||
+    l.includes("token refresh") ||
+    l.includes("permission") ||
+    l.includes("address in use") ||
+    l.includes("could not") ||
+    l.includes("couldn't")
+  )
+    return "warn";
+  // "[NATIVE] debug [FILTER] ..." style lines are routine, not info.
+  if (l.includes(" debug ") || l.includes("[filter]")) return "debug";
+  return "info";
+}
+
+// Ordered pattern → plain-English rewrite. First match wins. `$1` is filled from
+// the capture group when present (e.g. the game/category name).
+const HUMANIZE: { re: RegExp; msg: (m: RegExpMatchArray) => string }[] = [
+  // Detection lifecycle
+  { re: /NEW GAME:\s*(.+?)\s*\((.+?)\)/, msg: (m) => `🎮 Detected game: ${m[1]} — via ${m[2]}.` },
+  { re: /Grace period expired\. Dropping:\s*(.+)/, msg: (m) => `⏹ Stopped showing "${m[1].trim()}" — the game closed or stayed out of focus past the grace period.` },
+  // Category push — success
+  { re: /\[PUSH\] Twitch category set to "(.+?)"/, msg: (m) => `✅ Updated your Twitch category to "${m[1]}".` },
+  { re: /\[PUSH\] Kick category set/, msg: () => `✅ Updated your Kick category.` },
+  { re: /\[PUSH\] (Twitch|Kick) token expired — refreshing/, msg: (m) => `🔄 Your ${m[1]} login expired — refreshing it automatically.` },
+  // Category push — problems
+  { re: /\[PUSH\] Twitch:? no game id for "(.+?)"/, msg: (m) => `⚠ No matching Twitch category found for "${m[1]}", so your Twitch category was left unchanged.` },
+  { re: /\[PUSH\] Kick:? no category id for "(.+?)"/, msg: (m) => `⚠ No matching Kick category found for "${m[1]}", so your Kick category was left unchanged.` },
+  { re: /\[PUSH\] (Twitch|Kick) retry still unauthorized/, msg: (m) => `❌ Couldn't update your ${m[1]} channel — your login was rejected even after refreshing. Reconnect ${m[1]} in Settings → API & Routing.` },
+  { re: /\[PUSH\] (Twitch|Kick) token refresh failed/, msg: (m) => `❌ Couldn't refresh your ${m[1]} login. Reconnect ${m[1]} in Settings → API & Routing.` },
+  { re: /\[PUSH\] Failed to save refreshed (Twitch|Kick) token/, msg: (m) => `⚠ Refreshed your ${m[1]} login but couldn't save it — check that your settings file isn't read-only.` },
+  // Startup / system
+  { re: /Widget\/OAuth server listening/, msg: () => `✅ Local server is up (port 53735) — overlays and login can connect.` },
+  { re: /Engine loop started\. Grace:\s*(\d+)s, Interval:\s*(\d+)s/, msg: (m) => `▶ Detection engine started (checks every ${m[2]}s, ${m[1]}s grace before dropping a game).` },
+  { re: /address in use|Address already in use/, msg: () => `❌ Port 53735 is already in use by another program. Close it (or the other copy of StatusForge) and restart.` },
+  { re: /Screen Recording|permission/i, msg: () => `⚠ macOS needs Screen Recording permission to read window titles. Grant it in System Settings → Privacy & Security, then restart.` },
+  { re: /Failed to bootstrap Config\.json/, msg: () => `❌ Couldn't create your settings file on first run — check folder write permissions.` },
+  { re: /Failed to generate initial widget token/, msg: () => `⚠ Couldn't create a widget security token — overlays may not connect until you regenerate it in Settings → Engine.` },
+];
+
+// Routine filter lines → short reasons (only shown in Friendly mode, as debug).
+const FILTER_REASONS: { re: RegExp; msg: string }[] = [
+  { re: /RAM floor not met/, msg: "Ignored a program using too little memory to be a game." },
+  { re: /Chromium\/Electron shell trapped/, msg: "Ignored an Electron/Chromium app (Discord, Spotify, VS Code, etc.)." },
+  { re: /Desktop UI framework trapped/, msg: "Ignored a desktop tool (Qt/GTK/MFC window)." },
+  { re: /Background\/helper cmdline trapped/, msg: "Ignored a background/helper process." },
+  { re: /Window too small/, msg: "Ignored a window too small to be a game." },
+  { re: /parked off-screen/, msg: "Ignored a window hidden off-screen." },
+];
+
+/** Returns a friendly sentence for a line, or null to keep the raw text. */
+function humanize(line: string): string | null {
+  for (const { re, msg } of HUMANIZE) {
+    const m = line.match(re);
+    if (m) return msg(m);
+  }
+  for (const { re, msg } of FILTER_REASONS) {
+    if (re.test(line)) return msg;
+  }
+  // Generic error/warn with no specific rule: strip the log prefix noise.
+  const lvl = lineLevel(line);
+  if (lvl === "error" || lvl === "warn") {
+    const stripped = line.replace(/^\[[^\]]*\]\[[^\]]*\]\[[^\]]*\]\[[^\]]*\]\s*/, "").trim();
+    return stripped || null;
+  }
+  return null;
+}
+
+const LEVEL_STYLE: Record<LogLevel, string> = {
+  error: "text-red-400",
+  warn: "text-yellow-400",
+  info: "text-white/70",
+  debug: "text-white/30",
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DevView() {
@@ -67,6 +153,17 @@ export default function DevView() {
   const [error, setError] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [friendly, setFriendly] = useState(true);
+  const [errorsOnly, setErrorsOnly] = useState(false);
+
+  // Rows to render: classify, optionally filter to problems, optionally humanize.
+  const rows = logs
+    .map((raw) => ({ raw, level: lineLevel(raw), plain: humanize(raw) }))
+    .filter((r) => (errorsOnly ? r.level === "error" || r.level === "warn" : true));
+  const errorCount = logs.filter((l) => {
+    const lv = lineLevel(l);
+    return lv === "error" || lv === "warn";
+  }).length;
 
   // Fetch logs from Rust backend
   const fetchLogs = useCallback(async () => {
@@ -284,12 +381,33 @@ export default function DevView() {
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
               </div>
               <span className="text-[10px] text-white/30 font-mono ml-2">
-                debug.log — {settings.logTailLines} lines
+                debug.log
               </span>
             </div>
-            <span className="text-[9px] text-white/20">
-              {logs.length} lines
-            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setFriendly((v) => !v)}
+                title="Rewrite log lines into plain English"
+                className={`text-[9px] px-2 py-1 rounded-md border transition-colors cursor-pointer ${
+                  friendly
+                    ? "bg-purple-500/15 border-purple-500/25 text-purple-300"
+                    : "bg-white/[0.04] border-white/10 text-white/40 hover:text-white/70"
+                }`}
+              >
+                {friendly ? "Plain English" : "Raw"}
+              </button>
+              <button
+                onClick={() => setErrorsOnly((v) => !v)}
+                title="Show only warnings and errors"
+                className={`text-[9px] px-2 py-1 rounded-md border transition-colors cursor-pointer ${
+                  errorsOnly
+                    ? "bg-red-500/15 border-red-500/25 text-red-300"
+                    : "bg-white/[0.04] border-white/10 text-white/40 hover:text-white/70"
+                }`}
+              >
+                Errors only{errorCount ? ` (${errorCount})` : ""}
+              </button>
+            </div>
           </div>
 
           <div
@@ -304,14 +422,25 @@ export default function DevView() {
             {error && (
               <div className="text-red-400 mb-2">Error: {error}</div>
             )}
-            {logs.length === 0 && !error && (
-              <div className="text-white/20">No log output yet.</div>
-            )}
-            {logs.map((line, i) => (
-              <div key={i} className={`${levelColor(line)} break-all whitespace-pre-wrap`}>
-                {line}
+            {rows.length === 0 && !error && (
+              <div className="text-white/20">
+                {errorsOnly ? "No warnings or errors 🎉" : "No log output yet."}
               </div>
-            ))}
+            )}
+            {rows.map((r, i) => {
+              const showPlain = friendly && r.plain;
+              return (
+                <div
+                  key={i}
+                  title={showPlain ? r.raw : undefined}
+                  className={`${
+                    showPlain ? LEVEL_STYLE[r.level] : levelColor(r.raw)
+                  } break-all whitespace-pre-wrap`}
+                >
+                  {showPlain ? r.plain : r.raw}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
