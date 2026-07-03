@@ -1270,7 +1270,12 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
       ...entry.userFields.map((f) => f.key),
       ...(entry.managedFields?.map((f) => f.key) ?? []),
     ];
-    return allKeys.some((k) => !!config.broadcaster[k as keyof typeof config.broadcaster]);
+    // Presence, not truthiness: addRouteFromCatalog sets a field to "" to
+    // activate its card (so the user can type into it), and removeRouteEntry
+    // deletes the key entirely to deactivate it. A truthy check meant a
+    // freshly-added, still-empty platform never satisfied its own
+    // activation check, so clicking "+ Add" silently did nothing.
+    return allKeys.some((k) => k in config.broadcaster);
   };
 
   const availableRoutes = ROUTING_CATALOG.filter((e) => !isRouteEntryActive(e));
