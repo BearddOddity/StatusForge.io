@@ -52,6 +52,6 @@ hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
 rustls = "0.23"
 rustls-pemfile = "2"
 tokio-rustls = "0.26"
-rcgen = "0.13"
+rcgen = "0.14"
 hmac = "0.12"
 
