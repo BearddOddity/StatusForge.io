@@ -552,7 +552,10 @@ fn ensure_idle_library_entry(base: &std::path::Path) {
         },
     );
     if let Err(e) = server::save_db(&db) {
-        log::warn!("[STARTUP] Failed to create idle category library entry: {}", e);
+        log::warn!(
+            "[STARTUP] Failed to create idle category library entry: {}",
+            e
+        );
     }
 }
 
@@ -1418,7 +1421,7 @@ fn refresh_platform_push(state: tauri::State<Arc<NativeEngineState>>) -> Result<
 fn export_metadata_readme(app: tauri::AppHandle) -> Result<String, String> {
     let db = server::load_db()?;
     let mut entries: Vec<&config::ForgeLibraryEntry> = db.library.values().collect();
-    entries.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    entries.sort_by_key(|e| e.title.to_lowercase());
 
     let mut md = String::new();
     md.push_str("# StatusForge Game Library\n\n");

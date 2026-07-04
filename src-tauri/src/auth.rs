@@ -846,10 +846,16 @@ fn redact_migrated_secrets(config: &mut AppConfig) {
         }
     };
     sync(&mut config.broadcaster.twitch_token, "twitch_access_token");
-    sync(&mut config.broadcaster.twitch_refresh, "twitch_refresh_token");
+    sync(
+        &mut config.broadcaster.twitch_refresh,
+        "twitch_refresh_token",
+    );
     sync(&mut config.broadcaster.kick_token, "kick_access_token");
     sync(&mut config.broadcaster.kick_refresh, "kick_refresh_token");
-    sync(&mut config.broadcaster.twitch_secret, "twitch_client_secret");
+    sync(
+        &mut config.broadcaster.twitch_secret,
+        "twitch_client_secret",
+    );
     sync(&mut config.broadcaster.kick_secret, "kick_client_secret");
     sync(&mut config.api_keys.igdb_token, "igdb_api_token");
     sync(&mut config.api_keys.igdb_secret, "igdb_api_secret");
