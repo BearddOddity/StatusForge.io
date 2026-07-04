@@ -718,6 +718,27 @@ fn spawn_engine_loop(
                 .map(|c| c.engine_settings.idle_category.clone())
                 .unwrap_or_else(|| "Just Chatting".to_string());
 
+            // SPARK Dual-PC Link active: this PC defers entirely to the
+            // paired SPARK agent (see hub.rs) so the two sources never
+            // crosswire. Drop any local detection still held and skip
+            // scanning this iteration.
+            let spark_link_active = config
+                .as_ref()
+                .map(|c| c.engine_settings.spark_link_active)
+                .unwrap_or(false);
+            if spark_link_active {
+                if current_game.is_some() {
+                    log::info!("[NATIVE] SPARK Dual-PC Link active — pausing local detection.");
+                    current_game = None;
+                    lost_focus_time = None;
+                    state_arc.clear_playing();
+                    let _ = app_handle.emit("game-cleared", &idle_category);
+                    state_arc.push_status();
+                }
+                std::thread::sleep(Duration::from_secs(scan_interval));
+                continue;
+            }
+
             // Load full forge DB (listed/delisted for the scanner, library for category push)
             let base = app_base_dir().unwrap_or_default();
             let forge_db_path = base.join("Forge_Database.json");

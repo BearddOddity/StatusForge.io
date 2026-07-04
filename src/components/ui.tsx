@@ -206,7 +206,7 @@ export function MetadataField({
   value: string;
   saving: boolean;
   onChange: (val: string) => void;
-  onSave: () => void;
+  onSave: (val: string) => void;
   onSearch?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -231,7 +231,7 @@ export function MetadataField({
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 onChange(localVal);
-                onSave();
+                onSave(localVal);
                 setEditing(false);
               }
               if (e.key === "Escape") {
@@ -245,7 +245,7 @@ export function MetadataField({
             disabled={saving}
             onClick={() => {
               onChange(localVal);
-              onSave();
+              onSave(localVal);
               setEditing(false);
             }}
           >
@@ -288,10 +288,7 @@ export function MetadataField({
           </button>
         )}
         <button
-          onClick={() => {
-            onChange(value);
-            onSave();
-          }}
+          onClick={() => onSave(value)}
           className="text-white/25 hover:text-green-400 transition-all text-xs cursor-pointer bg-transparent border-none shrink-0 p-1 rounded-md hover:bg-white/[0.04]"
           title="Save"
         >

@@ -72,6 +72,11 @@ pub struct EngineSettings {
     /// Optional user-set pairing key mixed into the SPARK heartbeat HMAC secret.
     #[serde(default)]
     pub spark_pairing_key: String,
+    /// When true, this PC's local scanner stops reporting detections —
+    /// only the paired SPARK agent drives the game state. Prevents the two
+    /// detection sources from crosswiring when a dual-PC link is in use.
+    #[serde(default)]
+    pub spark_link_active: bool,
     #[serde(default = "default_emulator_detection")]
     pub emulator_detection: bool,
     #[serde(default = "default_ram_threshold")]
@@ -114,6 +119,7 @@ impl Default for EngineSettings {
             widget_token: default_widget_token(),
             spark_pin: default_spark_pin(),
             spark_pairing_key: String::new(),
+            spark_link_active: false,
             emulator_detection: default_emulator_detection(),
             ram_threshold: default_ram_threshold(),
             process_filter_bypass: false,
