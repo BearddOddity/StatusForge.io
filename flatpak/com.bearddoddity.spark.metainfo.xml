@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.bearddoddity.spark</id>
+  <name>StatusForge Spark</name>
+  <summary>Dual-PC game-detection agent for StatusForge.io</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      SPARK runs on a gaming PC and forwards signed game-detection
+      heartbeats over the LAN to a StatusForge.io hub on a separate
+      streaming PC, for dual-PC streaming setups.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.bearddoddity.spark.desktop</launchable>
+  <url type="homepage">https://github.com/BearddOddity/StatusForge.io</url>
+  <releases>
+    <release version="1.0.0" date="2026-07-04"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>
