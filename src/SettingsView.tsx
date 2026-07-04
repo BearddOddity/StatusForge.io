@@ -2274,7 +2274,8 @@ function SystemSubTab({
     if (typeof res === "string") {
       toast(`Database exported to ${res}`, "success");
     } else {
-      const err = res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
+      const err =
+        res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
       toast(err ? `Export failed: ${err}` : "Export failed", "error");
     }
   };
@@ -2284,7 +2285,8 @@ function SystemSubTab({
     if (typeof res === "string") {
       toast(`Library README saved to ${res}`, "success");
     } else {
-      const err = res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
+      const err =
+        res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
       toast(err ? `Export failed: ${err}` : "Export failed", "error");
     }
   };
