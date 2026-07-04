@@ -20,6 +20,12 @@
 # macOS ships UNSIGNED and un-notarized by design (no Apple account) — the
 # job succeeds and emits an unsigned .dmg/.app. See the commented block at
 # the bottom to enable Apple signing later.
+#
+# Flatpak: not a native Tauri bundle target, so the `flatpak` job below runs
+# after `build` and wraps the just-published Linux .deb into a Flatpak
+# single-file bundle (manifests in flatpak/), uploaded as an extra asset on
+# the same release. This is a distributable .flatpak bundle, not a Flathub
+# submission (that's a separate, manual repo-review process).
 
 name: Release
 
@@ -102,3 +108,72 @@ jobs:
           releaseDraft: false
           prerelease: ${{ matrix.app.prerelease }}
           includeUpdaterJson: true
+
+  # Wraps each app's just-published Linux .deb into a Flatpak single-file
+  # bundle and attaches it to the same release. Runs after `build` so the
+  # release + .deb asset already exist to download from.
+  flatpak:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - name: StatusForge
+            id: com.bearddoddity.statusforge
+            debName: statusforge.deb
+            manifest: com.bearddoddity.statusforge.yml
+            versionFile: src-tauri/tauri.conf.json
+            isSpark: false
+          - name: Spark
+            id: com.bearddoddity.spark
+            debName: spark.deb
+            manifest: com.bearddoddity.spark.yml
+            versionFile: spark-app/src-tauri/tauri.conf.json
+            isSpark: true
+    name: Flatpak (${{ matrix.app.name }})
+    steps:
+      - uses: actions/checkout@v4
+
+      # StatusForge tags as v<version> (tauri-action expands __VERSION__ at
+      # build time); Spark always tags as the moving spark-latest.
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ matrix.app.isSpark }}" = "true" ]; then
+            echo "tag=spark-latest" >> "$GITHUB_OUTPUT"
+          else
+            VERSION=$(node -p "require('./${{ matrix.app.versionFile }}').version")
+            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.gnome.Platform//46 org.gnome.Sdk//46
+
+      - name: Download ${{ matrix.app.name }}'s .deb from its release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p flatpak
+          gh release download "${{ steps.tag.outputs.tag }}" --pattern '*.deb' --dir flatpak --clobber --repo "${{ github.repository }}"
+
+      - name: Rename .deb to what the manifest expects
+        working-directory: flatpak
+        run: mv -f *.deb ${{ matrix.app.debName }}
+
+      - name: Build Flatpak bundle
+        working-directory: flatpak
+        run: |
+          flatpak-builder --user --force-clean --repo=repo build ${{ matrix.app.manifest }}
+          flatpak build-bundle repo ${{ matrix.app.id }}.flatpak ${{ matrix.app.id }}
+
+      - name: Upload Flatpak bundle to the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" "flatpak/${{ matrix.app.id }}.flatpak" --clobber --repo "${{ github.repository }}"
