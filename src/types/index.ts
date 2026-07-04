@@ -50,6 +50,7 @@ export interface EngineSettings {
   widget_poll_rate: number;
   safe_mode: boolean;
   auto_push: boolean;
+  platform_push_enabled: boolean;
   widget_fade_timer: number;
   strict_forge_mode: boolean;
   sb_action_name: string;

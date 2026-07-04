@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { ForgeLibraryEntry } from "@/types";
 import { Card, CoverImage } from "./ui";
 
@@ -26,6 +26,52 @@ export default function CarouselView({
     },
     [entries.length, onSelect]
   );
+
+  // Arrow keys move the active cover, Home/End jump to the ends, Enter/Space
+  // opens the focused cover — global listener since the carousel has no
+  // natural single focusable element to bind to, but skipped while the user
+  // is typing into an input/textarea/contenteditable elsewhere on the page.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (isTyping) return;
+
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          goTo(activeIndex - 1);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          goTo(activeIndex + 1);
+          break;
+        case "Home":
+          e.preventDefault();
+          goTo(0);
+          break;
+        case "End":
+          e.preventDefault();
+          goTo(entries.length - 1);
+          break;
+        case "Enter":
+        case " ":
+          if (onActiveCardClick) {
+            e.preventDefault();
+            onActiveCardClick();
+          }
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [activeIndex, entries.length, goTo, onActiveCardClick]);
 
   if (entries.length === 0) {
     return (
@@ -58,7 +104,7 @@ export default function CarouselView({
           className="flex items-center h-full transition-transform duration-500 ease-out"
           style={{
             gap: `${CARD_GAP}px`,
-            transform: `translateX(${-activeIndex * STEP}px)`,
+            transform: `translateX(${-(activeIndex - windowStart) * STEP}px)`,
             willChange: "transform",
           }}
         >

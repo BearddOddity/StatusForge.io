@@ -1,5 +1,10 @@
 # Ignore Security Keys
 *.pem
+*.key
+*.p12
+*.keystore
+.env
+.env.*
 
 # Ignore Node and Build folders
 node_modules/
@@ -30,3 +35,12 @@ Forge_Database.json
 not required/
 **/target/
 *.log
+
+# Ignore Playwright MCP preview screenshots/traces
+.playwright-mcp/
+
+# Ignore editor/OS junk
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

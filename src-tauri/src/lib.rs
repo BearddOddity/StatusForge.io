@@ -1052,39 +1052,38 @@ fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
     Ok(migrated)
 }
 
-/// Retrieve all keychain-stored tokens as a JSON object.
-/// Called by the frontend so API keys never need to live in Config.json.
+/// Retrieve all keychain-stored tokens as a JSON object, keyed by the same
+/// app-facing names the frontend/config use (`twitch_token`, `kick_token`,
+/// …). The actual OS keyring entries are stored under different names
+/// (`twitch_access_token`, `kick_access_token`, …) — see
+/// `migrate_tokens_to_keychain` and `auth::backfill_from_keychain`, which
+/// this must stay in sync with. Called by the frontend so API keys never
+/// need to live in Config.json.
 #[tauri::command]
 fn get_all_keychain_tokens() -> Result<serde_json::Value, String> {
+    // (app-facing key, actual keyring entry name)
     let broadcaster_keys = [
-        "twitch_token",
-        "twitch_refresh",
-        "kick_token",
-        "kick_refresh",
-        "twitch_secret",
-        "kick_secret",
-        "twitch_client_id",
-        "kick_client_id",
+        ("twitch_token", "twitch_access_token"),
+        ("twitch_refresh", "twitch_refresh_token"),
+        ("kick_token", "kick_access_token"),
+        ("kick_refresh", "kick_refresh_token"),
+        ("twitch_secret", "twitch_client_secret"),
+        ("kick_secret", "kick_client_secret"),
     ];
-    let api_keys = ["igdb_token", "igdb_secret", "rawg", "steamgrid"];
+    let api_keys = [
+        ("igdb_token", "igdb_api_token"),
+        ("igdb_secret", "igdb_api_secret"),
+        ("rawg", "rawg_api_key"),
+        ("steamgrid", "steamgrid_api_key"),
+    ];
 
     let mut map = serde_json::Map::new();
-    for key in &broadcaster_keys {
-        let entry = keyring::Entry::new(KEYRING_SERVICE, key);
+    for (app_key, keychain_name) in broadcaster_keys.iter().chain(api_keys.iter()) {
+        let entry = keyring::Entry::new(KEYRING_SERVICE, keychain_name);
         if let Ok(e) = entry {
             if let Ok(val) = e.get_password() {
                 if !val.is_empty() {
-                    map.insert(key.to_string(), serde_json::json!(val));
-                }
-            }
-        }
-    }
-    for key in &api_keys {
-        let entry = keyring::Entry::new(KEYRING_SERVICE, key);
-        if let Ok(e) = entry {
-            if let Ok(val) = e.get_password() {
-                if !val.is_empty() {
-                    map.insert(key.to_string(), serde_json::json!(val));
+                    map.insert(app_key.to_string(), serde_json::json!(val));
                 }
             }
         }
@@ -1363,6 +1362,111 @@ fn dev_export_error_log(app: tauri::AppHandle, content: String) -> Result<String
     std::fs::write(&path, content).map_err(|e| format!("Failed to write log file: {}", e))?;
 
     Ok(path.to_string_lossy().to_string())
+}
+
+/// Write the full Forge_Database.json (scraped game metadata) to
+/// `Documents/StatusForge Logs/` as a timestamped, pretty-printed copy.
+/// Returns the full path written so the UI can show the user where it landed.
+#[tauri::command]
+fn export_game_database(app: tauri::AppHandle) -> Result<String, String> {
+    let db = server::load_db()?;
+    let docs = app
+        .path()
+        .document_dir()
+        .map_err(|e| format!("Failed to resolve Documents folder: {}", e))?;
+    let dir = docs.join("StatusForge Logs");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create export folder: {}", e))?;
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let path = dir.join(format!("statusforge_database_{}.json", timestamp));
+    let raw = serde_json::to_string_pretty(&db)
+        .map_err(|e| format!("Failed to serialize database: {}", e))?;
+    std::fs::write(&path, raw).map_err(|e| format!("Failed to write export file: {}", e))?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Re-push the currently active game's category. Toggling Platform Detection
+/// off leaves the last-pushed category on Twitch/Kick untouched (no revert)
+/// so viewers don't see it flicker; toggling back on doesn't wait for the
+/// player to switch games again — call this right after flipping the toggle
+/// so the platform picks up the in-progress session immediately.
+#[tauri::command]
+fn refresh_platform_push(state: tauri::State<Arc<NativeEngineState>>) -> Result<bool, String> {
+    let game = state.current_game.lock().unwrap().clone();
+    let Some(game) = game else {
+        return Ok(false);
+    };
+    let base = app_base_dir()?;
+    let config = auth::load_config_at(&base)?;
+    if !config.engine_settings.platform_push_enabled {
+        return Ok(false);
+    }
+    let forge_db = server::load_db()?;
+    pusher::push_category(&base, &config, &forge_db, &game.title);
+    Ok(true)
+}
+
+/// Generate a Markdown table listing every scraped game's metadata, suitable
+/// for pasting into a GitHub repo's README as a public library index. Written
+/// locally only — no git credentials touch this, the user pushes it
+/// themselves.
+#[tauri::command]
+fn export_metadata_readme(app: tauri::AppHandle) -> Result<String, String> {
+    let db = server::load_db()?;
+    let mut entries: Vec<&config::ForgeLibraryEntry> = db.library.values().collect();
+    entries.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+
+    let mut md = String::new();
+    md.push_str("# StatusForge Game Library\n\n");
+    md.push_str(&format!(
+        "Scraped metadata for {} game{} tracked by StatusForge.\n\n",
+        entries.len(),
+        if entries.len() == 1 { "" } else { "s" }
+    ));
+    md.push_str("| Cover | Title | Genre | Year | Developer | Publisher |\n");
+    md.push_str("|---|---|---|---|---|---|\n");
+    for e in &entries {
+        let cover = if e.cover_url.is_empty() {
+            String::new()
+        } else {
+            format!("![]({})", e.cover_url)
+        };
+        md.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} |\n",
+            cover,
+            md_escape(&e.title),
+            md_escape(&e.genre),
+            md_escape(&e.release_year),
+            md_escape(&e.developer),
+            md_escape(&e.publisher),
+        ));
+    }
+
+    let docs = app
+        .path()
+        .document_dir()
+        .map_err(|e| format!("Failed to resolve Documents folder: {}", e))?;
+    let dir = docs.join("StatusForge Logs");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create export folder: {}", e))?;
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let path = dir.join(format!("statusforge_library_{}.md", timestamp));
+    std::fs::write(&path, md).map_err(|e| format!("Failed to write README file: {}", e))?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Escape pipe characters so a title/genre/etc. containing `|` doesn't break
+/// the Markdown table's column boundaries.
+fn md_escape(s: &str) -> String {
+    s.replace('|', "\\|")
 }
 
 #[derive(serde::Serialize)]
@@ -1702,6 +1806,9 @@ pub fn run() {
             get_system_stats,
             log_frontend_toast,
             dev_export_error_log,
+            export_game_database,
+            export_metadata_readme,
+            refresh_platform_push,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

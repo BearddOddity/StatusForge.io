@@ -307,6 +307,9 @@ fn push_kick(base_dir: &Path, config: &AppConfig, db: &ForgeDatabase, title: &st
 /// No-op unless routing_mode is Native. Never errors — failures are logged so
 /// the engine loop keeps running.
 pub fn push_category(base_dir: &Path, config: &AppConfig, db: &ForgeDatabase, title: &str) {
+    if !config.engine_settings.platform_push_enabled {
+        return;
+    }
     if config.broadcaster.routing_mode != RoutingMode::Native {
         return;
     }

@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import type { EngineStatus, ToastType, SystemStats } from "@/types";
-import { tauriApi, getKeychainStatus, getSystemStats, fetchWidgetToken } from "@/hooks/useTauriApi";
+import {
+  tauriApi,
+  getKeychainStatus,
+  getSystemStats,
+  fetchWidgetToken,
+  fetchConfig,
+  saveConfig,
+} from "@/hooks/useTauriApi";
 import { Card, Btn, FieldSection } from "@/components/ui";
+import { Toggle } from "@/components/SettingsComponents";
 
 const idleCover = "/just%20chatting.png";
 const offlineCover = "/offline.svg";
@@ -159,6 +167,21 @@ export default function DashboardView({
   // makes a real (read-only) validation call on every refresh.
   const [platforms, setPlatforms] = useState<PlatformConnections>(disconnectedPlatforms);
   const [sparkPaired, setSparkPaired] = useState<{ hostname: string } | null>(null);
+  const [platformPushEnabled, setPlatformPushEnabled] = useState(true);
+  const togglePlatformPush = async () => {
+    const config = await fetchConfig();
+    if (!config) return;
+    const next = !config.engine_settings.platform_push_enabled;
+    setPlatformPushEnabled(next);
+    await saveConfig({
+      ...config,
+      engine_settings: { ...config.engine_settings, platform_push_enabled: next },
+    });
+    // Turning off leaves the last-pushed category alone (no revert). Turning
+    // back on shouldn't wait for the player to switch games again — pick up
+    // whatever's already in progress right away.
+    if (next) await tauriApi("refresh_platform_push");
+  };
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
@@ -169,6 +192,12 @@ export default function DashboardView({
         tauriApi("check_platform_live_status"),
       ]);
       if (cancelled) return;
+      if (config && typeof config === "object" && "engine_settings" in config) {
+        setPlatformPushEnabled(
+          (config as { engine_settings: { platform_push_enabled: boolean } }).engine_settings
+            .platform_push_enabled
+        );
+      }
       const routingMode =
         config && typeof config === "object" && "broadcaster" in config
           ? (config as { broadcaster: { routing_mode: string } }).broadcaster.routing_mode
@@ -397,6 +426,11 @@ export default function DashboardView({
                   </div>
                 );
               })}
+            </div>
+            {/* Platform Detection quick toggle */}
+            <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+              <span className="text-xs font-medium text-white/70">Platform Detection</span>
+              <Toggle on={platformPushEnabled} onToggle={togglePlatformPush} />
             </div>
             {/* Spark Pulse */}
             <div className="mt-3 pt-3 border-t border-white/5">

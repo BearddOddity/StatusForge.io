@@ -76,6 +76,7 @@ export function OverlayMetadataPanel({
 }: OverlayMetadataPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [editData, setEditData] = useState<Record<string, string>>({});
+  const [previewTab, setPreviewTab] = useState<"cover" | "logo">("cover");
 
   useEffect(() => {
     if (entry) {
@@ -93,6 +94,7 @@ export function OverlayMetadataPanel({
         twitch_id: entry.twitch_id || "",
         kick_id: entry.kick_id || "",
       });
+      setPreviewTab("cover");
     }
   }, [entry]);
 
@@ -134,9 +136,48 @@ export function OverlayMetadataPanel({
         {/* Left sidebar — cover + actions */}
         <div className="w-[280px] shrink-0 bg-black/20 border-r border-white/5 p-4 overflow-y-auto flex flex-col">
           <div className="relative flex flex-col items-center mb-5">
-            <div className="w-full aspect-[2/3] rounded-2xl overflow-hidden bg-black/30 border border-white/10 shadow-lg shadow-black/30 hover:border-white/15 transition-all">
-              <CoverImage src={editData.cover_url || ""} alt={editData.title || ""} />
+            <div className="flex w-full mb-2 rounded-lg bg-white/[0.04] border border-white/10 p-0.5">
+              <button
+                onClick={() => setPreviewTab("cover")}
+                className={`flex-1 text-[11px] font-medium py-1.5 rounded-md transition-all cursor-pointer ${
+                  previewTab === "cover"
+                    ? "bg-white/10 text-white"
+                    : "text-white/40 hover:text-white/70"
+                }`}
+              >
+                Cover
+              </button>
+              <button
+                onClick={() => setPreviewTab("logo")}
+                className={`flex-1 text-[11px] font-medium py-1.5 rounded-md transition-all cursor-pointer ${
+                  previewTab === "logo"
+                    ? "bg-white/10 text-white"
+                    : "text-white/40 hover:text-white/70"
+                }`}
+              >
+                Logo
+              </button>
             </div>
+            {previewTab === "cover" ? (
+              <div className="w-full aspect-[2/3] rounded-2xl overflow-hidden bg-black/30 border border-white/10 shadow-lg shadow-black/30 hover:border-white/15 transition-all">
+                <CoverImage src={editData.cover_url || ""} alt={editData.title || ""} />
+              </div>
+            ) : (
+              <div className="w-full aspect-[2/3] rounded-2xl overflow-hidden bg-black/30 border border-white/10 shadow-lg shadow-black/30 hover:border-white/15 transition-all flex items-center justify-center p-4">
+                {editData.logo_url ? (
+                  <img
+                    src={editData.logo_url}
+                    alt={`${editData.title || ""} logo`}
+                    className="max-w-full max-h-full object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <span className="text-white/25 text-xs text-center px-4">No logo URL set</span>
+                )}
+              </div>
+            )}
             <h3 className="text-white font-semibold text-center mt-3 text-sm">
               {entry.title || "Untitled"}
             </h3>

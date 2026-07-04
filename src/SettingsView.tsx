@@ -1014,6 +1014,7 @@ const defaultConfig: AppConfig = {
     widget_poll_rate: 8,
     safe_mode: false,
     auto_push: false,
+    platform_push_enabled: true,
     widget_fade_timer: 15,
     strict_forge_mode: false,
     sb_action_name: "UpdateCategory",
@@ -1728,6 +1729,33 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
             </button>
           </div>
 
+          <div className="flex items-center justify-between py-3 mb-2 border-b border-white/[0.05]">
+            <div>
+              <span className="text-xs text-white/80 font-medium">Platform Detection</span>
+              <p className="text-[10px] text-white/30 mt-0.5">
+                Send detected game state to Twitch / Kick. Turn off to keep detection local-only.
+              </p>
+            </div>
+            <Toggle
+              on={config.engine_settings.platform_push_enabled}
+              onToggle={() => {
+                const next = !config.engine_settings.platform_push_enabled;
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        engine_settings: { ...prev.engine_settings, platform_push_enabled: next },
+                      }
+                    : prev
+                );
+                // Off leaves the last-pushed category as-is; on picks up an
+                // in-progress session immediately instead of waiting for the
+                // next game switch.
+                if (next) tauriApi("refresh_platform_push");
+              }}
+            />
+          </div>
+
           {allRouteDisplay.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-white/30">
               <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mb-4">
@@ -2241,6 +2269,26 @@ function SystemSubTab({
     }
   };
 
+  const exportGameDatabase = async () => {
+    const res = await tauriApi("export_game_database");
+    if (typeof res === "string") {
+      toast(`Database exported to ${res}`, "success");
+    } else {
+      const err = res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
+      toast(err ? `Export failed: ${err}` : "Export failed", "error");
+    }
+  };
+
+  const exportMetadataReadme = async () => {
+    const res = await tauriApi("export_metadata_readme");
+    if (typeof res === "string") {
+      toast(`Library README saved to ${res}`, "success");
+    } else {
+      const err = res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
+      toast(err ? `Export failed: ${err}` : "Export failed", "error");
+    }
+  };
+
   const startupCount = [prefs.launchOnLogin, prefs.autoStartEngine, prefs.minimizeToTray].filter(
     Boolean
   ).length;
@@ -2517,9 +2565,15 @@ function SystemSubTab({
       </CollapsibleSection>
 
       {/* Actions */}
-      <div className="flex gap-3 mt-5">
+      <div className="flex gap-3 mt-5 flex-wrap">
         <button onClick={exportConfig} className="btn-ghost">
           Export Config
+        </button>
+        <button onClick={exportGameDatabase} className="btn-ghost">
+          Export Game Database
+        </button>
+        <button onClick={exportMetadataReadme} className="btn-ghost">
+          Export Library README (.md)
         </button>
       </div>
     </div>

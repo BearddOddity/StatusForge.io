@@ -59,6 +59,11 @@ pub struct EngineSettings {
     pub safe_mode: bool,
     #[serde(default)]
     pub auto_push: bool,
+    /// Master switch for pushing detected game state to Twitch/Kick (category
+    /// updates, stream info). Defaults true so upgrading existing configs
+    /// doesn't silently stop routing that was already working.
+    #[serde(default = "default_platform_push_enabled")]
+    pub platform_push_enabled: bool,
     #[serde(default = "default_widget_fade_timer")]
     pub widget_fade_timer: u64,
     #[serde(default)]
@@ -113,6 +118,7 @@ impl Default for EngineSettings {
             widget_poll_rate: default_widget_poll_rate(),
             safe_mode: false,
             auto_push: false,
+            platform_push_enabled: default_platform_push_enabled(),
             widget_fade_timer: default_widget_fade_timer(),
             strict_forge_mode: false,
             sb_action_name: default_sb_action_name(),
@@ -331,6 +337,10 @@ fn default_spark_pin() -> String {
     "0000".to_string()
 }
 fn default_emulator_detection() -> bool {
+    true
+}
+
+fn default_platform_push_enabled() -> bool {
     true
 }
 fn default_ram_threshold() -> u64 {
