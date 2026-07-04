@@ -50,22 +50,44 @@ pub struct TokenQuery {
     token: Option<String>,
 }
 
-/// Validate the widget token when one is supplied. Absent token → allowed
-/// (overlays don't send one; the server is loopback-only). Wrong token → 401.
+/// Byte-for-byte equal without short-circuiting on the first mismatching
+/// byte, so response timing doesn't leak how many leading bytes of a guess
+/// were correct. Only the length check exits early — token length isn't
+/// secret (it's a fixed-size base64 encoding of 16 random bytes).
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Validate the widget token. A request must supply the correct token via
+/// `X-Forge-Token` header or `?token=` query param — missing or wrong token
+/// is always rejected.
+///
+/// Binding to loopback only keeps *other machines* out; it does nothing
+/// against a malicious webpage the user has open in their own browser,
+/// which can reach `127.0.0.1` just fine and — with permissive CORS — read
+/// the response too. The token is the actual access control here, so it
+/// can't be optional.
 fn check_token(headers: &HeaderMap, query_token: Option<&str>) -> Result<(), StatusCode> {
     let provided = headers
         .get("X-Forge-Token")
         .and_then(|v| v.to_str().ok())
         .or(query_token);
     let Some(provided) = provided else {
-        return Ok(());
+        return Err(StatusCode::UNAUTHORIZED);
     };
     let expected = crate::app_base_dir()
         .ok()
         .and_then(|base| crate::auth::load_config_at(&base).ok())
         .map(|c| c.engine_settings.widget_token)
         .unwrap_or_default();
-    if !expected.is_empty() && provided == expected {
+    if !expected.is_empty() && constant_time_eq(provided.as_bytes(), expected.as_bytes()) {
         Ok(())
     } else {
         Err(StatusCode::UNAUTHORIZED)
@@ -337,14 +359,23 @@ async fn kick_login_handler(State(state): State<ServerState>) -> Result<Redirect
     )))
 }
 
-async fn twitch_login_handler() -> Result<Redirect, StatusCode> {
+async fn twitch_login_handler(State(state): State<ServerState>) -> Result<Redirect, StatusCode> {
     let config = load_config().ok_or_else(|| internal("Config.json unavailable".into()))?;
     let client_id = config.broadcaster.twitch_client;
     if client_id.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
+    let state_token = crate::auth::generate_code_verifier();
+    state.oauth.pkce.lock().unwrap().insert(
+        "twitch".to_string(),
+        crate::auth::PkceState {
+            verifier: String::new(),
+            state: state_token.clone(),
+        },
+    );
     Ok(Redirect::temporary(&crate::auth::build_twitch_auth_url(
         &client_id,
+        &state_token,
     )))
 }
 
@@ -487,7 +518,7 @@ async fn forge_widget_handler(
     let expected = load_config()
         .map(|c| c.engine_settings.widget_token)
         .unwrap_or_default();
-    if expected.is_empty() || token != expected {
+    if expected.is_empty() || !constant_time_eq(token.as_bytes(), expected.as_bytes()) {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
@@ -517,10 +548,6 @@ async fn forge_widget_handler(
 }
 
 fn build_router(state: ServerState) -> Router {
-    let widgets_dir = crate::app_base_dir()
-        .map(|b| b.join("widgets"))
-        .unwrap_or_else(|_| std::path::PathBuf::from("widgets"));
-
     Router::new()
         .route("/status", get(status_handler))
         .route("/settings", get(settings_handler))
@@ -540,7 +567,6 @@ fn build_router(state: ServerState) -> Router {
             "/oauth/callback/{platform}",
             get(crate::auth::oauth_callback),
         )
-        .nest_service("/widgets", tower_http::services::ServeDir::new(widgets_dir))
         .layer(
             tower_http::cors::CorsLayer::new()
                 .allow_origin(tower_http::cors::Any)
@@ -683,5 +709,13 @@ mod tests {
         };
         unexile(&mut db, "Celeste.EXE");
         assert_eq!(db.delisted_apps, vec!["other.exe".to_string()]);
+    }
+
+    #[test]
+    fn constant_time_eq_matches_regular_equality() {
+        assert!(constant_time_eq(b"same-token", b"same-token"));
+        assert!(!constant_time_eq(b"same-token", b"different"));
+        assert!(!constant_time_eq(b"short", b"much-longer-value"));
+        assert!(constant_time_eq(b"", b""));
     }
 }

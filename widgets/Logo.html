@@ -52,9 +52,18 @@
     let widgetFadeTimer = null;
     let pollRate = 3000;
 
+    // This page is only ever loaded via /forge-widget/<token>/Logo.html, so
+    // the token that unlocked the page itself is right there in the URL —
+    // reuse it for /status and /settings, which require it too.
+    function getWidgetToken() {
+        const parts = window.location.pathname.split('/');
+        const idx = parts.indexOf('forge-widget');
+        return idx >= 0 && parts[idx + 1] ? parts[idx + 1] : '';
+    }
+
     async function initializeWidget() {
         try {
-            const url = 'http://127.0.0.1:53735/settings?nocache=' + new Date().getTime();
+            const url = 'http://127.0.0.1:53735/settings?nocache=' + new Date().getTime() + '&token=' + encodeURIComponent(getWidgetToken());
             const setRes = await fetch(url);
             const setJson = await setRes.json();
             pollRate = (setJson.widget_poll_rate || 3) * 1000;
@@ -65,7 +74,7 @@
 
     async function pollEngine() {
         try {
-            const url = 'http://127.0.0.1:53735/status?nocache=' + new Date().getTime();
+            const url = 'http://127.0.0.1:53735/status?nocache=' + new Date().getTime() + '&token=' + encodeURIComponent(getWidgetToken());
             const res = await fetch(url);
             const data = await res.json();
             const w = document.getElementById("w");

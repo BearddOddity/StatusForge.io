@@ -233,7 +233,9 @@ pub async fn oauth_callback(
         "kick" => {
             handle_kick_callback(code, params.state, &mut config, &base_dir, &oauth_state).await
         }
-        "twitch" => handle_twitch_callback(code, &mut config, &base_dir).await,
+        "twitch" => {
+            handle_twitch_callback(code, params.state, &mut config, &base_dir, &oauth_state).await
+        }
         other => Html(build_popup_response(other, false, "Unknown platform")),
     }
 }
@@ -305,9 +307,37 @@ async fn handle_kick_callback(
 
 async fn handle_twitch_callback(
     code: String,
+    state: Option<String>,
     config: &mut AppConfig,
     base_dir: &std::path::Path,
+    oauth_state: &OAuthState,
 ) -> Html<String> {
+    // Validate the CSRF state token, same as Kick's flow — without this, an
+    // attacker who starts their own Twitch OAuth flow could get a victim to
+    // hit this callback with the attacker's own `code`, causing the app to
+    // store the attacker's tokens as if they were the user's connection.
+    let pending = {
+        let mut guard = oauth_state.pkce.lock().unwrap();
+        guard.remove("twitch")
+    };
+    let pending = match pending {
+        Some(p) => p,
+        None => {
+            return Html(build_popup_response(
+                "twitch",
+                false,
+                "No pending request — possible CSRF",
+            ))
+        }
+    };
+    if state.as_ref() != Some(&pending.state) {
+        return Html(build_popup_response(
+            "twitch",
+            false,
+            "State mismatch — possible CSRF",
+        ));
+    }
+
     let client_id = &config.broadcaster.twitch_client;
     let client_secret = &config.broadcaster.twitch_secret;
     if client_id.is_empty() || client_secret.is_empty() {
@@ -894,14 +924,15 @@ pub fn build_kick_auth_url(client_id: &str, state: &str, code_challenge: &str) -
     )
 }
 
-pub fn build_twitch_auth_url(client_id: &str) -> String {
+pub fn build_twitch_auth_url(client_id: &str, state: &str) -> String {
     let scopes = urlencoding::encode("channel:manage:broadcast");
     format!(
-        "{}?response_type=code&client_id={}&redirect_uri={}&scope={}",
+        "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}",
         TWITCH_AUTH_URL,
         urlencoding::encode(client_id),
         urlencoding::encode(TWITCH_REDIRECT_URI),
-        scopes
+        scopes,
+        urlencoding::encode(state)
     )
 }
 

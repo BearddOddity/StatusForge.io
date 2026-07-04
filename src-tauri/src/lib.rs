@@ -1154,7 +1154,7 @@ async fn kick_login(
 #[tauri::command]
 async fn twitch_login(
     app: tauri::AppHandle,
-    _state: tauri::State<'_, auth::SharedOAuthState>,
+    state: tauri::State<'_, auth::SharedOAuthState>,
 ) -> Result<String, String> {
     let base_dir = app_base_dir()?;
     let config_path = base_dir.join("Config.json");
@@ -1169,7 +1169,19 @@ async fn twitch_login(
         return Err("Twitch client ID not configured".to_string());
     }
 
-    let url = auth::build_twitch_auth_url(client_id);
+    let state_token = auth::generate_code_verifier(); // reuse CSPRNG for state
+    {
+        let mut pkce = state.pkce.lock().unwrap();
+        pkce.insert(
+            "twitch".to_string(),
+            auth::PkceState {
+                verifier: String::new(),
+                state: state_token.clone(),
+            },
+        );
+    }
+
+    let url = auth::build_twitch_auth_url(client_id, &state_token);
 
     #[allow(deprecated)]
     {
