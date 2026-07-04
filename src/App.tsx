@@ -240,7 +240,7 @@ function App() {
           </span>
         </button>
 
-        <NavButton id="dashboard" label="Status Room" icon="⏳" />
+        <NavButton id="dashboard" label="Dashboard" icon="⏳" />
         <NavButton id="library" label="Library" icon="📚" />
         <NavButton id="settings" label="Settings" icon="⚙️" />
 

@@ -525,6 +525,37 @@ mod native_engine_state_tests {
     }
 }
 
+/// Ensures the current idle category (e.g. "Just Chatting") has a Library
+/// entry, so it's editable (custom cover, etc.) the same way a detected
+/// game is. Bare-inserts on first run only — `find_library_key` means an
+/// existing entry (whatever case/whitespace it was created with) is left
+/// completely untouched, so this never clobbers a cover a user already set.
+fn ensure_idle_library_entry(base: &std::path::Path) {
+    let Ok(config) = auth::load_config_at(base) else {
+        return;
+    };
+    let idle_category = config.engine_settings.idle_category.trim();
+    if idle_category.is_empty() {
+        return;
+    }
+    let Ok(mut db) = server::load_db() else {
+        return;
+    };
+    if config::find_library_key(&db, idle_category).is_some() {
+        return;
+    }
+    db.library.insert(
+        idle_category.to_string(),
+        config::ForgeLibraryEntry {
+            title: idle_category.to_string(),
+            ..Default::default()
+        },
+    );
+    if let Err(e) = server::save_db(&db) {
+        log::warn!("[STARTUP] Failed to create idle category library entry: {}", e);
+    }
+}
+
 /// Shared by the native engine loop and the LAN Hub (hub.rs): whichever
 /// detects a new game — this PC's own scanner or a paired SPARK agent on a
 /// second PC — funnels through here for the exact same treatment. SPARK
@@ -553,14 +584,27 @@ pub fn on_game_detected(
     pusher::push_category(base, config, &forge_db, game_title);
 
     // Reload fresh rather than reusing the snapshot above, to avoid
-    // clobbering a concurrent write from the axum server.
-    let needs_metadata = match server::load_db() {
-        Ok(mut db) => {
-            if !db.library.contains_key(game_title) {
+    // clobbering a concurrent write from the axum server. Resolve through
+    // find_library_key so a title that only differs from an existing entry
+    // by case/whitespace (raw OS window titles from the scanner or a paired
+    // SPARK agent vary run to run) updates that entry instead of minting a
+    // second one.
+    let (title, needs_metadata) = match server::load_db() {
+        Ok(mut db) => match config::find_library_key(&db, game_title) {
+            Some(key) => {
+                let needs = db
+                    .library
+                    .get(&key)
+                    .map(|e| e.genre.is_empty() && e.developer.is_empty() && e.cover_url.is_empty())
+                    .unwrap_or(false);
+                (key, needs)
+            }
+            None => {
+                let title = game_title.trim().to_string();
                 db.library.insert(
-                    game_title.to_string(),
+                    title.clone(),
                     config::ForgeLibraryEntry {
-                        title: game_title.to_string(),
+                        title: title.clone(),
                         executables: process.to_string(),
                         ..Default::default()
                     },
@@ -568,17 +612,12 @@ pub fn on_game_detected(
                 if let Err(e) = server::save_db(&db) {
                     log::warn!("[DETECT] Failed to save new library entry: {}", e);
                 }
+                (title, true)
             }
-            // Covers both the freshly-inserted case and an older bare entry
-            // from before this existed.
-            db.library
-                .get(game_title)
-                .map(|e| e.genre.is_empty() && e.developer.is_empty() && e.cover_url.is_empty())
-                .unwrap_or(false)
-        }
+        },
         Err(e) => {
             log::warn!("[DETECT] Failed to load Forge DB for library upsert: {}", e);
-            false
+            (game_title.trim().to_string(), false)
         }
     };
 
@@ -586,28 +625,42 @@ pub fn on_game_detected(
         return;
     }
 
-    let title = game_title.to_string();
     let keys = config.api_keys.clone();
     let broadcaster = config.broadcaster.clone();
     let state_for_scan = state_arc.clone();
     let app_for_scan = app_handle.clone();
     tauri::async_runtime::spawn(async move {
-        let existing = server::load_db()
-            .ok()
-            .and_then(|db| db.library.get(&title).cloned())
-            .unwrap_or_else(|| config::ForgeLibraryEntry {
-                title: title.clone(),
-                ..Default::default()
-            });
+        let (key, existing) = match server::load_db() {
+            Ok(db) => match config::find_library_key(&db, &title) {
+                Some(key) => {
+                    let entry = db.library.get(&key).cloned().unwrap_or_default();
+                    (key, entry)
+                }
+                None => (
+                    title.clone(),
+                    config::ForgeLibraryEntry {
+                        title: title.clone(),
+                        ..Default::default()
+                    },
+                ),
+            },
+            Err(_) => (
+                title.clone(),
+                config::ForgeLibraryEntry {
+                    title: title.clone(),
+                    ..Default::default()
+                },
+            ),
+        };
         let merged = metadata::scan(&title, &keys, &broadcaster, existing).await;
         match server::load_db() {
             Ok(mut db) => {
-                db.library.insert(title.clone(), merged);
+                db.library.insert(key.clone(), merged);
                 if let Err(e) = server::save_db(&db) {
                     log::warn!("[DETECT] Failed to save scanned metadata: {}", e);
                 } else {
                     state_for_scan.push_status();
-                    let _ = app_for_scan.emit("library-updated", &title);
+                    let _ = app_for_scan.emit("library-updated", &key);
                 }
             }
             Err(e) => log::warn!(
@@ -694,15 +747,14 @@ fn spawn_engine_loop(
         );
 
         while running.load(Ordering::Relaxed) {
-            // Reload config each iteration
+            // Reload config each iteration. Goes through auth::load_config_at
+            // (not a raw file read) so tokens migrated to the OS keychain
+            // (migrate_tokens_to_keychain) get backfilled here too — this
+            // config is what pusher::push_category/on_game_detected use for
+            // the actual Twitch/Kick routing pushes.
             let config = {
                 let base = app_base_dir().unwrap_or_default();
-                let config_path = base.join("Config.json");
-                if let Ok(content) = std::fs::read_to_string(&config_path) {
-                    serde_json::from_str::<AppConfig>(&content).ok()
-                } else {
-                    None
-                }
+                auth::load_config_at(&base).ok()
             };
 
             let scan_interval = config
@@ -876,7 +928,7 @@ fn get_native_engine_status(state: tauri::State<Arc<NativeEngineState>>) -> serd
 
 // --- OS Keychain Token Storage ---
 
-const KEYRING_SERVICE: &str = "statusforge.io";
+pub(crate) const KEYRING_SERVICE: &str = "statusforge.io";
 
 /// Store a secret token in the OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service).
 #[tauri::command]
@@ -1201,6 +1253,38 @@ async fn twitch_validate_token() -> Result<String, String> {
     Ok(name)
 }
 
+/// Checks whether the stored Twitch/Kick tokens still actually work — unlike
+/// `twitch_validate_token`/`kick_validate_token` this never writes back to
+/// Config.json, so it's safe to poll from the Dashboard's "Platform
+/// Connections" panel without spamming disk saves or clobbering ids each
+/// tick. A stored token can be revoked/expired without StatusForge knowing
+/// until it's actually used, so "credential present" alone isn't "connected".
+#[tauri::command]
+async fn check_platform_live_status() -> serde_json::Value {
+    let Ok(base_dir) = app_base_dir() else {
+        return serde_json::json!({"twitch": false, "kick": false});
+    };
+    let Ok(config) = auth::load_config_at(&base_dir) else {
+        return serde_json::json!({"twitch": false, "kick": false});
+    };
+
+    let twitch_live = !config.broadcaster.twitch_token.is_empty()
+        && !config.broadcaster.twitch_client.is_empty()
+        && auth::validate_twitch_token(
+            &config.broadcaster.twitch_token,
+            &config.broadcaster.twitch_client,
+        )
+        .await
+        .is_ok();
+
+    let kick_live = !config.broadcaster.kick_token.is_empty()
+        && auth::validate_kick_token(&config.broadcaster.kick_token)
+            .await
+            .is_ok();
+
+    serde_json::json!({"twitch": twitch_live, "kick": kick_live})
+}
+
 /// Manually trigger Kick category database sync.
 #[tauri::command]
 async fn sync_kick_db() -> Result<String, String> {
@@ -1224,7 +1308,7 @@ fn rotate_widget_token() -> Result<String, String> {
 }
 
 /// Exile a game: drop it from the library and delist its lowercase title so
-/// the scanner ignores it. Used by the Status Room "Exile to Apps" button.
+/// the scanner ignores it. Used by the Dashboard "Exile to Apps" button.
 #[tauri::command]
 fn exile_app(game: String) -> Result<String, String> {
     let game = game.trim().to_string();
@@ -1510,6 +1594,14 @@ pub fn run() {
                 log::warn!("Failed to set up system tray: {}", e);
             }
 
+            // Give the idle category (e.g. "Just Chatting") a real Library
+            // entry on first run so it shows up in the Library editor and
+            // users can set a custom cover for it, same as any detected
+            // game — instead of only ever existing as a config string.
+            if let Ok(base) = app_base_dir() {
+                ensure_idle_library_entry(&base);
+            }
+
             // LAN Hub: announce on udp/53736, receive SPARK heartbeats on udp/53735
             hub::start_hub(
                 hub_state.clone(),
@@ -1597,6 +1689,7 @@ pub fn run() {
             twitch_refresh_token,
             kick_validate_token,
             twitch_validate_token,
+            check_platform_live_status,
             sync_kick_db,
             rotate_widget_token,
             exile_app,

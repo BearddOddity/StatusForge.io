@@ -246,6 +246,29 @@ pub struct ForgeDatabase {
     pub library: HashMap<String, ForgeLibraryEntry>,
 }
 
+/// Finds the existing `library` key for `title`, tolerating the whitespace/
+/// casing drift that different sources (raw OS window titles from the
+/// native scanner and a paired SPARK agent, vs. hand-typed titles in the
+/// Library editor) can introduce for what a human would call the same
+/// game. Every insertion site should resolve through this first instead of
+/// keying on the raw title directly — otherwise "Half-Life" and "half-life "
+/// silently become two separate library entries.
+///
+/// Exact match (post-trim) wins first so a title that's already the stored
+/// key never pays for a full scan; only falls back to a case-insensitive
+/// scan over existing keys when there's no exact hit.
+pub fn find_library_key(db: &ForgeDatabase, title: &str) -> Option<String> {
+    let needle = title.trim();
+    if db.library.contains_key(needle) {
+        return Some(needle.to_string());
+    }
+    let needle_lower = needle.to_lowercase();
+    db.library
+        .keys()
+        .find(|k| k.trim().to_lowercase() == needle_lower)
+        .cloned()
+}
+
 /// Engine status returned to frontend
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 
