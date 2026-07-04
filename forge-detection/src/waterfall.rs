@@ -1,14 +1,14 @@
-//! ForgeWaterfall — the core detection orchestrator.
+//!  the core detection orchestrator.
 //!
-//! Rust port of `ForgeWaterfall` from the original forge_scanner.py, with the
+//! Rust port of the original forge_scanner.py, with the
 //! same staged pipeline:
 //!
 //! 1. Active window / foreground process identification (OS-specific)
-//! 2. The Forge — listed_apps VIP lookup (instant match)
-//! 3. The Gauntlet — delisted apps, system exiles, banned paths, browser titles
-//! 4. The Great Filter — behavioral traps (RAM floor, Chromium/Electron,
+//! 2. listed_apps VIP lookup (instant match)
+//! 3. delisted apps, system exiles, banned paths, browser titles
+//! 4. behavioral traps (RAM floor, Chromium/Electron,
 //!    cmdline flags, desktop UI frameworks, window geometry)
-//! 5. Golden tickets — Steam running-app id, wrapper/launcher parent process
+//! 5. Steam running-app id, wrapper/launcher parent process
 //! 6. Confidence scoring for DRM-free / indie games
 //!
 //! The `LogFn` type alias is also used by the native engine loop in the host app.
@@ -211,7 +211,7 @@ impl ForgeWaterfall {
         let exe_path = &proc.exe_path;
         let window_title = window.title.as_str();
 
-        // ── Stage 1: The Forge (VIP immunity via listed_apps) ──────────────
+        // ── Stage 1: (listed_apps) ──────────────
         if let Some(title) = kw.listed_apps.get(exe_name) {
             return Some(format_game_output(
                 exe_name,
@@ -238,7 +238,7 @@ impl ForgeWaterfall {
             ));
         }
 
-        // ── Stage 2: The Gauntlet (hard kills) ─────────────────────────────
+        // ── Stage 2:(hard kills) ─────────────────────────────
         if !kw.config.process_filter_bypass {
             if kw.delisted_apps.contains(exe_name) || SYSTEM_EXILES.contains(&exe_name.as_str()) {
                 return None;
@@ -255,12 +255,12 @@ impl ForgeWaterfall {
             return None;
         }
 
-        // ── Stage 3: The Great Filter (behavioral traps) ───────────────────
+        // ── Stage 3: (behavioral traps) ───────────────────
         if !self.survives_great_filter(window, proc, &kw.config) {
             return None;
         }
 
-        // ── Stage 4: Golden tickets (authoritative proof) ──────────────────
+        // ── Stage 4: (authoritative proof) ──────────────────
         if exe_path.contains("steamapps") {
             if let Some(app_id) = platform::read_steam_running_app_id() {
                 if app_id > 0 {
@@ -590,7 +590,7 @@ fn macos_bundle_display_name(exe_path: &str) -> Option<String> {
     }
 }
 
-/// Linux golden tickets: Feral GameMode and Flatpak sandbox membership.
+/// Linux: Feral GameMode and Flatpak sandbox membership.
 #[cfg(target_os = "linux")]
 fn linux_golden_ticket(pid: u32) -> Option<String> {
     use std::process::Command;
@@ -721,7 +721,7 @@ mod tests {
         assert_eq!(d.platform, "Xbox Game Pass");
     }
 
-    // ── Stage 2: the gauntlet ───────────────────────────────────────────
+    // ── Stage 2: ───────────────────────────────────────────
 
     #[test]
     fn system_exiles_are_killed() {
@@ -775,13 +775,13 @@ mod tests {
             ..Default::default()
         };
         s.update_forge_knowledge(HashMap::new(), vec![], false, cfg);
-        // steam.exe survives the gauntlet with bypass on, and fullscreen +
+        // steam.exe survives with bypass on, and fullscreen +
         // title + RAM pushes it over the confidence threshold.
         let d = s.evaluate(&win("Steam Big Picture", true), &proc("steam.exe", "", 900));
         assert!(d.is_some());
     }
 
-    // ── Stage 3: great filter ───────────────────────────────────────────
+    // ── Stage 3: ───────────────────────────────────────────
 
     #[test]
     fn ram_floor_trap() {
@@ -822,7 +822,7 @@ mod tests {
             .is_none());
     }
 
-    // ── Stage 4: golden tickets ─────────────────────────────────────────
+    // ── Stage 4: ─────────────────────────────────────────
 
     #[test]
     fn proton_parent_is_golden() {
