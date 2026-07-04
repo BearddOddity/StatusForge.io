@@ -14,6 +14,10 @@
   </description>
   <launchable type="desktop-id">com.bearddoddity.spark.desktop</launchable>
   <url type="homepage">https://github.com/BearddOddity/StatusForge.io</url>
+  <categories>
+    <category>Network</category>
+    <category>Utility</category>
+  </categories>
   <releases>
     <release version="1.0.0" date="2026-07-04"/>
   </releases>
