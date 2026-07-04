@@ -56,7 +56,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.app.name }} (${{ matrix.os }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -135,7 +135,7 @@ jobs:
             isSpark: true
     name: Flatpak (${{ matrix.app.name }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # StatusForge tags as v<version> (tauri-action expands __VERSION__ at
       # build time); Spark always tags as the moving spark-latest.
