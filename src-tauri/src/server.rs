@@ -148,7 +148,18 @@ pub fn upsert_library_entry(
         .ok_or_else(|| "title required".to_string())?
         .to_string();
 
-    let existing = db.library.get(&title).cloned().unwrap_or_default();
+    // Resolve to any existing entry that only differs by case/whitespace
+    // (see find_library_key) so Add Game / Save Changes never mints a
+    // second key for a game the scanner — or an earlier manual save —
+    // already stored under slightly different casing/padding. The old key
+    // is removed and re-inserted under `title` so the key always tracks
+    // whatever title was most recently saved, keeping key == entry.title.
+    let existing_key = crate::config::find_library_key(db, &title);
+    let existing = existing_key
+        .as_ref()
+        .and_then(|k| db.library.remove(k))
+        .unwrap_or_default();
+
     // Overlay on the serialized existing entry — serde ignores unknown keys,
     // so arbitrary extra body fields are dropped and known ones merge in.
     let mut obj = match serde_json::to_value(&existing) {
@@ -284,7 +295,11 @@ async fn scan_metadata_handler(
     }
     let config = load_config().unwrap_or_default();
     let mut db = load_db().map_err(internal)?;
-    let mut existing = db.library.get(&title).cloned().unwrap_or_default();
+    // Resolve through find_library_key (same as upsert_library_entry) so a
+    // re-scan of a title that only differs by case/whitespace from an
+    // existing entry updates that entry instead of minting a duplicate.
+    let key = crate::config::find_library_key(&db, &title).unwrap_or_else(|| title.clone());
+    let mut existing = db.library.remove(&key).unwrap_or_default();
     existing.title = title.clone();
     let merged =
         crate::metadata::scan(&title, &config.api_keys, &config.broadcaster, existing).await;
@@ -350,35 +365,33 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
     let game_title = game.as_ref().map(|g| g.title.clone()).unwrap_or_default();
 
     // Enrich with Forge_Database.json library metadata when we have a match.
+    // While idle, fall back to the idle category's own library entry (e.g.
+    // "Just Chatting") so a custom cover set for it via the Library editor
+    // shows up here too, instead of always falling through to the app's
+    // built-in placeholder image.
     let mut genre = String::new();
     let mut developer = String::new();
     let mut publisher = String::new();
     let mut release_date = String::new();
     let mut cover_url = String::new();
     let mut logo_url = String::new();
-    if !game_title.is_empty() {
-        if let Ok(base) = crate::app_base_dir() {
-            if let Ok(content) = std::fs::read_to_string(base.join("Forge_Database.json")) {
-                if let Ok(db) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(entry) = db
-                        .get("library")
-                        .and_then(|l| l.get(&game_title))
-                        .and_then(|e| e.as_object())
-                    {
-                        let s = |k: &str| {
-                            entry
-                                .get(k)
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string()
-                        };
-                        genre = s("genre");
-                        developer = s("developer");
-                        publisher = s("publisher");
-                        release_date = s("release_year");
-                        cover_url = s("cover_url");
-                        logo_url = s("logo_url");
-                    }
+    let lookup_title = if !game_title.is_empty() {
+        Some(game_title.clone())
+    } else {
+        config
+            .as_ref()
+            .map(|c| c.engine_settings.idle_category.clone())
+    };
+    if let Some(lookup_title) = lookup_title {
+        if let Ok(db) = load_db() {
+            if let Some(key) = crate::config::find_library_key(&db, &lookup_title) {
+                if let Some(entry) = db.library.get(&key) {
+                    genre = entry.genre.clone();
+                    developer = entry.developer.clone();
+                    publisher = entry.publisher.clone();
+                    release_date = entry.release_year.clone();
+                    cover_url = entry.cover_url.clone();
+                    logo_url = entry.logo_url.clone();
                 }
             }
         }

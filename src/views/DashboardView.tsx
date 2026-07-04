@@ -153,24 +153,33 @@ export default function DashboardView({
   }, []);
 
   // Platform Connections: real config/keychain state, not the widget WS link.
+  // "Connected" means the stored Twitch/Kick token still actually works, not
+  // just that one is saved — a token can be revoked/expired without
+  // StatusForge knowing until it's used, so `check_platform_live_status`
+  // makes a real (read-only) validation call on every refresh.
   const [platforms, setPlatforms] = useState<PlatformConnections>(disconnectedPlatforms);
   const [sparkPaired, setSparkPaired] = useState<{ hostname: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
-      const [keychain, config, hub] = await Promise.all([
+      const [keychain, config, hub, live] = await Promise.all([
         getKeychainStatus(),
         tauriApi("export_config"),
         tauriApi("hub_get_status"),
+        tauriApi("check_platform_live_status"),
       ]);
       if (cancelled) return;
       const routingMode =
         config && typeof config === "object" && "broadcaster" in config
           ? (config as { broadcaster: { routing_mode: string } }).broadcaster.routing_mode
           : "";
+      const liveStatus =
+        live && typeof live === "object" && !("error" in live)
+          ? (live as { twitch: boolean; kick: boolean })
+          : { twitch: false, kick: false };
       setPlatforms({
-        twitch: keychain.stored.includes("twitch_token"),
-        kick: keychain.stored.includes("kick_token"),
+        twitch: keychain.stored.includes("twitch_token") && liveStatus.twitch,
+        kick: keychain.stored.includes("kick_token") && liveStatus.kick,
         sbot: routingMode === "streamer_bot",
       });
       const paired =
@@ -229,7 +238,13 @@ export default function DashboardView({
   };
 
   const isPlaying = engineStatus.is_playing;
-  const placeholderCover = engineStatus.running ? idleCover : offlineCover;
+  // While idle (engine running, nothing detected), the backend resolves
+  // engineStatus.cover_url to the idle category's own Library entry (e.g.
+  // "Just Chatting") when one has a custom cover set — falls back to the
+  // built-in placeholder otherwise. Offline always wins regardless.
+  const placeholderCover = engineStatus.running
+    ? engineStatus.cover_url || idleCover
+    : offlineCover;
   const title = isPlaying
     ? engineStatus.game_title
     : engineStatus.running
@@ -239,7 +254,7 @@ export default function DashboardView({
   return (
     <div>
       {/* Header */}
-      <h2 className="text-2xl font-bold text-white tracking-tight mb-5">Status Room</h2>
+      <h2 className="text-2xl font-bold text-white tracking-tight mb-5">Dashboard</h2>
 
       {/* Now Playing */}
       <Card className="overflow-hidden mb-5">

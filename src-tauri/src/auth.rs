@@ -729,17 +729,132 @@ pub fn load_config_at(base_dir: &std::path::Path) -> Result<AppConfig, String> {
     let config_path = base_dir.join("Config.json");
     let content = std::fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read config: {}", e))?;
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))
+    let mut config: AppConfig =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
+    backfill_from_keychain(&mut config);
+    Ok(config)
+}
+
+/// `migrate_tokens_to_keychain` (lib.rs) moves OAuth/API-key fields out of
+/// Config.json into the OS keychain and blanks them on disk. Every other
+/// consumer in this app (pusher, hub, metadata scans, token validation)
+/// reads these fields straight off the loaded `AppConfig` — without this
+/// backfill, migrating leaves those fields permanently empty in memory and
+/// silently breaks category pushes and metadata API scans even though the
+/// token is safely stored. A field already non-empty on disk (not migrated,
+/// or keychain unavailable on this OS) is left untouched — the keychain
+/// only fills gaps, never overrides what Config.json already has.
+fn backfill_from_keychain(config: &mut AppConfig) {
+    let read = |keychain_name: &str| -> Option<String> {
+        keyring::Entry::new(crate::KEYRING_SERVICE, keychain_name)
+            .ok()
+            .and_then(|e| e.get_password().ok())
+    };
+
+    if config.broadcaster.twitch_token.is_empty() {
+        if let Some(v) = read("twitch_access_token") {
+            config.broadcaster.twitch_token = v;
+        }
+    }
+    if config.broadcaster.twitch_refresh.is_empty() {
+        if let Some(v) = read("twitch_refresh_token") {
+            config.broadcaster.twitch_refresh = v;
+        }
+    }
+    if config.broadcaster.kick_token.is_empty() {
+        if let Some(v) = read("kick_access_token") {
+            config.broadcaster.kick_token = v;
+        }
+    }
+    if config.broadcaster.kick_refresh.is_empty() {
+        if let Some(v) = read("kick_refresh_token") {
+            config.broadcaster.kick_refresh = v;
+        }
+    }
+    if config.broadcaster.twitch_secret.is_empty() {
+        if let Some(v) = read("twitch_client_secret") {
+            config.broadcaster.twitch_secret = v;
+        }
+    }
+    if config.broadcaster.kick_secret.is_empty() {
+        if let Some(v) = read("kick_client_secret") {
+            config.broadcaster.kick_secret = v;
+        }
+    }
+    if config.api_keys.igdb_token.is_empty() {
+        if let Some(v) = read("igdb_api_token") {
+            config.api_keys.igdb_token = v;
+        }
+    }
+    if config.api_keys.igdb_secret.is_empty() {
+        if let Some(v) = read("igdb_api_secret") {
+            config.api_keys.igdb_secret = v;
+        }
+    }
+    if config.api_keys.rawg.is_empty() {
+        if let Some(v) = read("rawg_api_key") {
+            config.api_keys.rawg = v;
+        }
+    }
+    if config.api_keys.steamgrid.is_empty() {
+        if let Some(v) = read("steamgrid_api_key") {
+            config.api_keys.steamgrid = v;
+        }
+    }
 }
 
 pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<(), String> {
     let config_path = base_dir.join("Config.json");
-    let raw = serde_json::to_string_pretty(config)
+    // `config` may carry secrets that `load_config_at` backfilled in-memory
+    // from the OS keychain (e.g. a caller loaded, tweaked one unrelated
+    // field like the SPARK pin, and is saving the whole struct back). Never
+    // let an already-migrated field regain a plaintext copy on disk here —
+    // re-sync the (possibly refreshed, e.g. after a token-refresh-and-save)
+    // value into the keychain instead and blank it in what actually gets
+    // written. A field with no existing keychain entry (never migrated) is
+    // untouched, so first-time OAuth connects still save normally.
+    let mut to_write = config.clone();
+    redact_migrated_secrets(&mut to_write);
+    let raw = serde_json::to_string_pretty(&to_write)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
     let tmp = config_path.with_extension("tmp");
     std::fs::write(&tmp, raw).map_err(|e| format!("Failed to write temp config: {}", e))?;
     std::fs::rename(&tmp, &config_path).map_err(|e| format!("Failed to rename config: {}", e))?;
     Ok(())
+}
+
+/// For every field `migrate_tokens_to_keychain` can move to the OS keychain:
+/// if it's non-empty here AND a keychain entry already exists for it (i.e.
+/// this install has migrated), push the current value into the keychain
+/// (picks up a refreshed token) and blank it before it's serialized — so
+/// Config.json never regains a plaintext secret once migrated, regardless
+/// of which code path loaded (and keychain-backfilled) this config first.
+fn redact_migrated_secrets(config: &mut AppConfig) {
+    let sync = |field: &mut String, keychain_name: &str| {
+        if field.is_empty() {
+            return;
+        }
+        let Ok(entry) = keyring::Entry::new(crate::KEYRING_SERVICE, keychain_name) else {
+            return;
+        };
+        // Only redact if this field was already migrated — an entry existing
+        // is exactly that signal. A never-migrated field saves as plaintext,
+        // same as before this fix existed.
+        if entry.get_password().is_ok() {
+            let _ = entry.set_password(field);
+            field.clear();
+        }
+    };
+    sync(&mut config.broadcaster.twitch_token, "twitch_access_token");
+    sync(&mut config.broadcaster.twitch_refresh, "twitch_refresh_token");
+    sync(&mut config.broadcaster.kick_token, "kick_access_token");
+    sync(&mut config.broadcaster.kick_refresh, "kick_refresh_token");
+    sync(&mut config.broadcaster.twitch_secret, "twitch_client_secret");
+    sync(&mut config.broadcaster.kick_secret, "kick_client_secret");
+    sync(&mut config.api_keys.igdb_token, "igdb_api_token");
+    sync(&mut config.api_keys.igdb_secret, "igdb_api_secret");
+    sync(&mut config.api_keys.rawg, "rawg_api_key");
+    sync(&mut config.api_keys.steamgrid, "steamgrid_api_key");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
