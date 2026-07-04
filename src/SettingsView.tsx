@@ -229,6 +229,23 @@ function EngineSubTab({
                   Streaming from two PCs? Run the SPARK agent on the gaming PC — this hub receives
                   its detections over the LAN and updates overlays exactly like local detection.
                 </p>
+
+                <div className="flex items-center justify-between p-2.5 mb-3 bg-white/[0.02] border border-white/5 rounded-lg">
+                  <div>
+                    <p className="text-xs text-white/70">Activate Link</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">
+                      While active, this PC's local detection pauses — SPARK is the only engine
+                      running, preventing the two sources from crosswiring.
+                    </p>
+                  </div>
+                  <Toggle
+                    on={config.engine_settings.spark_link_active}
+                    onToggle={() =>
+                      setEngine("spark_link_active", !config.engine_settings.spark_link_active)
+                    }
+                  />
+                </div>
+
                 <label className="block text-[11px] uppercase tracking-wider text-white/50 mb-1.5">
                   Network PIN
                 </label>
@@ -1003,6 +1020,7 @@ const defaultConfig: AppConfig = {
     widget_token: "",
     spark_pin: "0000",
     spark_pairing_key: "",
+    spark_link_active: false,
     emulator_detection: true,
     ram_threshold: 80,
     process_filter_bypass: false,
@@ -2576,6 +2594,21 @@ function compressImage(file: File, maxSize = 1920, quality = 0.85): Promise<stri
   });
 }
 
+// The individual toggles inside the Animations "Advanced" dropdown — kept in
+// one place so the Quality/Performance master switches can drive them all.
+const ADVANCED_ANIM_KEYS = [
+  "coverBreathe",
+  "coverGlint",
+  "cardHoverLift",
+  "cardGlint",
+  "holoEffects",
+  "statusPulse",
+  "toastAnimations",
+  "modalAnimations",
+  "progressBarAnimation",
+  "buttonHoverEffects",
+] as const satisfies readonly (keyof ThemePrefs)[];
+
 // ─── Theme Sub-tab ────────────────────────────────────────────────────────────
 function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
   const [prefs, setPrefs] = useState<ThemePrefs>(loadThemePrefs);
@@ -2584,6 +2617,43 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
 
   const set = <K extends keyof ThemePrefs>(key: K, value: ThemePrefs[K]) => {
     setPrefs((prev) => ({ ...prev, [key]: value }));
+  };
+
+  // Quality and Performance are mutually exclusive — only one can be active.
+  // Quality (on) forces every Advanced toggle on and switches Performance
+  // off; Performance (on) forces them all off and switches Quality off.
+  const toggleQuality = () => {
+    setPrefs((prev) => {
+      const enabling = !prev.animationsEnabled;
+      const next: ThemePrefs = {
+        ...prev,
+        animationsEnabled: enabling,
+        reducedMotion: enabling ? false : prev.reducedMotion,
+      };
+      if (enabling) {
+        ADVANCED_ANIM_KEYS.forEach((key) => {
+          next[key] = true;
+        });
+      }
+      return next;
+    });
+  };
+
+  const togglePerformance = () => {
+    setPrefs((prev) => {
+      const enabling = !prev.reducedMotion;
+      const next: ThemePrefs = {
+        ...prev,
+        reducedMotion: enabling,
+        animationsEnabled: enabling ? false : prev.animationsEnabled,
+      };
+      if (enabling) {
+        ADVANCED_ANIM_KEYS.forEach((key) => {
+          next[key] = false;
+        });
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -3177,7 +3247,7 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
 
       {/* Animations & Visual Effects */}
       <CollapsibleSection
-        title="Micro-Animations & FX"
+        title="Animations"
         description="Toggle holographic borders, breathing covers, status sweeps, and progress bars."
         icon="✨"
         badge={
@@ -3200,10 +3270,7 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                 Enable transitions and rich dynamic layout movements
               </p>
             </div>
-            <Toggle
-              on={prefs.animationsEnabled}
-              onToggle={() => set("animationsEnabled", !prefs.animationsEnabled)}
-            />
+            <Toggle on={prefs.animationsEnabled} onToggle={toggleQuality} />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
             <div>
@@ -3212,10 +3279,7 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
                 Instantly terminate all hover translations and scales for optimal hardware response
               </p>
             </div>
-            <Toggle
-              on={prefs.reducedMotion}
-              onToggle={() => set("reducedMotion", !prefs.reducedMotion)}
-            />
+            <Toggle on={prefs.reducedMotion} onToggle={togglePerformance} />
           </div>
 
           {showAnimAdvanced && <AdvancedAnimations prefs={prefs} set={set} />}
