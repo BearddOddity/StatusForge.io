@@ -1,6 +1,6 @@
 {
   "name": "statusforge.io",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "StatusForge.io Rich Presence Engine",
   "type": "module",
   "scripts": {
