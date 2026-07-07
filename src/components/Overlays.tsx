@@ -47,7 +47,7 @@ const FIELD_SECTIONS = [
         key: "executables",
         label: "File Name(s)",
         placeholder: "e.g. FalloutNV.exe",
-        hint: "The exact .exe the scanner should match to this title (comma-separate more than one). Fixes a game that's detected under the wrong name or not detected at all.",
+        hint: "The exact .exe the scanner should match to this title (comma-separate more than one, full paths are fine too — only the file name is used). Fixes a game that's detected under the wrong name or not detected at all.",
       },
     ],
   },

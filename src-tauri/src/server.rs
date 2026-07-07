@@ -242,9 +242,22 @@ pub fn upsert_library_entry(
 
 /// Split a user-entered `executables` field ("FalloutNV.exe, other.exe")
 /// into normalized (trimmed, lowercased) individual exe names.
+///
+/// Detection matches on the bare process name only (never a full path), so
+/// if an entry looks like a path — someone pasted
+/// `D:\SteamLibrary\...\FalloutNV.exe` instead of just `FalloutNV.exe` — the
+/// path is stripped down to its final component. Without this, a pasted
+/// path would silently never match anything.
 fn split_executables(s: &str) -> Vec<String> {
     s.split(',')
-        .map(|p| p.trim().to_lowercase())
+        .map(|p| {
+            let normalized = p.trim().replace('\\', "/");
+            normalized
+                .rsplit('/')
+                .next()
+                .unwrap_or(&normalized)
+                .to_lowercase()
+        })
         .filter(|p| !p.is_empty())
         .collect()
 }
@@ -773,6 +786,23 @@ mod tests {
             Some(&"Fallout New Vegas".to_string())
         );
         assert_eq!(db.library["Fallout New Vegas"].executables, "falloutnv.exe");
+    }
+
+    #[test]
+    fn executables_field_strips_full_paths_to_the_file_name() {
+        let mut db = ForgeDatabase::default();
+        let body = serde_json::json!({
+            "title": "Fallout New Vegas",
+            "executables": r"D:\SteamLibrary\steamapps\common\Fallout New Vegas\FalloutNV.exe",
+        });
+        upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+        assert_eq!(
+            db.listed_apps.get("falloutnv.exe"),
+            Some(&"Fallout New Vegas".to_string())
+        );
+        assert!(!db
+            .listed_apps
+            .contains_key(r"d:\steamlibrary\steamapps\common\fallout new vegas\falloutnv.exe"));
     }
 
     #[test]
