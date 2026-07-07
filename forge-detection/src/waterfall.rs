@@ -314,9 +314,15 @@ impl ForgeWaterfall {
             }
         }
         let title_lower = window_title.to_lowercase();
-        if [" - google chrome", " - discord", " - firefox", " - edge"]
-            .iter()
-            .any(|s| title_lower.contains(s))
+        if [
+            " - google chrome",
+            " - discord",
+            " - firefox",
+            " - edge",
+            " - youtube",
+        ]
+        .iter()
+        .any(|s| title_lower.contains(s))
         {
             return None;
         }
@@ -828,6 +834,32 @@ mod tests {
             .evaluate(
                 &win("Tool", true),
                 &proc("tool.exe", "c:\\windows\\tool.exe", 900)
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn youtube_titles_are_killed() {
+        let s = scout_with(&[], &[], false);
+        // Caught whether the browser appends its own name to the title...
+        assert!(s
+            .evaluate(
+                &win("Some Video - YouTube - Google Chrome", true),
+                &proc("chrome.exe", "d:\\g\\chrome.exe", 900),
+            )
+            .is_none());
+        // ...or the tab/PWA window title is just "<video> - YouTube".
+        assert!(s
+            .evaluate(
+                &win("Some Video - YouTube", true),
+                &proc("chrome.exe", "d:\\g\\chrome.exe", 900),
+            )
+            .is_none());
+        // YouTube Music too.
+        assert!(s
+            .evaluate(
+                &win("Some Song - YouTube Music", true),
+                &proc("chrome.exe", "d:\\g\\chrome.exe", 900),
             )
             .is_none());
     }
