@@ -16,6 +16,7 @@ interface OverlayMetadataPanelProps {
         publisher: string;
         cover_url: string;
         logo_url: string;
+        executables: string;
         steam_id: string;
         igdb_id: string;
         rawg_id: string;
@@ -42,6 +43,12 @@ const FIELD_SECTIONS = [
       { key: "release_year", label: "Release Year" },
       { key: "developer", label: "Developer" },
       { key: "publisher", label: "Publisher" },
+      {
+        key: "executables",
+        label: "File Name(s)",
+        placeholder: "e.g. FalloutNV.exe",
+        hint: "The exact .exe the scanner should match to this title (comma-separate more than one). Fixes a game that's detected under the wrong name or not detected at all.",
+      },
     ],
   },
   {
@@ -88,6 +95,7 @@ export function OverlayMetadataPanel({
         publisher: entry.publisher || "",
         cover_url: entry.cover_url || "",
         logo_url: entry.logo_url || "",
+        executables: entry.executables || "",
         steam_id: entry.steam_id || "",
         igdb_id: entry.igdb_id || "",
         rawg_id: entry.rawg_id || "",
@@ -257,8 +265,12 @@ export function OverlayMetadataPanel({
                       }
                       onSave={(val) => onSave({ title: editData.title, [field.key]: val })}
                       onSearch={
-                        field.key !== "title" && entry.title ? () => runScan(field.key) : undefined
+                        field.key !== "title" && field.key !== "executables" && entry.title
+                          ? () => runScan(field.key)
+                          : undefined
                       }
+                      placeholder={"placeholder" in field ? field.placeholder : undefined}
+                      hint={"hint" in field ? field.hint : undefined}
                     />
                   ))}
                 </div>

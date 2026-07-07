@@ -211,8 +211,42 @@ pub fn upsert_library_entry(
         }
     }
 
+    // A user-edited `executables` field is the whole point of exposing it in
+    // the metadata editor: it lets someone fix a game the scanner mis-titles
+    // (or misses entirely) by telling the engine exactly which exe maps to
+    // this title, without waiting on a hardcoded alias. Mirror any change
+    // into `listed_apps` — the same Stage-1 "instant match" map the built-in
+    // aliases use — so it actually takes effect on the next detection pass,
+    // not just sit in the entry as inert metadata.
+    if body.contains_key("executables") {
+        for exe in split_executables(&existing.executables) {
+            if db
+                .listed_apps
+                .get(&exe)
+                .map(|t| t == &title)
+                .unwrap_or(false)
+            {
+                db.listed_apps.remove(&exe);
+            }
+        }
+        let new_execs = split_executables(&entry.executables);
+        for exe in &new_execs {
+            db.listed_apps.insert(exe.clone(), title.clone());
+        }
+        entry.executables = new_execs.join(", ");
+    }
+
     db.library.insert(title.clone(), entry);
     Ok(title)
+}
+
+/// Split a user-entered `executables` field ("FalloutNV.exe, other.exe")
+/// into normalized (trimmed, lowercased) individual exe names.
+fn split_executables(s: &str) -> Vec<String> {
+    s.split(',')
+        .map(|p| p.trim().to_lowercase())
+        .filter(|p| !p.is_empty())
+        .collect()
 }
 
 /// Remove a process (case-insensitive) from the delisted list.
@@ -724,6 +758,81 @@ mod tests {
         // title is required
         let bad = serde_json::json!({ "genre": "X" });
         assert!(upsert_library_entry(&mut db, bad.as_object().unwrap()).is_err());
+    }
+
+    #[test]
+    fn executables_field_registers_listed_apps() {
+        let mut db = ForgeDatabase::default();
+        let body = serde_json::json!({
+            "title": "Fallout New Vegas",
+            "executables": "FalloutNV.exe",
+        });
+        upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+        assert_eq!(
+            db.listed_apps.get("falloutnv.exe"),
+            Some(&"Fallout New Vegas".to_string())
+        );
+        assert_eq!(db.library["Fallout New Vegas"].executables, "falloutnv.exe");
+    }
+
+    #[test]
+    fn executables_field_supports_multiple_comma_separated() {
+        let mut db = ForgeDatabase::default();
+        let body = serde_json::json!({
+            "title": "APB Reloaded",
+            "executables": "APB.exe,  APBLauncher.exe ",
+        });
+        upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+        assert_eq!(
+            db.listed_apps.get("apb.exe"),
+            Some(&"APB Reloaded".to_string())
+        );
+        assert_eq!(
+            db.listed_apps.get("apblauncher.exe"),
+            Some(&"APB Reloaded".to_string())
+        );
+    }
+
+    #[test]
+    fn editing_executables_removes_stale_listed_apps_entry() {
+        let mut db = ForgeDatabase::default();
+        let first = serde_json::json!({
+            "title": "Fallout New Vegas",
+            "executables": "wrongname.exe",
+        });
+        upsert_library_entry(&mut db, first.as_object().unwrap()).unwrap();
+        assert!(db.listed_apps.contains_key("wrongname.exe"));
+
+        let corrected = serde_json::json!({
+            "title": "Fallout New Vegas",
+            "executables": "FalloutNV.exe",
+        });
+        upsert_library_entry(&mut db, corrected.as_object().unwrap()).unwrap();
+        assert!(!db.listed_apps.contains_key("wrongname.exe"));
+        assert_eq!(
+            db.listed_apps.get("falloutnv.exe"),
+            Some(&"Fallout New Vegas".to_string())
+        );
+    }
+
+    #[test]
+    fn saving_without_touching_executables_leaves_listed_apps_alone() {
+        let mut db = ForgeDatabase::default();
+        let first = serde_json::json!({
+            "title": "Celeste",
+            "executables": "celeste.exe",
+        });
+        upsert_library_entry(&mut db, first.as_object().unwrap()).unwrap();
+
+        let genre_only = serde_json::json!({
+            "title": "Celeste",
+            "genre": "Platformer",
+        });
+        upsert_library_entry(&mut db, genre_only.as_object().unwrap()).unwrap();
+        assert_eq!(
+            db.listed_apps.get("celeste.exe"),
+            Some(&"Celeste".to_string())
+        );
     }
 
     #[test]

@@ -201,6 +201,8 @@ export function MetadataField({
   onChange,
   onSave,
   onSearch,
+  placeholder,
+  hint,
 }: {
   label: string;
   value: string;
@@ -208,6 +210,8 @@ export function MetadataField({
   onChange: (val: string) => void;
   onSave: (val: string) => void;
   onSearch?: () => void;
+  placeholder?: string;
+  hint?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [localVal, setLocalVal] = useState(value);
@@ -226,6 +230,7 @@ export function MetadataField({
           <input
             value={localVal}
             onChange={(e) => setLocalVal(e.target.value)}
+            placeholder={placeholder}
             className="input-glass flex-1 min-w-0"
             autoFocus
             onKeyDown={(e) => {
@@ -261,6 +266,7 @@ export function MetadataField({
             ✕
           </Btn>
         </div>
+        {hint && <p className="text-[10px] text-white/30 mt-1.5 leading-snug">{hint}</p>}
       </div>
     );
   }
@@ -302,6 +308,7 @@ export function MetadataField({
           ✎
         </button>
       </div>
+      {hint && <p className="text-[10px] text-white/30 mt-1.5 leading-snug">{hint}</p>}
     </div>
   );
 }
