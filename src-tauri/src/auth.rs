@@ -711,6 +711,12 @@ pub async fn sync_kick_database(
         .await
         .map_err(|e| format!("Kick categories request failed: {}", e))?;
 
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(
+            "Kick categories returned 401 Unauthorized — the saved Kick token is invalid or expired; reconnect Kick in Settings"
+                .to_string(),
+        );
+    }
     if !resp.status().is_success() {
         return Err(format!("Kick categories returned {}", resp.status()));
     }

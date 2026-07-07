@@ -148,10 +148,20 @@ pub async fn scan(
 }
 
 async fn get_json(req: reqwest::RequestBuilder) -> Result<serde_json::Value, String> {
-    req.send()
-        .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+
+    // reqwest's default error_for_status() message ("HTTP status client error
+    // (401 Unauthorized) for url (...)") is meaningless to a non-technical
+    // user — spell out what a 401 actually means here: the saved token is
+    // invalid or expired, not a bug to report.
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(
+            "not authorized (401) — the saved token is invalid or expired; reconnect this platform in Settings"
+                .to_string(),
+        );
+    }
+
+    resp.error_for_status()
         .map_err(|e| e.to_string())?
         .json()
         .await
