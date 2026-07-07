@@ -31,6 +31,7 @@ const SYSTEM_EXILES: &[&str] = &[
     "obs64.exe",
     "obs32.exe",
     "taskmgr.exe",
+    "systemsettings.exe",
     "spotify.exe",
     "code.exe",
     "cmd.exe",
@@ -295,6 +296,14 @@ impl ForgeWaterfall {
 
         // ── Xbox Game Pass / UWP piercer ───────────────────────────────────
         if exe_name == "applicationframehost.exe" && !window_title.is_empty() {
+            // The Windows Settings app is also hosted by ApplicationFrameHost.exe
+            // and its window is titled exactly "Settings" — without this
+            // exclusion, opening Settings gets pierced straight through as a
+            // running game instead of falling through to the browser/system
+            // exile checks below.
+            if window_title.trim().eq_ignore_ascii_case("settings") {
+                return None;
+            }
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -801,6 +810,36 @@ mod tests {
             .unwrap();
         assert_eq!(d.title, "Forza Horizon 5");
         assert_eq!(d.platform, "Xbox Game Pass");
+    }
+
+    #[test]
+    fn uwp_piercer_excludes_windows_settings() {
+        let s = scout_with(&[], &[], false);
+        assert!(s
+            .evaluate(
+                &win("Settings", true),
+                &proc(
+                    "applicationframehost.exe",
+                    "c:\\windows\\system32\\applicationframehost.exe",
+                    500,
+                ),
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn native_settings_app_is_killed() {
+        let s = scout_with(&[], &[], false);
+        assert!(s
+            .evaluate(
+                &win("Settings", true),
+                &proc(
+                    "systemsettings.exe",
+                    "c:\\windows\\systemapps\\systemsettings.exe",
+                    900,
+                ),
+            )
+            .is_none());
     }
 
     // ── Stage 2: ───────────────────────────────────────────
