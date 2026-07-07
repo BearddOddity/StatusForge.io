@@ -1,0 +1,43 @@
+# Memory-safety/leak sanitizer — separate from ci.yml's plain `cargo test`,
+# which won't notice a leak or a use-after-free that doesn't crash outright.
+# Builds and runs forge-detection's test suite (unit tests + the anti-
+# regression corpus) under AddressSanitizer + LeakSanitizer on nightly, which
+# instruments allocations and fails the job the moment one is reported.
+#
+# Scoped to forge-detection only, not src-tauri/spark-app: those link GTK,
+# WebKitGTK, and other uninstrumented system C libraries whose own internal
+# caches read as false-positive leaks under LSan, which would make the job
+# noisy rather than useful. forge-detection is pure Rust with no such
+# dependencies, so its signal is clean. Revisit src-tauri once there's a
+# targeted way to scope the sanitizer to just its own allocations.
+
+name: Memory Leak Prevention
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  sanitizer:
+    name: ASan + LSan (forge-detection)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup nightly Rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: forge-detection
+
+      - name: Run test suite under AddressSanitizer + LeakSanitizer
+        working-directory: forge-detection
+        env:
+          RUSTFLAGS: -Z sanitizer=address
+          RUSTDOCFLAGS: -Z sanitizer=address
+        run: cargo test -Z build-std --target x86_64-unknown-linux-gnu

@@ -1,0 +1,36 @@
+# Detection/parsing regression corpus — separate from ci.yml's unit tests,
+# which exercise individual helpers in isolation. This runs a larger,
+# data-driven corpus of real-world exe-name/window-title/path combinations
+# through the FULL evaluate() pipeline (forge-detection/tests/fixtures/
+# detection_corpus.json), so a change that silently breaks matching for a
+# previously-working game — by altering how stages compose, not by breaking
+# a single function — gets caught. Grow the corpus in that JSON file whenever
+# such a regression is found in the wild; no Rust changes needed to add a case.
+#
+# Pure detection logic (no OS window/GUI APIs involved — ProcessSnapshot and
+# ActiveWindow are constructed directly), so one OS is sufficient.
+
+name: Anti-Regression
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  detection-corpus:
+    name: Detection corpus (forge-detection)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: forge-detection
+
+      - name: Run detection corpus
+        run: cargo test --manifest-path forge-detection/Cargo.toml --test detection_corpus

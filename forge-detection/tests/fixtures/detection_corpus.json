@@ -1,0 +1,365 @@
+[
+  {
+    "name": "known_alias_fallout_nv_wins_even_in_strict_mode",
+    "strict_mode": true,
+    "window_title": "FalloutNV",
+    "exe_name": "falloutnv.exe",
+    "exe_path": "d:/steamlibrary/common/fallout new vegas/falloutnv.exe",
+    "memory_mb": 1,
+    "expected": { "title": "Fallout New Vegas", "platform": "The Forge" }
+  },
+  {
+    "name": "known_alias_gta_iv",
+    "window_title": "GTAIV",
+    "exe_name": "gtaiv.exe",
+    "exe_path": "d:/games/gtaiv/gtaiv.exe",
+    "is_fullscreen": true,
+    "memory_mb": 4000,
+    "expected": { "title": "Grand Theft Auto IV", "platform": "The Forge" }
+  },
+  {
+    "name": "known_alias_funko_fusion",
+    "window_title": "FunkoFusion",
+    "exe_name": "funkofusion.exe",
+    "exe_path": "d:/games/funkofusion/funkofusion.exe",
+    "is_fullscreen": true,
+    "memory_mb": 4000,
+    "expected": { "title": "Funko Fusion", "platform": "The Forge" }
+  },
+  {
+    "name": "known_alias_3d_aim_trainer",
+    "window_title": "3DAT",
+    "exe_name": "3dat.exe",
+    "exe_path": "d:/games/3dat/3dat.exe",
+    "is_fullscreen": true,
+    "memory_mb": 2000,
+    "expected": { "title": "3D Aim Trainer", "platform": "The Forge" }
+  },
+  {
+    "name": "known_alias_aimlabs",
+    "window_title": "Aim Lab",
+    "exe_name": "aimlab_tb.exe",
+    "exe_path": "d:/games/aimlab/aimlab_tb.exe",
+    "is_fullscreen": true,
+    "memory_mb": 2000,
+    "expected": { "title": "Aimlabs", "platform": "The Forge" }
+  },
+  {
+    "name": "listed_app_wins_instantly_stardew_valley",
+    "listed_apps": [["stardewvalley.exe", "Stardew Valley"]],
+    "window_title": "Stardew Valley",
+    "exe_name": "stardewvalley.exe",
+    "exe_path": "d:/games/stardew valley/stardewvalley.exe",
+    "is_fullscreen": true,
+    "memory_mb": 800,
+    "expected": { "title": "Stardew Valley", "platform": "The Forge" }
+  },
+  {
+    "name": "known_window_title_alias_alan_wake_version_tag",
+    "window_title": "Alan Wake - v1.07.33.72514",
+    "exe_name": "alanwake.exe",
+    "exe_path": "d:/games/alan wake/alanwake.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Alan Wake", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "known_window_title_alias_apb_reloaded",
+    "window_title": "APB Reloaded (64-bit, PC-D3D-SM3)",
+    "exe_name": "apb.exe",
+    "exe_path": "d:/games/apb/apb.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "APB Reloaded", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "known_window_title_alias_cod_infinite_warfare_trademark_glyph",
+    "window_title": "Call of Duty® Infinite Warfare",
+    "exe_name": "modernwarfare.exe",
+    "exe_path": "d:/games/cod iw/modernwarfare.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Call of Duty: Infinite Warfare", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "uwp_piercer_halo_infinite",
+    "window_title": "Halo Infinite",
+    "exe_name": "applicationframehost.exe",
+    "exe_path": "c:/windows/system32/applicationframehost.exe",
+    "memory_mb": 500,
+    "expected": { "title": "Halo Infinite", "platform": "Xbox Game Pass" }
+  },
+  {
+    "name": "uwp_piercer_excludes_settings",
+    "window_title": "Settings",
+    "exe_name": "applicationframehost.exe",
+    "exe_path": "c:/windows/system32/applicationframehost.exe",
+    "memory_mb": 500,
+    "expected": null
+  },
+  {
+    "name": "native_settings_app_killed",
+    "window_title": "Settings",
+    "exe_name": "systemsettings.exe",
+    "exe_path": "c:/windows/systemapps/systemsettings.exe",
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "system_exile_discord_killed",
+    "window_title": "Discord",
+    "exe_name": "discord.exe",
+    "exe_path": "c:/users/x/appdata/local/discord/discord.exe",
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "system_exile_steam_killed",
+    "window_title": "Steam",
+    "exe_name": "steam.exe",
+    "exe_path": "c:/steam/steam.exe",
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "youtube_tab_title_killed",
+    "window_title": "Never Gonna Give You Up - YouTube - Google Chrome",
+    "exe_name": "chrome.exe",
+    "exe_path": "d:/g/chrome.exe",
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "youtube_music_tab_title_killed",
+    "window_title": "Lo-fi Beats - YouTube Music",
+    "exe_name": "chrome.exe",
+    "exe_path": "d:/g/chrome.exe",
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "browser_titled_window_killed",
+    "window_title": "Cool Web Game - Google Chrome",
+    "exe_name": "chrome.exe",
+    "exe_path": "d:/g/chrome.exe",
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "delisted_app_killed",
+    "delisted_apps": ["retiredgame.exe"],
+    "window_title": "Retired Game",
+    "exe_name": "retiredgame.exe",
+    "exe_path": "d:/g/retiredgame.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "banned_path_system32_killed",
+    "window_title": "Some Tool",
+    "exe_name": "tool.exe",
+    "exe_path": "c:/windows/system32/tool.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "banned_path_usr_bin_killed",
+    "window_title": "Some Tool",
+    "exe_name": "tool.exe",
+    "exe_path": "/usr/bin/tool",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "ram_floor_trap_kills_tiny_process",
+    "window_title": "Tiny Helper",
+    "exe_name": "tinyhelper.exe",
+    "exe_path": "d:/t/tinyhelper.exe",
+    "is_fullscreen": true,
+    "memory_mb": 12,
+    "expected": null
+  },
+  {
+    "name": "cmdline_renderer_trap_kills_chromium_child",
+    "window_title": "App",
+    "exe_name": "app.exe",
+    "exe_path": "d:/a/app.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "cmdline": "app.exe --type=renderer",
+    "expected": null
+  },
+  {
+    "name": "geometry_trap_kills_small_window",
+    "window_title": "Widget",
+    "exe_name": "widget.exe",
+    "exe_path": "d:/w/widget.exe",
+    "rect": [0, 0, 320, 240],
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "geometry_trap_kills_offscreen_window",
+    "window_title": "Hidden",
+    "exe_name": "bg.exe",
+    "exe_path": "d:/b/bg.exe",
+    "rect": [-32000, -32000, 1920, 1080],
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "proton_parent_wrapper_hades",
+    "window_title": "",
+    "exe_name": "hades.exe",
+    "exe_path": "z:/games/common/hades/hades.exe",
+    "parent_name": "proton",
+    "memory_mb": 900,
+    "expected": { "title": "Hades", "platform": "Shell Wrapper/Proton" }
+  },
+  {
+    "name": "wine_parent_wrapper_shell_script",
+    "window_title": "",
+    "exe_name": "game.exe",
+    "exe_path": "/home/user/games/undertale/game.exe",
+    "parent_name": "start.sh",
+    "memory_mb": 900,
+    "expected": { "title": "Undertale", "platform": "Shell Wrapper/Proton" }
+  },
+  {
+    "name": "epic_launcher_parent_fortnite",
+    "window_title": "Fortnite",
+    "exe_name": "fortnitegame.exe",
+    "exe_path": "d:/epic/fortnite/fortnitegame.exe",
+    "parent_name": "epicgameslauncher.exe",
+    "is_fullscreen": true,
+    "memory_mb": 2000,
+    "expected": { "title": "Fortnite", "platform": "Official Launcher" }
+  },
+  {
+    "name": "ea_desktop_launcher_parent_apex",
+    "window_title": "Apex Legends",
+    "exe_name": "r5apex.exe",
+    "exe_path": "d:/ea/apex/r5apex.exe",
+    "parent_name": "eadesktop.exe",
+    "is_fullscreen": true,
+    "memory_mb": 2000,
+    "expected": { "title": "Apex Legends", "platform": "Official Launcher" }
+  },
+  {
+    "name": "emulator_splitter_yuzu_zelda",
+    "window_title": "The Legend of Zelda: Breath of the Wild - yuzu 1770",
+    "exe_name": "yuzu.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "The Legend of Zelda: Breath of the Wild", "platform": "Emulator" }
+  },
+  {
+    "name": "emulator_splitter_retroarch_pipe_format",
+    "window_title": "RetroArch | Super Mario World",
+    "exe_name": "retroarch.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Super Mario World", "platform": "Emulator" }
+  },
+  {
+    "name": "emulator_splitter_dolphin_wind_waker",
+    "window_title": "The Legend of Zelda: The Wind Waker - Dolphin 5.0",
+    "exe_name": "dolphin.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "The Legend of Zelda: The Wind Waker", "platform": "Emulator" }
+  },
+  {
+    "name": "emulator_splitter_pcsx2_ffx",
+    "window_title": "Final Fantasy X - PCSX2 2.0",
+    "exe_name": "pcsx2.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Final Fantasy X", "platform": "Emulator" }
+  },
+  {
+    "name": "generic_exe_path_extraction_terraria",
+    "window_title": "Terraria",
+    "exe_name": "game.exe",
+    "exe_path": "d:/library/common/terraria/game.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Terraria", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "generic_exe_path_extraction_unreal_shipping_binary",
+    "window_title": "MyGame Win64 Shipping",
+    "exe_name": "mygame-win64-shipping.exe",
+    "exe_path": "d:/games/MyGame/Binaries/Win64/MyGame-Win64-Shipping.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "MyGame", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "generic_start_exe_overrides_given_title_with_path_extraction",
+    "window_title": "Hollow Knight Standalone",
+    "exe_name": "start.exe",
+    "exe_path": "d:/games/hollow knight/start.exe",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Hollow Knight", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "indie_standalone_celeste_reaches_confidence_threshold",
+    "window_title": "Celeste",
+    "exe_name": "celeste.exe",
+    "exe_path": "",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Celeste", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "indie_standalone_undertale_reaches_confidence_threshold",
+    "window_title": "UNDERTALE",
+    "exe_name": "undertale.exe",
+    "exe_path": "",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "UNDERTALE", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "indie_standalone_cuphead_reaches_confidence_threshold",
+    "window_title": "Cuphead",
+    "exe_name": "cuphead.exe",
+    "exe_path": "",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Cuphead", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "low_confidence_windowed_title_matches_exe_returns_none",
+    "window_title": "tool2.exe",
+    "exe_name": "tool2.exe",
+    "exe_path": "",
+    "is_fullscreen": false,
+    "memory_mb": 900,
+    "expected": null
+  },
+  {
+    "name": "not_responding_suffix_stripped_matches_normal_title",
+    "window_title": "Celeste (Not Responding)",
+    "exe_name": "celeste.exe",
+    "exe_path": "",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": { "title": "Celeste", "platform": "Standalone/DRM-Free" }
+  },
+  {
+    "name": "exe_name_becomes_title_when_no_path_no_title_disco_elysium",
+    "window_title": "",
+    "exe_name": "disco_elysium.exe",
+    "exe_path": "",
+    "is_fullscreen": true,
+    "memory_mb": 900,
+    "expected": null
+  }
+]
