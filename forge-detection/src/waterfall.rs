@@ -94,6 +94,62 @@ const EMULATOR_TAGS: &[&str] = &[
     "ppsspp",
 ];
 
+/// Built-in exe-name → canonical-title corrections for games whose process
+/// name or raw window title is misleading (slang/abbreviated exe names,
+/// missing spacing, etc.). Checked as an always-on extension of the user's
+/// `listed_apps`, so these get an instant Stage-1 match — the confidence
+/// traps and window-title guessing never see them.
+const KNOWN_EXE_TITLE_ALIASES: &[(&str, &str)] = &[
+    ("gtaiv.exe", "Grand Theft Auto IV"),
+    ("funkofusion.exe", "Funko Fusion"),
+    ("falloutnv.exe", "Fallout New Vegas"),
+    ("3dat.exe", "3D Aim Trainer"),
+    ("aimlab_tb.exe", "Aimlabs"),
+];
+
+fn known_exe_title_alias(exe_name: &str) -> Option<&'static str> {
+    KNOWN_EXE_TITLE_ALIASES
+        .iter()
+        .find(|(exe, _)| *exe == exe_name)
+        .map(|(_, title)| *title)
+}
+
+/// Built-in window-title corrections for games that append a build/version
+/// tag or a trademark glyph to their window title, matched case-insensitively
+/// against the full (trimmed) title.
+const KNOWN_WINDOW_TITLE_ALIASES: &[(&str, &str)] = &[
+    ("alan wake - v1.07.33.72514", "Alan Wake"),
+    ("apb reloaded (64-bit, pc-d3d-sm3)", "APB Reloaded"),
+    (
+        "call of duty® infinite warfare",
+        "Call of Duty: Infinite Warfare",
+    ),
+];
+
+fn known_window_title_alias(window_title: &str) -> Option<&'static str> {
+    let normalized = window_title.trim().to_lowercase();
+    KNOWN_WINDOW_TITLE_ALIASES
+        .iter()
+        .find(|(raw, _)| *raw == normalized)
+        .map(|(_, title)| *title)
+}
+
+/// Windows appends " (Not Responding)" to a window's title while it's hung.
+/// Left as-is, a hung game would get scanned/cover-cached under a distinct
+/// title and create a duplicate library entry alongside the real one, so
+/// this is stripped before the title is used anywhere else.
+fn strip_not_responding_suffix(title: &str) -> &str {
+    const SUFFIX: &str = " (not responding)";
+    let trimmed = title.trim_end();
+    if trimmed.len() >= SUFFIX.len()
+        && trimmed[trimmed.len() - SUFFIX.len()..].eq_ignore_ascii_case(SUFFIX)
+    {
+        trimmed[..trimmed.len() - SUFFIX.len()].trim_end()
+    } else {
+        trimmed
+    }
+}
+
 const GENERIC_EXE_NAMES: &[&str] = &[
     "game.exe",
     "win64-shipping",
@@ -209,10 +265,20 @@ impl ForgeWaterfall {
         let kw = self.knowledge.as_ref()?;
         let exe_name = &proc.exe_name;
         let exe_path = &proc.exe_path;
-        let window_title = window.title.as_str();
+        let window_title = strip_not_responding_suffix(window.title.as_str());
 
-        // ── Stage 1: (listed_apps) ──────────────
-        if let Some(title) = kw.listed_apps.get(exe_name) {
+        // ── Stage 1: (listed_apps + built-in title corrections) ────────
+        // Built-in aliases are checked alongside the user's own listed_apps
+        // so well-known games whose exe name or window title is misleading
+        // (slang exe names, trademark glyphs, build-version suffixes) get an
+        // instant, confident match instead of falling through to
+        // window-title guessing or being trapped by the confidence traps.
+        if let Some(title) = kw
+            .listed_apps
+            .get(exe_name)
+            .map(|s| s.as_str())
+            .or_else(|| known_exe_title_alias(exe_name))
+        {
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -520,6 +586,16 @@ pub fn format_game_output(
     platform_tag: &str,
     emulator_detection: bool,
 ) -> GameDetection {
+    // Built-in window-title correction (version/build suffixes, trademark
+    // glyphs) — takes priority over every other title source below.
+    if let Some(title) = known_window_title_alias(window_title) {
+        return GameDetection {
+            title: title.to_string(),
+            process: exe_name.to_string(),
+            platform: platform_tag.to_string(),
+        };
+    }
+
     // Emulator splitter: "Game Title - Yuzu 1.0" → "Game Title"
     if emulator_detection
         && EMULATOR_TAGS.iter().any(|emu| exe_name.contains(emu))
@@ -1031,5 +1107,111 @@ mod tests {
         assert!(!has_engine_dna(&exe.to_string_lossy().to_lowercase()));
         assert!(!has_engine_dna("z:/does/not/exist/game.exe"));
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ── Built-in exe/title aliases ──────────────────────────────────────
+
+    #[test]
+    fn known_exe_aliases_win_instantly_even_with_low_ram_and_strict_mode() {
+        for (exe, expected_title) in KNOWN_EXE_TITLE_ALIASES {
+            // strict_mode = true and a tiny memory footprint would normally
+            // kill detection outright; the built-in alias must still win.
+            let s = scout_with(&[], &[], true);
+            let d = s
+                .evaluate(&win(exe, false), &proc(exe, &format!("d:\\g\\{exe}"), 1))
+                .unwrap_or_else(|| panic!("{exe} was not detected"));
+            assert_eq!(d.title, *expected_title, "wrong title for {exe}");
+            assert_eq!(d.platform, "The Forge");
+        }
+    }
+
+    #[test]
+    fn gtaiv_alias() {
+        let s = scout_with(&[], &[], false);
+        let d = s
+            .evaluate(
+                &win("GTAIV", true),
+                &proc("gtaiv.exe", "d:\\games\\gtaiv\\gtaiv.exe", 4000),
+            )
+            .unwrap();
+        assert_eq!(d.title, "Grand Theft Auto IV");
+    }
+
+    #[test]
+    fn funko_fusion_alias_adds_missing_space() {
+        let s = scout_with(&[], &[], false);
+        let d = s
+            .evaluate(
+                &win("FunkoFusion", true),
+                &proc(
+                    "funkofusion.exe",
+                    "d:\\games\\funkofusion\\funkofusion.exe",
+                    4000,
+                ),
+            )
+            .unwrap();
+        assert_eq!(d.title, "Funko Fusion");
+    }
+
+    #[test]
+    fn fallout_nv_alias_ignores_path_extraction() {
+        let s = scout_with(&[], &[], false);
+        let d = s
+            .evaluate(
+                &win("FalloutNV", true),
+                &proc(
+                    "falloutnv.exe",
+                    "d:\\steamlibrary\\steamapps\\common\\fallout new vegas\\falloutnv.exe",
+                    4000,
+                ),
+            )
+            .unwrap();
+        assert_eq!(d.title, "Fallout New Vegas");
+    }
+
+    #[test]
+    fn known_window_title_aliases_strip_version_and_build_tags() {
+        let cases = [
+            ("Alan Wake - v1.07.33.72514", "Alan Wake"),
+            ("APB Reloaded (64-bit, PC-D3D-SM3)", "APB Reloaded"),
+            (
+                "Call of Duty® Infinite Warfare",
+                "Call of Duty: Infinite Warfare",
+            ),
+        ];
+        for (raw, expected) in cases {
+            let d = format_game_output("game.exe", "", raw, "Standalone/DRM-Free", true);
+            assert_eq!(d.title, expected, "wrong title for {raw}");
+        }
+    }
+
+    // ── "Not Responding" dedup ──────────────────────────────────────────
+
+    #[test]
+    fn strip_not_responding_suffix_removes_windows_hang_tag() {
+        assert_eq!(
+            strip_not_responding_suffix("Celeste (Not Responding)"),
+            "Celeste"
+        );
+        assert_eq!(
+            strip_not_responding_suffix("Celeste (not responding)"),
+            "Celeste"
+        );
+        assert_eq!(strip_not_responding_suffix("Celeste"), "Celeste");
+    }
+
+    #[test]
+    fn hung_window_produces_same_title_as_normal_window() {
+        let s = scout_with(&[], &[], false);
+        let normal = s
+            .evaluate(&win("Celeste", true), &proc("celeste.exe", "", 900))
+            .unwrap();
+        let hung = s
+            .evaluate(
+                &win("Celeste (Not Responding)", true),
+                &proc("celeste.exe", "", 900),
+            )
+            .unwrap();
+        assert_eq!(normal.title, hung.title);
     }
 }
