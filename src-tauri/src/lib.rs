@@ -1169,19 +1169,21 @@ async fn twitch_login(
         return Err("Twitch client ID not configured".to_string());
     }
 
+    let verifier = auth::generate_code_verifier();
+    let challenge = auth::generate_code_challenge(&verifier);
     let state_token = auth::generate_code_verifier(); // reuse CSPRNG for state
     {
         let mut pkce = state.pkce.lock().unwrap();
         pkce.insert(
             "twitch".to_string(),
             auth::PkceState {
-                verifier: String::new(),
+                verifier,
                 state: state_token.clone(),
             },
         );
     }
 
-    let url = auth::build_twitch_auth_url(client_id, &state_token);
+    let url = auth::build_twitch_auth_url(client_id, &state_token, &challenge);
 
     #[allow(deprecated)]
     {
@@ -1576,6 +1578,40 @@ fn set_log_level(level: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Rejects webhook targets that resolve to loopback, private, or
+/// link-local addresses so a malicious/compromised webhook URL (e.g. from
+/// an imported config) can't be used to probe the user's LAN or local
+/// services (SSRF). Users legitimately configuring `localhost` webhooks for
+/// their own tooling are the one case this deliberately still blocks; the
+/// security benefit of a strict allowlist outweighs that niche use.
+fn is_safe_webhook_host(host: &str) -> bool {
+    use std::net::ToSocketAddrs;
+
+    // Bracket bare IPv6 literals so ToSocketAddrs can parse "host:port".
+    let lookup = if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]:0")
+    } else {
+        format!("{host}:0")
+    };
+
+    match lookup.to_socket_addrs() {
+        Ok(addrs) => addrs.map(|a| a.ip()).all(|ip| match ip {
+            std::net::IpAddr::V4(v4) => {
+                !(v4.is_loopback()
+                    || v4.is_private()
+                    || v4.is_link_local()
+                    || v4.is_unspecified()
+                    || v4.is_broadcast())
+            }
+            std::net::IpAddr::V6(v6) => {
+                !(v6.is_loopback() || v6.is_unspecified() || v6.is_unique_local())
+            }
+        }),
+        // Unresolvable host — fail closed rather than let reqwest attempt it.
+        Err(_) => false,
+    }
+}
+
 /// Relay a small JSON event to a user-configured webhook. Lives in Rust
 /// because the webview CSP blocks arbitrary outbound fetches.
 #[tauri::command]
@@ -1587,6 +1623,15 @@ async fn post_webhook(
 ) -> Result<(), String> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err("Webhook URL must be http(s)".to_string());
+    }
+    let parsed = url::Url::parse(&url).map_err(|e| format!("Invalid webhook URL: {}", e))?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "Webhook URL must have a host".to_string())?;
+    if !is_safe_webhook_host(host) {
+        return Err(
+            "Webhook URL must not point to a loopback, private, or link-local address".to_string(),
+        );
     }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))

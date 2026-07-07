@@ -9,7 +9,6 @@
   "permissions": [
     "core:default",
     "fs:default",
-    "shell:allow-execute",
     "shell:allow-open",
     "core:path:default",
     "core:resources:default",

@@ -365,17 +365,20 @@ async fn twitch_login_handler(State(state): State<ServerState>) -> Result<Redire
     if client_id.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
+    let verifier = crate::auth::generate_code_verifier();
+    let challenge = crate::auth::generate_code_challenge(&verifier);
     let state_token = crate::auth::generate_code_verifier();
     state.oauth.pkce.lock().unwrap().insert(
         "twitch".to_string(),
         crate::auth::PkceState {
-            verifier: String::new(),
+            verifier,
             state: state_token.clone(),
         },
     );
     Ok(Redirect::temporary(&crate::auth::build_twitch_auth_url(
         &client_id,
         &state_token,
+        &challenge,
     )))
 }
 
@@ -569,11 +572,33 @@ fn build_router(state: ServerState) -> Router {
         )
         .layer(
             tower_http::cors::CorsLayer::new()
-                .allow_origin(tower_http::cors::Any)
+                .allow_origin(allowed_cors_origins())
                 .allow_methods(tower_http::cors::Any)
                 .allow_headers(tower_http::cors::Any),
         )
         .with_state(state)
+}
+
+/// Origins allowed to make cross-origin requests to the local server.
+///
+/// Widget overlays (OBS browser sources) load their HTML from this same
+/// server, so their fetches are same-origin and need no CORS grant at all.
+/// The only legitimate cross-origin caller is the app's own webview, so we
+/// allowlist exactly those origins instead of reflecting `Any` — a random
+/// webpage in the user's regular browser must not be able to read
+/// `/status`/`/api/forge-full` or trigger `/import-meta` even if it somehow
+/// obtains a widget token.
+fn allowed_cors_origins() -> tower_http::cors::AllowOrigin {
+    const ORIGINS: &[&str] = &[
+        "http://localhost:5173",   // Vite dev server
+        "tauri://localhost",       // production webview (macOS/Linux)
+        "https://tauri.localhost", // production webview (Windows)
+    ];
+    tower_http::cors::AllowOrigin::list(
+        ORIGINS
+            .iter()
+            .map(|o| axum::http::HeaderValue::from_static(o)),
+    )
 }
 
 /// Start the combined plain-HTTP + TLS server on 127.0.0.1:53735.

@@ -348,10 +348,11 @@ async fn handle_twitch_callback(
         ));
     }
 
-    let token_resp = match exchange_twitch_token(&code, client_id, client_secret).await {
-        Ok(r) => r,
-        Err(e) => return Html(build_popup_response("twitch", false, &e)),
-    };
+    let token_resp =
+        match exchange_twitch_token(&code, client_id, client_secret, &pending.verifier).await {
+            Ok(r) => r,
+            Err(e) => return Html(build_popup_response("twitch", false, &e)),
+        };
 
     // Fetch broadcaster ID
     let access_token = token_resp.access_token.clone();
@@ -436,6 +437,7 @@ async fn exchange_twitch_token(
     code: &str,
     client_id: &str,
     client_secret: &str,
+    code_verifier: &str,
 ) -> Result<TokenResponse, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -448,6 +450,7 @@ async fn exchange_twitch_token(
         ("client_secret", client_secret),
         ("redirect_uri", TWITCH_REDIRECT_URI),
         ("code", code),
+        ("code_verifier", code_verifier),
     ];
 
     let resp = client
@@ -924,15 +927,16 @@ pub fn build_kick_auth_url(client_id: &str, state: &str, code_challenge: &str) -
     )
 }
 
-pub fn build_twitch_auth_url(client_id: &str, state: &str) -> String {
+pub fn build_twitch_auth_url(client_id: &str, state: &str, code_challenge: &str) -> String {
     let scopes = urlencoding::encode("channel:manage:broadcast");
     format!(
-        "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}",
+        "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}&code_challenge={}&code_challenge_method=S256",
         TWITCH_AUTH_URL,
         urlencoding::encode(client_id),
         urlencoding::encode(TWITCH_REDIRECT_URI),
         scopes,
-        urlencoding::encode(state)
+        urlencoding::encode(state),
+        urlencoding::encode(code_challenge)
     )
 }
 
