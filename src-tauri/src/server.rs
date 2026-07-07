@@ -445,27 +445,21 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
 
     let game_title = game.as_ref().map(|g| g.title.clone()).unwrap_or_default();
 
-    // Enrich with Forge_Database.json library metadata when we have a match.
-    // While idle, fall back to the idle category's own library entry (e.g.
-    // "Just Chatting") so a custom cover set for it via the Library editor
-    // shows up here too, instead of always falling through to the app's
-    // built-in placeholder image.
+    // Enrich with Forge_Database.json library metadata when we have a
+    // detected game. The idle category (e.g. "Just Chatting") isn't a real
+    // game and has no Library entry of its own (see
+    // `remove_idle_library_entry`) — while idle, everything here stays
+    // empty and the frontend substitutes its own bundled placeholder cover
+    // instead of showing blank.
     let mut genre = String::new();
     let mut developer = String::new();
     let mut publisher = String::new();
     let mut release_date = String::new();
     let mut cover_url = String::new();
     let mut logo_url = String::new();
-    let lookup_title = if !game_title.is_empty() {
-        Some(game_title.clone())
-    } else {
-        config
-            .as_ref()
-            .map(|c| c.engine_settings.idle_category.clone())
-    };
-    if let Some(lookup_title) = lookup_title {
+    if !game_title.is_empty() {
         if let Ok(db) = load_db() {
-            if let Some(key) = crate::config::find_library_key(&db, &lookup_title) {
+            if let Some(key) = crate::config::find_library_key(&db, &game_title) {
                 if let Some(entry) = db.library.get(&key) {
                     genre = entry.genre.clone();
                     developer = entry.developer.clone();

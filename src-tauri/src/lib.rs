@@ -525,12 +525,15 @@ mod native_engine_state_tests {
     }
 }
 
-/// Ensures the current idle category (e.g. "Just Chatting") has a Library
-/// entry, so it's editable (custom cover, etc.) the same way a detected
-/// game is. Bare-inserts on first run only — `find_library_key` means an
-/// existing entry (whatever case/whitespace it was created with) is left
-/// completely untouched, so this never clobbers a cover a user already set.
-fn ensure_idle_library_entry(base: &std::path::Path) {
+/// The idle category (e.g. "Just Chatting") isn't a game — it never goes
+/// through `on_game_detected`'s metadata scan, so it has no real cover/genre
+/// to show, and it doesn't belong in the Library alongside actual games. An
+/// older version of this app auto-created a bare Library entry for it (to
+/// let a custom cover be set by hand); this removes that entry if one exists
+/// so it stops showing up as a blank-cover "game" card, on every startup.
+/// The idle-state cover now comes from a bundled default image instead (see
+/// `server::build_status`), so no Library entry is needed for that anymore.
+fn remove_idle_library_entry(base: &std::path::Path) {
     let Ok(config) = auth::load_config_at(base) else {
         return;
     };
@@ -541,19 +544,13 @@ fn ensure_idle_library_entry(base: &std::path::Path) {
     let Ok(mut db) = server::load_db() else {
         return;
     };
-    if config::find_library_key(&db, idle_category).is_some() {
+    let Some(key) = config::find_library_key(&db, idle_category) else {
         return;
-    }
-    db.library.insert(
-        idle_category.to_string(),
-        config::ForgeLibraryEntry {
-            title: idle_category.to_string(),
-            ..Default::default()
-        },
-    );
+    };
+    db.library.remove(&key);
     if let Err(e) = server::save_db(&db) {
         log::warn!(
-            "[STARTUP] Failed to create idle category library entry: {}",
+            "[STARTUP] Failed to remove idle category library entry: {}",
             e
         );
     }
@@ -1758,12 +1755,12 @@ pub fn run() {
                 log::warn!("Failed to set up system tray: {}", e);
             }
 
-            // Give the idle category (e.g. "Just Chatting") a real Library
-            // entry on first run so it shows up in the Library editor and
-            // users can set a custom cover for it, same as any detected
-            // game — instead of only ever existing as a config string.
+            // Clean up any idle-category (e.g. "Just Chatting") Library
+            // entry left over from an older version of this app — it isn't
+            // a game and shouldn't show up as one (see
+            // `remove_idle_library_entry`).
             if let Ok(base) = app_base_dir() {
-                ensure_idle_library_entry(&base);
+                remove_idle_library_entry(&base);
             }
 
             // LAN Hub: announce on udp/53736, receive SPARK heartbeats on udp/53735
