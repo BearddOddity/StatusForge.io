@@ -1601,7 +1601,12 @@ fn is_safe_webhook_host(host: &str) -> bool {
                     || v4.is_broadcast())
             }
             std::net::IpAddr::V6(v6) => {
-                !(v6.is_loopback() || v6.is_unspecified() || v6.is_unique_local())
+                // `Ipv6Addr::is_unique_local()` isn't available until Rust
+                // 1.84, but this crate's MSRV is 1.77.2 — check the
+                // fc00::/7 range by hand instead (top 7 bits of the first
+                // octet are 1111110, i.e. 0xfc or 0xfd).
+                let is_unique_local = (v6.octets()[0] & 0xfe) == 0xfc;
+                !(v6.is_loopback() || v6.is_unspecified() || is_unique_local)
             }
         }),
         // Unresolvable host — fail closed rather than let reqwest attempt it.
