@@ -3,16 +3,18 @@
 // statusforge/download.html to match a published StatusForge release.
 // Run by .github/workflows/update-download-page.yml on every
 // `release: published` event (StatusForge releases only — Spark is always
-// prerelease and is filtered out at the workflow level).
+// prerelease and is filtered out at the workflow level), or manually via
+// workflow_dispatch (which passes the current /releases/latest instead).
 import { readFileSync, writeFileSync } from "node:fs";
 
 const filePath = process.argv[2];
-if (!filePath) {
-  console.error("usage: update-download-page.mjs <path-to-download.html>");
+const releaseJsonPath = process.argv[3];
+if (!filePath || !releaseJsonPath) {
+  console.error("usage: update-download-page.mjs <path-to-download.html> <path-to-release.json>");
   process.exit(1);
 }
 
-const release = JSON.parse(process.env.RELEASE_JSON || "{}");
+const release = JSON.parse(readFileSync(releaseJsonPath, "utf8") || "{}");
 const tag = release.tag_name;
 const assets = release.assets || [];
 
