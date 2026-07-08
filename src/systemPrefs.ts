@@ -23,6 +23,9 @@ export interface SystemPrefs {
   // publish them.
   updateChannel: "stable" | "beta" | "closed-beta";
   showDevTools: boolean;
+  // Reveals the OAuth-managed token previews in Settings > API & Routing
+  // (Access/Refresh Token). Off by default — those values stay masked.
+  showAccessTokens: boolean;
 }
 
 export const defaultSystemPrefs: SystemPrefs = {
@@ -41,6 +44,7 @@ export const defaultSystemPrefs: SystemPrefs = {
   wsAutoReconnect: true,
   updateChannel: "stable",
   showDevTools: false,
+  showAccessTokens: false,
 };
 
 export const SYSTEM_PREFS_KEY = "statusforge_system_prefs";

@@ -11,7 +11,9 @@ import type { EngineStatus, ViewId } from "@/types";
 import { fetchEngineStatus, fetchWidgetToken, tauriApi } from "@/hooks/useTauriApi";
 import { loadSystemPrefs, applySystemPrefs, SYSTEM_PREFS_EVENT } from "@/systemPrefs";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useUpdater } from "@/hooks/useUpdater";
 import { useToasts, ToastContainer } from "@/components/Toast";
+import UpdateBanner from "@/components/UpdateBanner";
 import DashboardView from "@/views/DashboardView";
 import LibraryView from "@/LibraryView";
 import { THEME_PREFS_EVENT, loadThemePrefs, saveThemePrefs, applyThemePrefs } from "@/theme";
@@ -20,8 +22,8 @@ import DevView from "@/dev/DevView";
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewId>("dashboard");
-  const [appVersion] = useState("0.5.0");
   const { toasts, add: toast } = useToasts();
+  const updater = useUpdater(toast);
 
   // Dev Tools sidebar tab visibility is a persisted System setting (Settings >
   // System > Developer Tools > "Dev Tools Tab"), not a hidden unlock gesture.
@@ -104,7 +106,12 @@ function App() {
   const views = useMemo(
     () => ({
       dashboard: (
-        <DashboardView engineStatus={engineStatus} wsConnected={wsConnected} toast={toast} />
+        <DashboardView
+          engineStatus={engineStatus}
+          wsConnected={wsConnected}
+          toast={toast}
+          onNavigate={setCurrentView}
+        />
       ),
       settings: <SettingsView engineStatus={engineStatus} onRefresh={fetchStatus} toast={toast} />,
       library: <LibraryView toast={toast} />,
@@ -271,6 +278,14 @@ function App() {
       {/* Main */}
       <main className="flex-1 p-8 overflow-y-auto overflow-x-hidden h-screen min-w-0 flex flex-col">
         <ToastContainer toasts={toasts} />
+        {updater.available && (
+          <UpdateBanner
+            version={updater.version}
+            installing={updater.installing}
+            onInstall={updater.install}
+            onDismiss={updater.dismiss}
+          />
+        )}
         {views[currentView]}
       </main>
     </div>

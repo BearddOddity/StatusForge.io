@@ -779,9 +779,24 @@ pub fn load_config_at(base_dir: &std::path::Path) -> Result<AppConfig, String> {
 /// only fills gaps, never overrides what Config.json already has.
 fn backfill_from_keychain(config: &mut AppConfig) {
     let read = |keychain_name: &str| -> Option<String> {
-        keyring::Entry::new(crate::KEYRING_SERVICE, keychain_name)
-            .ok()
-            .and_then(|e| e.get_password().ok())
+        let entry = keyring::Entry::new(crate::KEYRING_SERVICE, keychain_name).ok()?;
+        match entry.get_password() {
+            Ok(v) => Some(v),
+            // NoEntry just means this field was never migrated — expected
+            // and silent. Anything else (locked keychain, no Secret Service
+            // provider running, permission denied, ...) means a migrated
+            // credential exists but can't currently be read, which otherwise
+            // looks identical to "never connected" with no way to tell why.
+            Err(keyring::Error::NoEntry) => None,
+            Err(e) => {
+                log::warn!(
+                    "[KEYCHAIN] Failed to read {} from OS keychain: {}",
+                    keychain_name,
+                    e
+                );
+                None
+            }
+        }
     };
 
     if config.broadcaster.twitch_token.is_empty() {
@@ -874,8 +889,18 @@ fn redact_migrated_secrets(config: &mut AppConfig) {
         // is exactly that signal. A never-migrated field saves as plaintext,
         // same as before this fix existed.
         if entry.get_password().is_ok() {
-            let _ = entry.set_password(field);
-            field.clear();
+            // Only blank the Config.json copy if the keychain write actually
+            // succeeded. If the OS keychain is locked, unavailable, or the
+            // write is otherwise rejected, keep the plaintext value where it
+            // is rather than losing the credential from both places.
+            match entry.set_password(field) {
+                Ok(()) => field.clear(),
+                Err(e) => log::warn!(
+                    "[KEYCHAIN] Failed to sync {} to OS keychain ({}) — keeping it in Config.json",
+                    keychain_name,
+                    e
+                ),
+            }
         }
     };
     sync(&mut config.broadcaster.twitch_token, "twitch_access_token");

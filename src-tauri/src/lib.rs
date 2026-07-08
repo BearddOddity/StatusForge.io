@@ -401,7 +401,7 @@ fn is_engine_running(state: tauri::State<Arc<NativeEngineState>>) -> bool {
 
 use scanner::waterfall::{ForgeWaterfall, LogFn};
 use scanner::{GameDetection, ScannerConfig};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Shared state for the native detection engine.
@@ -1267,36 +1267,154 @@ async fn twitch_validate_token() -> Result<String, String> {
     Ok(name)
 }
 
-/// Checks whether the stored Twitch/Kick tokens still actually work — unlike
-/// `twitch_validate_token`/`kick_validate_token` this never writes back to
-/// Config.json, so it's safe to poll from the Dashboard's "Platform
-/// Connections" panel without spamming disk saves or clobbering ids each
-/// tick. A stored token can be revoked/expired without StatusForge knowing
-/// until it's actually used, so "credential present" alone isn't "connected".
+const REAUTH_ATTEMPT_COOLDOWN_SECS: u64 = 300;
+static LAST_TWITCH_REAUTH_ATTEMPT_SECS: AtomicU64 = AtomicU64::new(0);
+static LAST_KICK_REAUTH_ATTEMPT_SECS: AtomicU64 = AtomicU64::new(0);
+static TWITCH_NEEDS_REAUTH: AtomicBool = AtomicBool::new(false);
+static KICK_NEEDS_REAUTH: AtomicBool = AtomicBool::new(false);
+
+/// True (and records the attempt) once per cooldown window — a genuinely
+/// dead refresh token shouldn't get hammered on every 10s Dashboard poll.
+fn reauth_cooldown_elapsed(last: &AtomicU64) -> bool {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if now.saturating_sub(last.load(Ordering::Relaxed)) < REAUTH_ATTEMPT_COOLDOWN_SECS {
+        return false;
+    }
+    last.store(now, Ordering::Relaxed);
+    true
+}
+
+/// Validates the stored Twitch token; on failure, tries one silent refresh
+/// (same recovery pusher.rs already does on a 401 during a push) before
+/// giving up. Returns (live, needs_reauth). needs_reauth latches true once a
+/// refresh attempt has actually been made and failed — meaning the refresh
+/// token itself is dead, not just the short-lived access token — and stays
+/// true across cooldown-gated polls until either a refresh succeeds or the
+/// user reconnects (whichever happens first makes a live check succeed,
+/// which always clears it immediately).
+async fn check_twitch_live(base_dir: &std::path::Path, config: &AppConfig) -> (bool, bool) {
+    if config.broadcaster.twitch_token.is_empty() || config.broadcaster.twitch_client.is_empty() {
+        TWITCH_NEEDS_REAUTH.store(false, Ordering::Relaxed);
+        return (false, false);
+    }
+    if auth::validate_twitch_token(
+        &config.broadcaster.twitch_token,
+        &config.broadcaster.twitch_client,
+    )
+    .await
+    .is_ok()
+    {
+        TWITCH_NEEDS_REAUTH.store(false, Ordering::Relaxed);
+        return (true, false);
+    }
+    if reauth_cooldown_elapsed(&LAST_TWITCH_REAUTH_ATTEMPT_SECS) {
+        let cfg = config.clone();
+        let refreshed = tokio::task::spawn_blocking(move || auth::refresh_twitch_token(&cfg)).await;
+        if let Ok(Ok(new_token)) = refreshed {
+            let mut updated = config.clone();
+            updated.broadcaster.twitch_token = new_token.clone();
+            if let Err(e) = auth::save_config_at(base_dir, &updated) {
+                log::warn!(
+                    "[LIVE-CHECK] Failed to persist refreshed Twitch token: {}",
+                    e
+                );
+            }
+            let live = auth::validate_twitch_token(&new_token, &config.broadcaster.twitch_client)
+                .await
+                .is_ok();
+            TWITCH_NEEDS_REAUTH.store(!live, Ordering::Relaxed);
+            return (live, !live);
+        }
+        TWITCH_NEEDS_REAUTH.store(true, Ordering::Relaxed);
+        return (false, true);
+    }
+    (false, TWITCH_NEEDS_REAUTH.load(Ordering::Relaxed))
+}
+
+/// Kick counterpart of `check_twitch_live` — same refresh-then-latch shape.
+async fn check_kick_live(base_dir: &std::path::Path, config: &AppConfig) -> (bool, bool) {
+    if config.broadcaster.kick_token.is_empty() {
+        KICK_NEEDS_REAUTH.store(false, Ordering::Relaxed);
+        return (false, false);
+    }
+    if auth::validate_kick_token(&config.broadcaster.kick_token)
+        .await
+        .is_ok()
+    {
+        KICK_NEEDS_REAUTH.store(false, Ordering::Relaxed);
+        return (true, false);
+    }
+    if reauth_cooldown_elapsed(&LAST_KICK_REAUTH_ATTEMPT_SECS) {
+        let cfg = config.clone();
+        let refreshed = tokio::task::spawn_blocking(move || auth::refresh_kick_token(&cfg)).await;
+        if let Ok(Ok(new_token)) = refreshed {
+            let mut updated = config.clone();
+            updated.broadcaster.kick_token = new_token.clone();
+            if let Err(e) = auth::save_config_at(base_dir, &updated) {
+                log::warn!("[LIVE-CHECK] Failed to persist refreshed Kick token: {}", e);
+            }
+            let live = auth::validate_kick_token(&new_token).await.is_ok();
+            KICK_NEEDS_REAUTH.store(!live, Ordering::Relaxed);
+            return (live, !live);
+        }
+        KICK_NEEDS_REAUTH.store(true, Ordering::Relaxed);
+        return (false, true);
+    }
+    (false, KICK_NEEDS_REAUTH.load(Ordering::Relaxed))
+}
+
+/// Checks whether the stored Twitch/Kick tokens still actually work, trying
+/// a silent refresh first if not (see `check_twitch_live`/`check_kick_live`)
+/// — so a merely-expired access token self-heals with no user action, and
+/// `*_needs_reauth` only fires once that recovery has genuinely failed. Safe
+/// to poll from the Dashboard's "Platform Connections" panel: refresh
+/// attempts are cooldown-limited, and a successful refresh is the only case
+/// that writes back to Config.json.
 #[tauri::command]
 async fn check_platform_live_status() -> serde_json::Value {
+    let empty = || {
+        serde_json::json!({
+            "twitch": false, "twitch_needs_reauth": false,
+            "kick": false, "kick_needs_reauth": false,
+            "sbot": false,
+        })
+    };
     let Ok(base_dir) = app_base_dir() else {
-        return serde_json::json!({"twitch": false, "kick": false});
+        return empty();
     };
     let Ok(config) = auth::load_config_at(&base_dir) else {
-        return serde_json::json!({"twitch": false, "kick": false});
+        return empty();
     };
 
-    let twitch_live = !config.broadcaster.twitch_token.is_empty()
-        && !config.broadcaster.twitch_client.is_empty()
-        && auth::validate_twitch_token(
-            &config.broadcaster.twitch_token,
-            &config.broadcaster.twitch_client,
+    let (twitch_live, twitch_needs_reauth) = check_twitch_live(&base_dir, &config).await;
+    let (kick_live, kick_needs_reauth) = check_kick_live(&base_dir, &config).await;
+
+    // Streamer.bot isn't pushed to directly — push_category no-ops in this
+    // routing mode, since Streamer.bot is expected to pull game state from
+    // StatusForge itself rather than receive a push — so there's no
+    // request/response to validate like Twitch/Kick get. The best available
+    // signal is whether anything is listening on the configured local port.
+    let sbot_live = if config.broadcaster.routing_mode == config::RoutingMode::StreamerBot {
+        let addr = format!("127.0.0.1:{}", config.engine_settings.sb_port);
+        tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            tokio::net::TcpStream::connect(&addr),
         )
         .await
-        .is_ok();
+        .map(|r| r.is_ok())
+        .unwrap_or(false)
+    } else {
+        false
+    };
 
-    let kick_live = !config.broadcaster.kick_token.is_empty()
-        && auth::validate_kick_token(&config.broadcaster.kick_token)
-            .await
-            .is_ok();
-
-    serde_json::json!({"twitch": twitch_live, "kick": kick_live})
+    serde_json::json!({
+        "twitch": twitch_live, "twitch_needs_reauth": twitch_needs_reauth,
+        "kick": kick_live, "kick_needs_reauth": kick_needs_reauth,
+        "sbot": sbot_live,
+    })
 }
 
 /// Manually trigger Kick category database sync.
@@ -1706,6 +1824,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
