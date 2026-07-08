@@ -621,7 +621,14 @@ fn build_router(state: ServerState) -> Router {
             tower_http::cors::CorsLayer::new()
                 .allow_origin(allowed_cors_origins())
                 .allow_methods(tower_http::cors::Any)
-                .allow_headers(tower_http::cors::Any),
+                .allow_headers(tower_http::cors::Any)
+                // The webview's origin (tauri://localhost, https://tauri.localhost)
+                // isn't itself a loopback address, so Chromium/WebView2 treat every
+                // fetch to 127.0.0.1 as a Private Network Access request and send a
+                // preflight with Access-Control-Request-Private-Network: true. Without
+                // echoing this header back, that preflight is denied and every request
+                // from the app's own UI to this server fails outright.
+                .allow_private_network(true),
         )
         .with_state(state)
 }
@@ -638,8 +645,9 @@ fn build_router(state: ServerState) -> Router {
 fn allowed_cors_origins() -> tower_http::cors::AllowOrigin {
     const ORIGINS: &[&str] = &[
         "http://localhost:5173",   // Vite dev server
-        "tauri://localhost",       // production webview (macOS/Linux)
-        "https://tauri.localhost", // production webview (Windows)
+        "tauri://localhost",       // production webview (macOS, WebKitGTK custom-scheme builds)
+        "http://tauri.localhost",  // production webview (Linux/WebKitGTK, observed in practice)
+        "https://tauri.localhost", // production webview (Windows/WebView2)
     ];
     tower_http::cors::AllowOrigin::list(
         ORIGINS
