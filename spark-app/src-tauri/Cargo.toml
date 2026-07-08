@@ -2,9 +2,9 @@
 name = "spark"
 version = "1.0.0"
 description = "StatusForge Spark — Dual-PC Game Detection Agent"
-authors = ["BeardedOddity"]
+authors = ["BearddOddity"]
 license = "MIT"
-repository = "https://github.com/BeardedOddity/StatusForge.io"
+repository = "https://github.com/BearddOddity/StatusForge.io"
 edition = "2021"
 rust-version = "1.77.2"
 
