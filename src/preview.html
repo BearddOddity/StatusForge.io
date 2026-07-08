@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OAuth Callback Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #050505;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+  }
+
+  /* Buttons to toggle states */
+  .controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .controls button {
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.7);
+    transition: all 0.2s;
+  }
+  .controls button:hover {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+  }
+  .controls button.active {
+    background: rgba(145,70,255,0.2);
+    border-color: rgba(145,70,255,0.4);
+    color: #c084fc;
+  }
+
+  /* ── Modal overlay ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .modal-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ── Card ── */
+  .modal-card {
+    width: 90vw;
+    max-width: 400px;
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+    transform: translateY(20px) scale(0.95);
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .modal-overlay.visible .modal-card {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+
+  .accent-line {
+    height: 2px;
+    width: 100%;
+  }
+
+  .card-body {
+    padding: 32px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  /* Icon */
+  .icon-wrap {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    margin-bottom: 24px;
+  }
+  .icon-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    animation: ping 2s ease-in-out infinite;
+  }
+  .icon-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-inner svg { width: 28px; height: 28px; }
+
+  @keyframes ping {
+    0% { opacity: 0.2; transform: scale(1); }
+    50% { opacity: 0.1; transform: scale(1.15); }
+    100% { opacity: 0.2; transform: scale(1); }
+  }
+
+  /* Spinner */
+  .spinner {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Title & subtitle */
+  .card-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .card-subtitle {
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+    line-height: 1.5;
+    max-width: 280px;
+    margin-bottom: 24px;
+  }
+
+  /* Pulse dots */
+  .dots {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    animation: dot-pulse 1.4s ease-in-out infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.4); }
+  }
+
+  /* Buttons */
+  .btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    color: #fff;
+  }
+  .btn-ghost {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.5);
+  }
+  .btn-ghost:hover {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.7);
+  }
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+  .btn-row .btn { flex: 1; }
+
+  /* Check / X */
+  .status-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Footer */
+  .card-footer {
+    padding: 12px 28px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .card-footer span {
+    font-size: 10px;
+    color: rgba(255,255,255,0.2);
+    font-weight: 500;
+    letter-spacing: 1px;
+  }
+  .card-footer svg {
+    width: 12px;
+    height: 12px;
+    color: rgba(255,255,255,0.15);
+  }
+
+  /* Platform toggle */
+  .platform-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .platform-toggle button {
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.5);
+    transition: all 0.2s;
+  }
+  .platform-toggle button.active {
+    color: #fff;
+  }
+
+  .label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.25);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="label">Platform</div>
+<div class="platform-toggle">
+  <button id="btn-twitch" class="active" style="border-color:#9146FF40;color:#c084fc" onclick="setPlatform('twitch')">Twitch</button>
+  <button id="btn-kick" onclick="setPlatform('kick')">Kick</button>
+</div>
+
+<div class="label">State</div>
+<div class="controls">
+  <button id="s-connecting" class="active" onclick="setState('connecting')">Connecting</button>
+  <button id="s-success" onclick="setState('success')">Success</button>
+  <button id="s-error" onclick="setState('error')">Error</button>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal-overlay visible">
+  <div class="modal-card">
+    <div id="accent" class="accent-line" style="background:linear-gradient(135deg,#9146FF,#6441A5)"></div>
+    <div class="card-body">
+
+      <!-- Icon area -->
+      <div class="icon-wrap">
+        <div id="icon-ring" class="icon-ring" style="background:#9146FF"></div>
+        <div id="icon-inner" class="icon-inner" style="background:#9146FF15;border:1px solid #9146FF30;color:#9146FF;box-shadow:0 0 30px #9146FF15">
+          <div id="icon-content">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+      </div>
+
+      <div id="card-title" class="card-title">Connect to Twitch</div>
+      <div id="card-subtitle" class="card-subtitle">A Twitch authorization window has been opened. Please log in and grant access to continue.</div>
+
+      <div id="dots" class="dots">
+        <div class="dot" style="background:#9146FF"></div>
+        <div class="dot" style="background:#9146FF"></div>
+        <div class="dot" style="background:#9146FF"></div>
+      </div>
+
+      <div id="actions" style="width:100%">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+
+    </div>
+    <div class="card-footer">
+      <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      <span>STATUSFORGE.IO</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const PLATFORMS = {
+  twitch: {
+    label: 'Twitch',
+    color: '#9146FF',
+    gradient: 'linear-gradient(135deg,#9146FF,#6441A5)',
+    icon: '<svg width="28" height="28" viewBox="0 0 2400 2800" fill="currentColor"><path d="M500,0L0,500v1800h600v500l500-500h400l900-900V0H500z M2200,1300l-400,400h-400l-350,350v-350H600V200h1600 V1300z"/><rect x="1700" y="550" width="200" height="600"/><rect x="1150" y="550" width="200" height="600"/></svg>',
+  },
+  kick: {
+    label: 'Kick',
+    color: '#00e676',
+    gradient: 'linear-gradient(135deg,#00e676,#00b248)',
+    icon: '<svg width="28" height="28" viewBox="0 0 453.9 510.6" fill="currentColor"><path d="M0,0h170.2v113.5h56.7v-56.7h56.7V0h170.2v170.2h-56.7v56.7h-56.7v56.7h56.7v56.7h56.7v170.2h-170.2v-56.7h-56.7v-56.7h-56.7v113.5H0V0Z"/></svg>',
+  },
+};
+
+let platform = 'twitch';
+let state = 'connecting';
+
+function setPlatform(p) {
+  platform = p;
+  document.querySelectorAll('.platform-toggle button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + p).classList.add('active');
+  render();
+}
+
+function setState(s) {
+  state = s;
+  document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+  document.getElementById('s-' + s).classList.add('active');
+  render();
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('visible');
+  setTimeout(() => document.getElementById('modal').classList.add('visible'), 600);
+}
+
+function render() {
+  const p = PLATFORMS[platform];
+  const accent = document.getElementById('accent');
+  const ring = document.getElementById('icon-ring');
+  const inner = document.getElementById('icon-inner');
+  const content = document.getElementById('icon-content');
+  const title = document.getElementById('card-title');
+  const subtitle = document.getElementById('card-subtitle');
+  const dots = document.getElementById('dots');
+  const actions = document.getElementById('actions');
+
+  accent.style.background = p.gradient;
+  ring.style.background = p.color;
+  inner.style.background = p.color + '15';
+  inner.style.borderColor = p.color + '30';
+  inner.style.color = p.color;
+  inner.style.boxShadow = '0 0 30px ' + p.color + '15';
+
+  // Icon content
+  if (state === 'connecting') {
+    content.innerHTML = p.icon + '<svg class="spinner" fill="none" viewBox="0 0 24 24" style="color:' + p.color + '"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+    ring.style.display = 'block';
+  } else if (state === 'success') {
+    content.innerHTML = '<svg class="status-icon" fill="none" stroke="#4ade80" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+    ring.style.display = 'none';
+  } else {
+    content.innerHTML = '<svg class="status-icon" fill="none" stroke="#f87171" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+    ring.style.display = 'none';
+  }
+
+  // Title & subtitle
+  if (state === 'connecting') {
+    title.textContent = 'Connect to ' + p.label;
+    subtitle.textContent = 'A ' + p.label + ' authorization window has been opened. Please log in and grant access to continue.';
+  } else if (state === 'success') {
+    title.textContent = p.label + ' Connected';
+    subtitle.textContent = 'Your account has been linked. You can now use all streaming features.';
+  } else {
+    title.textContent = 'Connection Failed';
+    subtitle.textContent = "We couldn't complete the authorization. This can happen if the popup was closed early or access was denied.";
+  }
+
+  // Dots
+  dots.style.display = state === 'connecting' ? 'flex' : 'none';
+  dots.querySelectorAll('.dot').forEach(d => d.style.background = p.color);
+
+  // Actions
+  if (state === 'connecting') {
+    actions.innerHTML = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
+  } else if (state === 'success') {
+    actions.innerHTML = '<button class="btn btn-primary" style="background:' + p.gradient + ';box-shadow:0 4px 20px ' + p.color + '30" onclick="closeModal()">Done</button>';
+  } else {
+    actions.innerHTML = '<div class="btn-row"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" style="background:' + p.gradient + ';box-shadow:0 4px 20px ' + p.color + '30" onclick="setState(\'connecting\')">Try Again</button></div>';
+  }
+}
+
+render();
+</script>
+</body>
+</html>

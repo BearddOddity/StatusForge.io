@@ -1,0 +1,46 @@
+# Ignore Security Keys
+*.pem
+*.key
+*.p12
+*.keystore
+.env
+.env.*
+
+# Ignore Node and Build folders
+node_modules/
+dist/
+
+# Ignore local Python builds and caches
+presence.exe
+presence
+presence.app
+presence.spec
+__pycache__/
+build/presence/
+
+# Ignore local databases, logs, and tokens generated during testing
+kick_db.json
+Custom_Meta.json
+vault.json
+Widget_Token.txt
+debug.log
+
+# Ignore sensitive config (contains API keys/tokens)
+Config.json
+
+# Ignore local game database
+Forge_Database.json
+
+# Ignore dev artifacts
+not required/
+**/target/
+*.log
+
+# Ignore Playwright MCP preview screenshots/traces
+.playwright-mcp/
+
+# Ignore editor/OS junk
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

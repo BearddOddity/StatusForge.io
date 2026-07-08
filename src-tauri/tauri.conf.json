@@ -1,0 +1,69 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "StatusForge.io",
+  "version": "0.5.1",
+  "identifier": "com.bearddoddity.statusforge",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "StatusForge.io",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "hiddenTitle": false,
+        "visible": true,
+        "url": "index.html",
+        "devtools": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://127.0.0.1:53735 http://127.0.0.1:53735 ws://127.0.0.1:53735; font-src 'self' https://fonts.gstatic.com; frame-src https://127.0.0.1:53735 http://127.0.0.1:53735",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**/*"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/BeardedOddity/StatusForge.io/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0QjZCNTc5RDgxMzBEOUUKUldTZURSUFllYlcySktkRC91S0RDRTNOUWw0Uzc0UWwxM1JYck1GbkpnZjNnc1lJQVladlV6S3IK"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsi"
+      }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../widgets/": "widgets/",
+      "../Config.json.template": "",
+      "../public/": "public/"
+    },
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

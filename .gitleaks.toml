@@ -1,0 +1,22 @@
+title = "StatusForge gitleaks config"
+
+[extend]
+useDefault = true
+
+# Tauri's updater `pubkey` field is a minisign PUBLIC key — the whole point
+# of asymmetric signing is that this half is meant to be public and shipped
+# in the app so it can verify update signatures. It's high-entropy base64,
+# which is why the generic-api-key rule flags it, but it's not a credential.
+# The private counterpart (~/.tauri/statusforge.key) never goes in the repo.
+#
+# Allowlisted by path rather than by matching the secret value: gitleaks
+# reports the *decoded* base64 fragment as the "secret" (tagged
+# decoded:base64), not the raw encoded string in the file, so a regex
+# against the literal file content never matches what the allowlist
+# actually checks.
+[allowlist]
+description = "Tauri updater minisign public keys (not secrets)"
+paths = [
+  '''src-tauri[/\\]tauri\.conf\.json''',
+  '''spark-app[/\\]src-tauri[/\\]tauri\.conf\.json''',
+]

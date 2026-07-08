@@ -1,0 +1,36 @@
+{
+  "api_keys": {
+    "igdb_client": "",
+    "igdb_secret": "",
+    "igdb_token": "",
+    "rawg": "",
+    "steamgrid": ""
+  },
+  "broadcaster": {
+    "kick_channel_id": "",
+    "kick_client": "",
+    "kick_refresh": "",
+    "kick_secret": "",
+    "kick_token": "",
+    "routing_mode": "native",
+    "twitch_broadcaster_id": "",
+    "twitch_client": "",
+    "twitch_refresh": "",
+    "twitch_secret": "",
+    "twitch_token": ""
+  },
+  "engine_settings": {
+    "auto_push": false,
+    "grace_period": 30,
+    "idle_category": "Just Chatting",
+    "platform_push_enabled": true,
+    "safe_mode": false,
+    "sb_action_name": "UpdateCategory",
+    "sb_port": 8080,
+    "scan_interval": 5,
+    "strict_forge_mode": false,
+    "widget_fade_timer": 15,
+    "widget_poll_rate": 8,
+    "widget_token": "GENERATE_A_RANDOM_TOKEN"
+  }
+}

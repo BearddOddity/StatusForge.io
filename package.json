@@ -1,0 +1,39 @@
+{
+  "name": "statusforge.io",
+  "version": "0.5.1",
+  "description": "StatusForge.io Rich Presence Engine",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
+    "check:capabilities": "node scripts/check-capabilities.mjs",
+    "tauri": "tauri",
+    "docs:kick": "npx tsx ../shared/kick-mcp/fetch-kick-docs.ts --out ./kick-docs",
+    "docs:kick:list": "npx tsx ../shared/kick-mcp/cli.ts list",
+    "docs:kick:search": "npx tsx ../shared/kick-mcp/cli.ts search"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.4",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9"
+  }
+}

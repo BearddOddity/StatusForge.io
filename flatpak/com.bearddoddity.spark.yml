@@ -1,0 +1,44 @@
+id: com.bearddoddity.spark
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: spark
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=ipc
+  # SPARK's whole job is broadcasting signed heartbeats to a StatusForge hub
+  # over the LAN (UDP 53735 heartbeat, 53736 discovery) — needs real network
+  # access, not just loopback.
+  - --share=network
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --filesystem=xdg-run/tray-icon:create
+
+modules:
+  - name: spark
+    buildsystem: simple
+    sources:
+      - type: file
+        path: spark.deb
+      - type: file
+        path: com.bearddoddity.spark.metainfo.xml
+    build-commands:
+      - mkdir -p deb-extract
+      - ar -x spark.deb --output deb-extract
+      - tar -C deb-extract -xf deb-extract/data.tar.gz
+      - |
+        BIN=$(find deb-extract/usr/bin -maxdepth 1 -type f | head -1)
+        install -Dm755 "$BIN" /app/bin/spark
+      - |
+        DESKTOP=$(find deb-extract/usr/share/applications -name '*.desktop' | head -1)
+        sed -i \
+          -e 's/^Exec=.*/Exec=spark/' \
+          -e 's/^Icon=.*/Icon=com.bearddoddity.spark/' \
+          "$DESKTOP"
+        install -Dm644 "$DESKTOP" /app/share/applications/com.bearddoddity.spark.desktop
+      - |
+        ICON=$(find deb-extract/usr/share/icons -type f -name '*.png' | head -1)
+        install -Dm644 "$ICON" /app/share/icons/hicolor/128x128/apps/com.bearddoddity.spark.png
+      - install -Dm644 com.bearddoddity.spark.metainfo.xml /app/share/metainfo/com.bearddoddity.spark.metainfo.xml

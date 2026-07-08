@@ -1,0 +1,65 @@
+# Security scanning, separate from ci.yml's test/lint gate.
+#
+# gitleaks: runs the open-source CLI directly (not gitleaks/gitleaks-action,
+# whose GitHub Action wrapper requires a paid GITLEAKS_LICENSE for private
+# repos — the underlying tool itself is free regardless of repo visibility).
+#
+# Scoped to the CURRENT tree only (--no-git), not full git history. Real
+# credentials were found hardcoded in a defaultConfig fallback and scrubbed
+# from source on 2026-07-03 (still rotate them if you haven't — see that
+# session's notes) — they remain recoverable from git history (commits
+# 85a07870/8ed6ef69) until that history is deliberately rewritten and
+# force-pushed, which is a separate, explicit decision, not something this
+# workflow does automatically. Scanning history here would just make this
+# job permanently red for an already-known, tracked issue instead of
+# guarding against *new* leaks going forward, which is this job's actual
+# purpose.
+#
+# CodeQL: results upload to GitHub Code Scanning, which requires GitHub
+# Advanced Security — free for public repos, a paid add-on for private ones.
+# This repo is currently private; if GHAS isn't enabled, the "Upload SARIF"
+# step below will fail even though the scan itself ran fine. Enable GHAS for
+# this repo (or make it public) to get full value from this job.
+
+name: Security
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source /repo --no-git -v
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript-typescript", "rust"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

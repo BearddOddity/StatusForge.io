@@ -1,0 +1,52 @@
+# cargo-deny config — replaces the standalone cargo-audit CI steps (this
+# tool covers the same RUSTSEC advisory checks, plus license compliance and
+# duplicate-dependency-version linting in one pass). See
+# https://embarkstudios.github.io/cargo-deny/ for full field docs; this file
+# only sets what we actually need, not the full generated template.
+#
+# forge-detection doesn't depend on tauri, so it doesn't inherit that crate's
+# gtk-rs/unic-* advisories the way src-tauri's deny.toml does — but it does
+# pull in plist -> quick-xml directly, hitting the same quick-xml advisories.
+
+[graph]
+all-features = false
+no-default-features = false
+
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2026-0194", reason = "transitive via plist -> quick-xml, not a direct dependency; re-check when upgrading plist" },
+    { id = "RUSTSEC-2026-0195", reason = "transitive via plist -> quick-xml, not a direct dependency; re-check when upgrading plist" },
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Unlicense",
+    "BSL-1.0",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+ignore = false
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow-workspace = false
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
