@@ -177,3 +177,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ steps.tag.outputs.tag }}" "flatpak/${{ matrix.app.id }}.flatpak" --clobber --repo "${{ github.repository }}"
+
+  # A release created with the default GITHUB_TOKEN (which tauri-action uses
+  # above) does NOT fire the `release: published` event for other workflows
+  # in this repo — that's a deliberate GitHub Actions anti-recursion rule,
+  # not a bug. update-download-page.yml's `on: release` trigger is dead as a
+  # result, so it's dispatched explicitly here instead once every asset
+  # (including the Flatpak wraps) actually exists on the release.
+  sync-download-page:
+    needs: [build, flatpak]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger download-page sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run update-download-page.yml --repo "${{ github.repository }}" --ref development_phase
