@@ -29,6 +29,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-process = "2"
 rand = "0.8"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 keyring = "3"

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import type { EngineStatus, AppConfig, SettingsSubTab, ToastType, ApiKeys } from "@/types";
 import type { KeychainStatus } from "@/types";
 import { fetchWidgetToken, getKeychainStatus, saveConfig, tauriApi } from "@/hooks/useTauriApi";
@@ -19,6 +20,7 @@ import {
   defaultSystemPrefs,
   loadSystemPrefs,
   saveSystemPrefs,
+  SYSTEM_PREFS_EVENT,
 } from "@/systemPrefs";
 
 import { clampInt } from "@/utils/number";
@@ -1148,6 +1150,15 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
   const floatingRef = useRef<HTMLDivElement>(null);
   const skipSave = useRef(false);
 
+  const [showAccessTokens, setShowAccessTokens] = useState(
+    () => loadSystemPrefs().showAccessTokens
+  );
+  useEffect(() => {
+    const handler = () => setShowAccessTokens(loadSystemPrefs().showAccessTokens);
+    window.addEventListener(SYSTEM_PREFS_EVENT, handler);
+    return () => window.removeEventListener(SYSTEM_PREFS_EVENT, handler);
+  }, []);
+
   const loadConfig = useCallback(async () => {
     skipSave.current = true;
     const res = await tauriApi("export_config");
@@ -1839,29 +1850,33 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                       <div className="px-4 pb-3 pt-0">
                         <div className="ml-9 flex flex-col gap-3">
                           <div className="flex flex-col gap-2.5">
-                            {entry.userFields.map((f) => (
-                              <div key={f.key}>
-                                <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1">
-                                  {f.label}
-                                </label>
-                                <input
-                                  type={
-                                    f.key.includes("secret") || f.key.includes("token")
-                                      ? "password"
-                                      : "text"
-                                  }
-                                  value={(bc[f.key as keyof typeof bc] as string) || ""}
-                                  onChange={(e) => setField(f.key, e.target.value)}
-                                  placeholder={`Enter ${f.label}`}
-                                  className="input-glass"
-                                />
-                                {f.hint && (
-                                  <p className="text-[10px] text-white/20 mt-1 leading-snug">
-                                    {f.hint}
-                                  </p>
-                                )}
-                              </div>
-                            ))}
+                            {entry.userFields.map((f) => {
+                              // Access Token specifically (not Client Secret,
+                              // not Refresh Token) is hidden entirely — label,
+                              // input, and hint all disappear — unless "Show
+                              // Access Tokens" is on (Settings > System >
+                              // Network).
+                              if (f.key.includes("token") && !showAccessTokens) return null;
+                              return (
+                                <div key={f.key}>
+                                  <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1">
+                                    {f.label}
+                                  </label>
+                                  <input
+                                    type={f.key.includes("secret") ? "password" : "text"}
+                                    value={(bc[f.key as keyof typeof bc] as string) || ""}
+                                    onChange={(e) => setField(f.key, e.target.value)}
+                                    placeholder={`Enter ${f.label}`}
+                                    className="input-glass"
+                                  />
+                                  {f.hint && (
+                                    <p className="text-[10px] text-white/20 mt-1 leading-snug">
+                                      {f.hint}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {entry.connectUrl &&
@@ -1957,6 +1972,13 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
 
 // ─── About Sub-tab ───────────────────────────────────────────────────────────
 function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
+  const [appVersion, setAppVersion] = useState("");
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => {});
+  }, []);
+
   return (
     <div>
       <CollapsibleSection
@@ -1966,13 +1988,13 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         defaultOpen={true}
         badge={
           <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold">
-            StatusForge v0.5.0
+            StatusForge v{appVersion || "…"}
           </span>
         }
       >
         <div className="grid grid-cols-2 gap-4">
           {[
-            { label: "App Version", value: "0.5.0", icon: "🚀" },
+            { label: "App Version", value: appVersion || "…", icon: "🚀" },
             { label: "Tauri Version", value: "2.x Native", icon: "🦀" },
             { label: "Platform", value: navigator.platform, icon: "💻" },
             { label: "Local Database", value: "Forge_Database.json", icon: "📂" },
@@ -2472,6 +2494,16 @@ function SystemSubTab({
             </p>
           </div>
           <Toggle on={prefs.wsAutoReconnect} onToggle={() => toggle("wsAutoReconnect")} />
+        </div>
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/[0.06]">
+          <div>
+            <span className="text-xs text-white/75 font-medium font-sans">Show Access Tokens</span>
+            <p className="text-[10px] text-white/35 mt-0.5">
+              Reveal Access/Refresh Token previews in API &amp; Routing. Off by default — they stay
+              masked.
+            </p>
+          </div>
+          <Toggle on={prefs.showAccessTokens} onToggle={() => toggle("showAccessTokens")} />
         </div>
       </CollapsibleSection>
 

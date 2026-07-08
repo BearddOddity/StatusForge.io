@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import type { EngineStatus, ToastType, SystemStats } from "@/types";
+import type { EngineStatus, ToastType, SystemStats, ViewId } from "@/types";
 import {
   tauriApi,
-  getKeychainStatus,
   getSystemStats,
   fetchWidgetToken,
   fetchConfig,
@@ -136,10 +135,12 @@ export default function DashboardView({
   engineStatus,
   wsConnected,
   toast,
+  onNavigate,
 }: {
   engineStatus: EngineStatus;
   wsConnected: boolean;
   toast: (msg: string, type?: ToastType) => void;
+  onNavigate: (view: ViewId) => void;
 }) {
   const [overlayUrls, setOverlayUrls] = useState<{ id: string; url: string; label: string }[]>([]);
   const [overlayIdCounter, setOverlayIdCounter] = useState(0);
@@ -165,6 +166,11 @@ export default function DashboardView({
   // StatusForge knowing until it's used, so `check_platform_live_status`
   // makes a real (read-only) validation call on every refresh.
   const [platforms, setPlatforms] = useState<PlatformConnections>(disconnectedPlatforms);
+  // Set once check_platform_live_status has tried a silent token refresh and
+  // it genuinely failed (refresh token itself dead/revoked, not just an
+  // expired access token) — the signal that a manual reconnect is actually
+  // needed, distinct from a transient "Offline".
+  const [needsReauth, setNeedsReauth] = useState({ twitch: false, kick: false });
   const [sparkPaired, setSparkPaired] = useState<{ hostname: string } | null>(null);
   const [platformPushEnabled, setPlatformPushEnabled] = useState(true);
   const togglePlatformPush = async () => {
@@ -184,8 +190,7 @@ export default function DashboardView({
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
-      const [keychain, config, hub, live] = await Promise.all([
-        getKeychainStatus(),
+      const [config, hub, live] = await Promise.all([
         tauriApi("export_config"),
         tauriApi("hub_get_status"),
         tauriApi("check_platform_live_status"),
@@ -197,18 +202,40 @@ export default function DashboardView({
             .platform_push_enabled
         );
       }
-      const routingMode =
-        config && typeof config === "object" && "broadcaster" in config
-          ? (config as { broadcaster: { routing_mode: string } }).broadcaster.routing_mode
-          : "";
+      // check_platform_live_status already accounts for tokens stored in
+      // Config.json OR the OS keychain (auth::load_config_at backfills from
+      // whichever one has it) and does a real live validation call — no
+      // need to separately gate on get_all_keychain_tokens here too. That
+      // extra gate used to require the token specifically be in the OS
+      // keychain, which silently showed "Offline" for anyone who hadn't
+      // migrated tokens there even though push/detection worked fine.
+      // sbot is a TCP reachability check against the configured Streamer.bot
+      // port, not a push validation — StatusForge doesn't push to it
+      // directly in this routing mode (see check_platform_live_status).
       const liveStatus =
         live && typeof live === "object" && !("error" in live)
-          ? (live as { twitch: boolean; kick: boolean })
-          : { twitch: false, kick: false };
+          ? (live as {
+              twitch: boolean;
+              twitch_needs_reauth: boolean;
+              kick: boolean;
+              kick_needs_reauth: boolean;
+              sbot: boolean;
+            })
+          : {
+              twitch: false,
+              twitch_needs_reauth: false,
+              kick: false,
+              kick_needs_reauth: false,
+              sbot: false,
+            };
       setPlatforms({
-        twitch: keychain.stored.includes("twitch_token") && liveStatus.twitch,
-        kick: keychain.stored.includes("kick_token") && liveStatus.kick,
-        sbot: routingMode === "streamer_bot",
+        twitch: liveStatus.twitch,
+        kick: liveStatus.kick,
+        sbot: liveStatus.sbot,
+      });
+      setNeedsReauth({
+        twitch: liveStatus.twitch_needs_reauth,
+        kick: liveStatus.kick_needs_reauth,
       });
       const paired =
         hub && typeof hub === "object" && "paired_spark" in hub
@@ -400,6 +427,7 @@ export default function DashboardView({
             <div className="flex flex-col gap-2">
               {platformDefs.map((p) => {
                 const connected = platforms[p.key];
+                const reauth = (p.key === "twitch" || p.key === "kick") && needsReauth[p.key];
                 return (
                   <div key={p.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
@@ -408,18 +436,35 @@ export default function DashboardView({
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span
-                        className={`w-1.5 h-1.5 rounded-full ${connected ? p.dotColor : "bg-white/20"}`}
+                        className={`w-1.5 h-1.5 rounded-full ${connected ? p.dotColor : reauth ? "bg-amber-400" : "bg-white/20"}`}
                         style={{
-                          animation: connected
-                            ? "var(--user-status-pulse, pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite)"
-                            : "none",
+                          animation:
+                            connected || reauth
+                              ? "var(--user-status-pulse, pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite)"
+                              : "none",
                         }}
                       />
-                      <span
-                        className={`text-[10px] font-medium ${connected ? "text-white/50" : "text-white/25"}`}
-                      >
-                        {connected ? "Connected" : "Offline"}
-                      </span>
+                      {reauth ? (
+                        <button
+                          onClick={() => {
+                            onNavigate("settings");
+                            toast(
+                              `${p.name} needs to be reconnected — open API & Routing to sign in again.`,
+                              "info"
+                            );
+                          }}
+                          className="text-[10px] font-semibold text-amber-400/80 hover:text-amber-400 transition-colors cursor-pointer bg-transparent border-none p-0"
+                          title={`${p.name}'s connection expired — click to reconnect`}
+                        >
+                          Reconnect
+                        </button>
+                      ) : (
+                        <span
+                          className={`text-[10px] font-medium ${connected ? "text-white/50" : "text-white/25"}`}
+                        >
+                          {connected ? "Connected" : "Offline"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );

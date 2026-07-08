@@ -133,15 +133,24 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
     setLoading(true);
     const token = await fetchWidgetToken();
     try {
-      const [forgeRes, exiledRes] = await Promise.all([
+      const [forgeRes, exiledRes, settingsRes] = await Promise.all([
         fetch("http://127.0.0.1:53735/api/forge-full", { headers: { "X-Forge-Token": token } }),
         fetch("http://127.0.0.1:53735/api/exiled-apps", { headers: { "X-Forge-Token": token } }),
+        fetch("http://127.0.0.1:53735/settings", { headers: { "X-Forge-Token": token } }),
       ]);
       if (forgeRes.ok) {
         const data = (await forgeRes.json()) as Record<string, ForgeLibraryEntry>;
-        const entries = Object.values(data).sort((a, b) =>
-          (a.title || "").localeCompare(b.title || "")
-        );
+        // The idle category (e.g. "Just Chatting") gets a Library entry so its
+        // cover is editable, but it isn't a game — keep it out of the browsing
+        // grid/carousel.
+        let idleCategory = "";
+        if (settingsRes.ok) {
+          const s = (await settingsRes.json()) as { idle_category?: string };
+          idleCategory = (s.idle_category || "").trim().toLowerCase();
+        }
+        const entries = Object.values(data)
+          .filter((e) => e.title.trim().toLowerCase() !== idleCategory)
+          .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
         setLibrary(entries);
       } else {
         setLibrary([]);
