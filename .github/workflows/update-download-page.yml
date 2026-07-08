@@ -1,0 +1,69 @@
+# Keeps statusforge/download.html on BearddOddity.github.io in sync with
+# whatever StatusForge release is actually published — the page previously
+# had hand-updated links that silently went stale.
+#
+# Runs automatically for the StatusForge release itself, not Spark (Spark
+# always publishes to the moving "spark-latest" tag as a prerelease; the
+# `if:` below filters it out). Can also be run manually (Actions tab ->
+# this workflow -> "Run workflow") to sync against whatever the current
+# /releases/latest is, e.g. to verify the deploy key/secret are set up
+# correctly without waiting for a real release.
+#
+# Requires a deploy key with write access to BearddOddity.github.io,
+# stored here as the PAGES_DEPLOY_SSH_KEY secret (Settings > Secrets and
+# variables > Actions). See scripts/update-download-page.mjs for the
+# asset -> platform matching logic.
+
+name: Update download page
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+jobs:
+  update-download-page:
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout StatusForge.io
+        uses: actions/checkout@v4
+
+      - name: Checkout BearddOddity.github.io
+        uses: actions/checkout@v4
+        with:
+          repository: BearddOddity/BearddOddity.github.io
+          ssh-key: ${{ secrets.PAGES_DEPLOY_SSH_KEY }}
+          path: pages-site
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Resolve release JSON
+        env:
+          RELEASE_EVENT_JSON: ${{ toJson(github.event.release) }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            printf '%s' "$RELEASE_EVENT_JSON" > release.json
+          else
+            gh api "repos/${{ github.repository }}/releases/latest" > release.json
+          fi
+
+      - name: Update download.html
+        run: node scripts/update-download-page.mjs pages-site/statusforge/download.html release.json
+
+      - name: Commit and push
+        working-directory: pages-site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add statusforge/download.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: sync StatusForge download page to $(node -p "require('../release.json').tag_name" 2>/dev/null || echo latest)"
+          git push
