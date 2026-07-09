@@ -438,7 +438,7 @@ recommendation:
 | `src-tauri/src/hub.rs` | The LAN "Hub" side of the SPARK dual-PC link: UDP heartbeat listener (53735) + discovery announcer (53736), heartbeat validation delegation to `spark_protocol`, funnels a SPARK-sourced detection through the same `on_game_detected`/`push_category` path as local detection. Not related to Twitch/Kick HTTP. |
 | `src-tauri/src/spark_protocol.rs` | Wire format + HMAC-signed heartbeat validation for the SPARK LAN protocol (v2; v1 legacy packets logged-and-rejected). A byte-identical copy lives in `spark-app/src-tauri/src/`. |
 | `src-tauri/src/server.rs` | Local axum server on `127.0.0.1:53735`, multiplexing TLS (Twitch OAuth callback) and plain HTTP (widget overlays, `/status`, `/ws` WebSocket, Kick OAuth callback) on one port by peeking the first byte. Widget endpoints require `X-Forge-Token`/`?token=` matching `engine_settings.widget_token` (401 otherwise). |
-| `src-tauri/src/metadata.rs` | `/api/scan-metadata` — RAWG → IGDB → Steam → GOG → SteamGridDB → Twitch/Kick category-id lookup, in that order, each independently skip-on-failure. Merge-only-empty-fields, respects per-field `locked_fields`. |
+| `src-tauri/src/metadata.rs` | `/api/scan-metadata` — Steam → GOG → IGDB → RAWG → SteamGridDB (by resolved Steam ID when available) → Twitch/Kick category-id lookup, in that order, each independently skip-on-failure. Merge-only-empty-fields, respects per-field `locked_fields`. Reordered from the original RAWG-first chain per the user's corrected priority — see the Alias System section's "Metadata source chain" subsection for the full rationale and code change. |
 | `spark-app/` | Separate, smaller Tauri app — the "SPARK" companion meant to run on a second gaming PC with no game database/metadata/platform-push responsibilities; only detects and forwards heartbeats to a Hub. Has its own working `auto_push` toggle (unrelated to StatusForge's dead field of the same name). |
 
 ## Business / Product Context (Interview Material — Roadmap, Not Verified Against Code)
@@ -498,11 +498,12 @@ more product-facing detail than the earlier technical read captured:
 ### Metadata & library system — current vs. planned
 
 **Current (matches code)**: `src-tauri/src/metadata.rs` implements a
-RAWG → IGDB → Steam → GOG → SteamGridDB → Twitch/Kick-category-id lookup
-chain (see Architecture Map above), merge-only-empty-fields, respecting
-per-field `locked_fields`. The on-disk library is a JSON structure
-(`Forge_Database.json` / the Library entries referenced by
-`ForgeLibraryEntry` in `config.rs`), not a database.
+Steam → GOG → IGDB → RAWG → SteamGridDB → Twitch/Kick-category-id lookup
+chain (see Architecture Map above and the Alias System section's "Metadata
+source chain" subsection for why this was reordered from RAWG-first),
+merge-only-empty-fields, respecting per-field `locked_fields`. The on-disk
+library is a JSON structure (`Forge_Database.json` / the Library entries
+referenced by `ForgeLibraryEntry` in `config.rs`), not a database.
 
 **Planned (interview only)**: the interview docs describe IGDB and Steam
 API metadata *enrichment* as "planned" work and separately propose
@@ -511,8 +512,8 @@ database (`status-forge.db` in the interview's terminology) with a games
 table, metadata columns, timestamps, and indices, plus a 24h-TTL metadata
 cache. **Reconciliation note**: this is a partial mismatch with the
 verified code — IGDB and Steam are not merely "planned," they are already
-two of the five sources in the existing `metadata.rs` lookup chain (RAWG →
-IGDB → Steam → GOG → SteamGridDB). What appears to actually be
+two of the five sources in the existing `metadata.rs` lookup chain (Steam →
+GOG → IGDB → RAWG → SteamGridDB). What appears to actually be
 planned/missing is (a) a persistent SQLite-backed metadata cache with a TTL
 (today's lookups are done fresh via `metadata::scan()`, not cached in a DB),
 and (b) migrating the *library itself* from JSON to SQLite. No
@@ -765,41 +766,63 @@ delimited string (`"RPG,Action,Fantasy"`), a plain array
 (`"genres_cycle": [{"name":"RPG","order":1}, ...]` plus
 `genre_rotation_enabled` and `current_genre_index` fields on the entry).
 
-### Canonical-identity resolution chain vs. `metadata.rs` enrichment chain (user decision, clarified)
+### Metadata source chain — corrected and implemented in code (user decision, real code change)
 
-The user's answer on platform-ID priority: "platform IDs flow should start
-with STEAM > GOG > IGDB > RAWG > .EXE (or = to .EXE)". This defines a
-**canonical-identity / platform-ID-confidence resolution priority chain**:
-Steam > GOG > IGDB > RAWG > `.exe`-name-derived, where the `.exe`-derived
-signal can also be treated as an equal-weight fallback rather than strictly
-last (per the user's "(or = to .EXE)" qualifier) — i.e. `.exe`-derived
-identity is the floor, and any of Steam/GOG/IGDB/RAWG that resolves cleanly
-outranks it, but the `.exe`-derived source is deliberately not slotted below
-RAWG as a distinct fifth tier in a strict sense. This chain feeds the
-proposed `identity_confidence` field above.
+An earlier pass of this doc mistakenly treated the alias system's proposed
+"canonical-identity" priority chain and the real `metadata.rs` enrichment
+chain as two separate pipelines. **The user corrected this: they're one and
+the same pipeline** — the earlier separate-pipelines framing was wrong, not
+a real distinction.
 
-**This is explicitly a separate pipeline from the already-implemented
-metadata *enrichment* chain** in `metadata.rs`, which is
-RAWG → IGDB → Steam → GOG → SteamGridDB (verified, Architecture Map above,
-`metadata.rs:441`) and fills in *metadata fields* (genre, year,
-developer/publisher, cover art) rather than resolving canonical
-identity/platform-ID confidence. The two chains order the same handful of
-sources differently on purpose: the enrichment chain is optimized for
-*metadata completeness/quality* (RAWG first because it's typically the
-richest general-purpose game database for descriptive fields), while the
-identity chain is optimized for *platform-ID trustworthiness* (Steam/GOG
-first because a live storefront-owned ID is the most authoritative proof of
-which exact game/edition is installed). Documenting this explicitly so a
-future reader doesn't mistake the differing order for a contradiction or a
-bug — it isn't one; they're two different pipelines serving two different
-purposes.
+The user's clarified intent: "(STEAM > GOG > IGDB > RAWG > .EXE) and (RAWG →
+IGDB → Steam → GOG → SteamGridDB) are one and same i just forgot the
+original but now looking at it i see issues in the old flow it should be
+.EXE → STEAM → GOG → IGDB → RAWG → and then SteamGridDB will detect STEAMs
+ID and find the covers / logos for the games." `.exe` here means the raw,
+platform-specific executable filename (their words: "slang for Filename.exe
+(platform specific equivalent)") — i.e. the exe/window-derived name the
+detection waterfall already resolves (`extract_true_game_name`/
+`format_game_output`, Detection Pipeline section above) before
+`metadata::scan()` is ever called. That name is already the `title: &str`
+argument every source below is queried *by* — it isn't a separate API call
+to add, it's already first by construction.
 
-**Open question flagged, not assumed:** if the user actually intended this
-answer to also reorder the *real*, already-implemented `metadata.rs`
-enrichment chain (rather than only define a new, separate identity-priority
-concept), that would be a real code-change request, not a documentation
-change, and needs explicit confirmation before any code is touched. Nothing
-in `metadata.rs` has been changed as part of this doc update.
+**This has been implemented as a real code change** (not just documented),
+in `src-tauri/src/metadata.rs`:
+
+- `scan()`'s query order is now **Steam → GOG → IGDB → RAWG → SteamGridDB**
+  (was: RAWG → IGDB → Steam → GOG → SteamGridDB). Since `merge_entry` only
+  fills currently-empty fields, this makes Steam's data win over GOG/IGDB/
+  RAWG for any field they'd otherwise all populate, matching the user's
+  stated priority.
+- `fetch_sgdb()` now takes the `steam_id` resolved by the earlier Steam step
+  (`Option<&str>`) and, when present, queries SteamGridDB directly by Steam
+  AppID — `GET /api/v2/grids/steam/{steam_id}` and
+  `GET /api/v2/logos/steam/{steam_id}` — instead of doing a fuzzy
+  title-based autocomplete search first. This matches the user's "SGDB will
+  detect Steam's ID and find the covers/logos" instruction, and is more
+  accurate than the title-search path (no ambiguity from similarly-named
+  games). The old title-autocomplete + `grids/game/{sgdb_id}`/
+  `logos/game/{sgdb_id}` path is kept as the fallback for titles with no
+  resolved `steam_id` (GOG-only/DRM-free/indie games not on Steam), since
+  that's the only way to discover SteamGridDB's own internal game id and
+  populate `sgdb_id` at all. The `/grids/steam/{id}` and `/logos/steam/{id}`
+  endpoint shapes were verified against a mature third-party SteamGridDB API
+  wrapper's source and test assertions (pattern `{base}/{type}/{platform}/
+  {ids}`, e.g. `grids/game/13136` and `grids/egs/Salt,14065` — steam is one
+  of the supported platform slugs alongside egs/bnet/etc.), not guessed.
+- The module doc comment at the top of `metadata.rs` was rewritten to
+  describe the new order and explain the exe-derived-title-as-seed framing
+  above.
+- `cargo check --lib` and the non-`#[ignore]`d unit tests in
+  `metadata.rs::tests` (`merge_fills_only_empty_fields`,
+  `merge_never_fills_a_locked_field_even_when_empty`) both pass against the
+  reordered code.
+
+The separate `identity_confidence` field on the proposed alias schema above
+still stands as a reasonable per-entry summary of "how confidently was this
+game's identity resolved," but it's fed by this single corrected chain, not
+by two independent chains as an earlier version of this doc claimed.
 
 ### Twitch ID / Kick ID resolution (user decision)
 

@@ -1,19 +1,41 @@
 //! External game-metadata scan for `/api/scan-metadata`.
 //!
+//! The `title` this scan searches by is not itself a "source" call here —
+//! it's already been resolved from the raw exe/window (the platform-specific
+//! executable name, e.g. `witcher3.exe`, cleaned up via the detection
+//! waterfall's `extract_true_game_name`/`format_game_output`) by the time it
+//! reaches this function, so the exe-derived identity is implicitly step
+//! zero: every source below is queried *by* that name, not queried to
+//! *produce* it.
+//!
 //! Sources, queried in this order (each skipped on any network failure or
-//! missing key — a scan never hard-fails):
-//! - RAWG: year, genre, developer, publisher, cover, rawg_id (needs key)
-//! - IGDB: same via apicalypse (Twitch app token fetched if needed), igdb_id
-//!   (needs key)
+//! missing key — a scan never hard-fails). Order matters: `merge_entry`
+//! only fills currently-empty fields, so the first source to answer for a
+//! given field wins and later sources only fill gaps.
 //! - Steam: year, genre, developer, publisher, cover, steam_id — public
-//!   storefront endpoints (store.steampowered.com), no key needed
-//! - GOG: same via the public catalog.gog.com search, gog_id, no key needed
-//! - SteamGridDB: preferred 600x900 cover, sgdb_id (needs key; overrides the
-//!   cover_url from every other source once fetched, since it's a
-//!   purpose-built cover-art database)
+//!   storefront endpoints (store.steampowered.com), no key needed. Queried
+//!   first: Steam's own catalog is the most authoritative/exact-match
+//!   source for PC titles, and resolving `steam_id` here lets the
+//!   SteamGridDB step below look up cover art precisely instead of doing
+//!   its own fuzzy title search.
+//! - GOG: same via the public catalog.gog.com search, gog_id, no key needed.
+//! - IGDB: via apicalypse (Twitch app token fetched if needed), igdb_id
+//!   (needs key).
+//! - RAWG: year, genre, developer, publisher, cover, rawg_id (needs key).
+//!   Queried last among the four metadata sources — broadest/least
+//!   authoritative catalog of the four, used mainly to fill in whatever
+//!   Steam/GOG/IGDB didn't have.
+//! - SteamGridDB: preferred 600x900 cover + logo, sgdb_id (needs key).
+//!   Always queried last. If Steam resolved a `steam_id` above, SGDB is
+//!   looked up directly by that Steam AppID (accurate, no fuzzy match); only
+//!   falls back to a title-based autocomplete search when no `steam_id` is
+//!   known. The cover/logo found here override whatever Steam/GOG/IGDB/RAWG
+//!   set, since this is a purpose-built cover-art database.
 //! - Twitch/Kick: category IDs looked up live by title (needs an active
 //!   connection to that platform — Client ID + token), not fetched from a
-//!   metadata database at all
+//!   metadata database at all, and not part of the identity/metadata chain
+//!   above — these exist solely to match each platform's own category ID,
+//!   independent of detection/metadata confidence.
 //!
 //! Merge strategy: only EMPTY fields of the existing entry are filled, so
 //! user-set/custom values always win.
@@ -79,13 +101,20 @@ pub async fn scan(
     };
 
     // Accumulate fetched data source by source; SGDB cover overrides the rest.
+    // Order: Steam -> GOG -> IGDB -> RAWG -> SteamGridDB (see module doc for
+    // why). Steam/GOG use each store's own public storefront/catalog
+    // endpoints, no API key required, so these always run.
     let mut fetched = ForgeLibraryEntry::default();
 
-    if !keys.rawg.is_empty() {
-        match fetch_rawg(&client, title, &keys.rawg).await {
-            Ok(e) => fetched = merge_entry(fetched, &e),
-            Err(e) => log::warn!("[META] RAWG failed: {}", e),
-        }
+    match fetch_steam(&client, title).await {
+        Ok(e) => fetched = merge_entry(fetched, &e),
+        Err(e) => log::warn!("[META] Steam failed: {}", e),
+    }
+    let steam_id = fetched.steam_id.clone();
+
+    match fetch_gog(&client, title).await {
+        Ok(e) => fetched = merge_entry(fetched, &e),
+        Err(e) => log::warn!("[META] GOG failed: {}", e),
     }
 
     if !keys.igdb_client.is_empty() && (!keys.igdb_token.is_empty() || !keys.igdb_secret.is_empty())
@@ -96,24 +125,24 @@ pub async fn scan(
         }
     }
 
-    // Steam and GOG use each store's own public storefront/catalog endpoints —
-    // no API key required, so these always run (unlike RAWG/IGDB/SGDB above).
-    match fetch_steam(&client, title).await {
-        Ok(e) => fetched = merge_entry(fetched, &e),
-        Err(e) => log::warn!("[META] Steam failed: {}", e),
-    }
-
-    match fetch_gog(&client, title).await {
-        Ok(e) => fetched = merge_entry(fetched, &e),
-        Err(e) => log::warn!("[META] GOG failed: {}", e),
+    if !keys.rawg.is_empty() {
+        match fetch_rawg(&client, title, &keys.rawg).await {
+            Ok(e) => fetched = merge_entry(fetched, &e),
+            Err(e) => log::warn!("[META] RAWG failed: {}", e),
+        }
     }
 
     if !keys.steamgrid.is_empty() {
-        match fetch_sgdb(&client, title, &keys.steamgrid).await {
+        let steam_id_ref = if steam_id.is_empty() {
+            None
+        } else {
+            Some(steam_id.as_str())
+        };
+        match fetch_sgdb(&client, title, &keys.steamgrid, steam_id_ref).await {
             Ok((id, cover, logo)) => {
                 fetched.sgdb_id = id;
                 if !cover.is_empty() {
-                    fetched.cover_url = cover; // SGDB cover preferred over RAWG/IGDB
+                    fetched.cover_url = cover; // SGDB cover preferred over Steam/GOG/IGDB/RAWG
                 }
                 fetched.logo_url = logo;
             }
@@ -407,11 +436,40 @@ async fn fetch_kick_id(
 
 /// Returns (sgdb_id, cover_url, logo_url) — cover/logo may be empty if
 /// SteamGridDB has no 600x900 grid / no logo for this game.
+///
+/// When `steam_id` is known (Steam was already resolved earlier in the
+/// scan), grids/logos are looked up directly by Steam AppID
+/// (`/grids/steam/{id}`, `/logos/steam/{id}`) — exact, no fuzzy title
+/// matching, and skips the autocomplete search entirely. That platform
+/// lookup doesn't return SteamGridDB's own internal game id, so `sgdb_id`
+/// is left empty on that path; only the title-autocomplete fallback below
+/// (used when `steam_id` is `None`, e.g. non-Steam/DRM-free titles) resolves
+/// and returns a real `sgdb_id`.
 async fn fetch_sgdb(
     client: &reqwest::Client,
     title: &str,
     key: &str,
+    steam_id: Option<&str>,
 ) -> Result<(String, String, String), String> {
+    if let Some(steam_id) = steam_id {
+        let grids_url = format!(
+            "https://www.steamgriddb.com/api/v2/grids/steam/{}?dimensions=600x900",
+            steam_id
+        );
+        let grids = get_json(client.get(&grids_url).bearer_auth(key)).await?;
+        let cover = grids["data"][0]["url"].as_str().unwrap_or("").to_string();
+
+        let logos_url = format!("https://www.steamgriddb.com/api/v2/logos/steam/{}", steam_id);
+        let logo = match get_json(client.get(&logos_url).bearer_auth(key)).await {
+            Ok(logos) => logos["data"][0]["url"].as_str().unwrap_or("").to_string(),
+            Err(e) => {
+                log::warn!("[META] SteamGridDB logo lookup (by steam_id) failed: {}", e);
+                String::new()
+            }
+        };
+        return Ok((String::new(), cover, logo));
+    }
+
     let search_url = format!(
         "https://www.steamgriddb.com/api/v2/search/autocomplete/{}",
         urlencoding::encode(title)
