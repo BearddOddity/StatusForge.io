@@ -958,6 +958,21 @@ both conditions are required.
    field: `"ui_language": "ja"`. Broadcasting is explicitly
    language-agnostic — it always uses the platform ID, never the
    UI-language string.
+
+   **Real tooling now exists ahead of the Phase 3 UI work** (this is a real
+   addition to the repo, not more spec): `i18n/templates/en.template.lang`
+   is a canonical, community-fillable translation template (`key.path =
+   "text"` lines, ~50 keys seeded from actual UI strings in `App.tsx`,
+   `LibraryView.tsx`, `DashboardView.tsx`, `views/*.tsx`, and shared
+   components — not exhaustive yet, see `i18n/README.md` for what's covered
+   and how to extend it), and `scripts/i18n-build.mjs`
+   (`npm run i18n:validate <file>` / `npm run i18n:build`) validates a
+   translated copy against the canonical key set (missing/extra keys, empty
+   translations, `{placeholder}` token mismatches, duplicate keys) and
+   compiles valid ones into `i18n/<lang>.json`. **The frontend doesn't read
+   these JSON files yet** — there's no i18n framework wired into the React
+   app — so this is translation-ready infrastructure sitting ahead of the
+   actual UI integration, not a working feature end-to-end.
 8. **Platform-ID guessing uses confidence scoring**, not exact-match-only:
    IGDB and Steam each supply candidate IDs with confidence scores; the
    same 0.80/0.70 thresholds from #3 apply; the weekly re-validation job

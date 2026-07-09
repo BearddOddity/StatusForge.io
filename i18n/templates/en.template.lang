@@ -1,0 +1,90 @@
+# StatusForge UI language template — canonical English (en)
+#
+# This is the SOURCE template. Do not translate this file directly — copy it
+# (see i18n/README.md) and translate the copy instead. This file is also the
+# schema: `npm run i18n:build` treats every key here as required, and flags
+# any translated file that's missing a key, has an extra/unknown key, or
+# still has the untouched English text on the right-hand side.
+#
+# Format, one entry per line:
+#   key.path = "text"
+# - Never edit the key (left of "="). It's what the app looks up at runtime.
+# - Only the quoted text on the right is translated.
+# - Lines starting with "#" are comments (context for translators) and are
+#   ignored by the build script.
+# - Blank lines are ignored.
+#
+# Keys are grouped by where they appear in the app. This is a starter set
+# pulled from the real UI (App.tsx, LibraryView.tsx, DashboardView.tsx,
+# views/*.tsx, components/*.tsx) — it is NOT every string in the app yet.
+# Extend this file (and re-run the build for every translated file) as more
+# UI gets covered; see i18n/README.md for the workflow.
+
+# lang: en
+
+# ── Sidebar / navigation (App.tsx) ─────────────────────────────────────────
+nav.appName = "StatusForge"
+nav.dashboard = "Dashboard"
+nav.library = "Library"
+nav.settings = "Settings"
+nav.devTools = "Dev Tools"
+nav.collapseSidebar = "Collapse sidebar"
+nav.expandSidebar = "Expand sidebar"
+nav.engineOnline = "Engine Online"
+nav.engineOffline = "Engine Offline"
+nav.gameDetected = "Game detected"
+nav.categoryReset = "Category reset"
+nav.initializing = "Initializing..."
+nav.loading = "Loading..."
+
+# ── Dashboard (views/DashboardView.tsx) ────────────────────────────────────
+dashboard.heading = "Dashboard"
+dashboard.platformDetection = "Platform Detection"
+dashboard.selectOverlay = "Select Overlay"
+dashboard.metadata = "Metadata"
+dashboard.copyFullUrl = "Copy full URL"
+dashboard.removeOverlay = "Remove overlay"
+
+# ── Library (LibraryView.tsx) ──────────────────────────────────────────────
+library.heading = "Library"
+library.loading = "Loading library..."
+library.searchPlaceholder = "Search by title, genre, developer..."
+library.sortBy = "Sort by"
+library.carouselView = "Carousel view"
+library.gridView = "Grid view"
+library.addGame = "Add Game"
+library.exiledApps = "Exiled Apps"
+
+# ── Library entry editor (components/Overlays.tsx) ─────────────────────────
+libraryEditor.titlePlaceholder = "Enter game title..."
+libraryEditor.yearPlaceholder = "e.g. 2024"
+libraryEditor.devPublisherPlaceholder = "Developer or publisher name..."
+libraryEditor.genrePlaceholder = "e.g. Action, RPG..."
+libraryEditor.urlPlaceholder = "https://..."
+
+# ── Common controls (components/ui.tsx) ────────────────────────────────────
+common.clickToEdit = "Click to edit"
+common.searchApis = "Search APIs"
+common.save = "Save"
+common.edit = "Edit"
+common.later = "Later"
+
+# ── Engine Config / Routing / API Keys (views/*.tsx) ───────────────────────
+engineConfig.heading = "Engine Configuration"
+engineConfig.controlPanel = "Control Panel"
+engineConfig.tokenSecurity = "Token Security"
+routing.heading = "Routing"
+routing.loading = "Loading..."
+routing.mode = "Mode"
+routing.twitch = "Twitch"
+routing.kick = "Kick"
+apiKeys.heading = "API Keys"
+apiKeys.loading = "Loading..."
+apiKeys.metadataHeading = "Metadata API Keys"
+
+# ── Update banner (components/UpdateBanner.tsx) ────────────────────────────
+update.available = "StatusForge {version} is available"
+update.installingBody = "Downloading and installing — the app will restart automatically."
+update.restartBody = "Restart to install the update."
+update.installing = "Installing…"
+update.restartToInstall = "Restart to Install"

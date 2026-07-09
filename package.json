@@ -11,6 +11,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
     "check:capabilities": "node scripts/check-capabilities.mjs",
+    "i18n:build": "node scripts/i18n-build.mjs build --all",
+    "i18n:validate": "node scripts/i18n-build.mjs validate",
     "tauri": "tauri",
     "docs:kick": "npx tsx ../shared/kick-mcp/fetch-kick-docs.ts --out ./kick-docs",
     "docs:kick:list": "npx tsx ../shared/kick-mcp/cli.ts list",
