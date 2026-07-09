@@ -441,6 +441,205 @@ recommendation:
 | `src-tauri/src/metadata.rs` | `/api/scan-metadata` — RAWG → IGDB → Steam → GOG → SteamGridDB → Twitch/Kick category-id lookup, in that order, each independently skip-on-failure. Merge-only-empty-fields, respects per-field `locked_fields`. |
 | `spark-app/` | Separate, smaller Tauri app — the "SPARK" companion meant to run on a second gaming PC with no game database/metadata/platform-push responsibilities; only detects and forwards heartbeats to a Hub. Has its own working `auto_push` toggle (unrelated to StatusForge's dead field of the same name). |
 
+## Business / Product Context (Interview Material — Roadmap, Not Verified Against Code)
+
+Everything below this point comes from four product-interview/planning
+documents supplied after the initial code audit (`status-forge-mcp` /
+`status-forge-audit` / `status-forge-interview-complete` / `status-forge-next-steps`
+interview docs), not from reading `waterfall.rs`/`pusher.rs`/`auth.rs`/`config.rs`
+again. It is business/roadmap context layered on top of the verified
+technical reference above. Anywhere it restates a technical claim that
+conflicts with the file:line-cited findings above, the code-verified version
+wins and the conflict is called out explicitly (see "Reconciliation Notes"
+at the end of this section).
+
+### Overview & positioning
+
+StatusForge is described as ~1 year in development, currently in public
+beta, and positioned as one of two co-lead MVP tools (alongside a "Chat
+Management" tool) for a broader **StreamerSuite** ecosystem, targeting an
+MVP launch roughly 1 month out from the interview date. The product model
+is "hybrid standalone + StreamerSuite": StatusForge is meant to keep working
+as a fully standalone app while also being installable/operable as a module
+inside StreamerSuite once that ships. (Product framing — no corresponding
+"StreamerSuite mode" flag or shared-runtime code was found in this repo
+during the source read; StatusForge's only cross-app integration verified
+in code is the SPARK LAN-hub pairing described above, which is a different,
+already-shipped thing.)
+
+### Supported platforms — current vs. planned
+
+**Current (matches code)**: Twitch and Kick, both with real OAuth + category
+push, per the Auto-Push/Broadcast Flow and Token Storage sections above.
+
+**Planned (interview only, not in code)**: YouTube, JoystickTV, and Rumble.
+The interview docs describe a metadata-broadcast plan where YouTube and
+JoystickTV would push *title only* (no category/game field) via a chat-bot
+relay rather than a REST category-update call like Twitch/Kick use, and
+Rumble's approach is explicitly TBD pending API research. None of this
+exists in `pusher.rs`/`auth.rs` today — the only two platforms with any
+push code are Twitch and Kick, as documented above.
+
+The interview docs also describe the current Twitch/Kick endpoint shapes in
+more product-facing detail than the earlier technical read captured:
+- Twitch: `PATCH /helix/channels` for title+category, `GET
+  /helix/search/categories` for category lookup by name.
+- Kick: `PATCH /public/v1/channels` (interview) — note the source-verified
+  push path (`pusher.rs`) calls a `GET /public/v2/categories?name=...`
+  endpoint for the live category-search fallback (see "Stale-cache fallback
+  for Kick categories" above); the interview's `/public/v1/channels` PATCH
+  path for the actual title/category push was not independently
+  re-confirmed against source in this pass — treat the v1-vs-v2 detail as
+  interview-reported, not re-verified.
+- Kick metadata: `/api/v2/channels/{channel_id}/metadata` and `GET
+  /api/v2/games` are mentioned as additional Kick endpoints in the
+  interview material; not checked against source in this pass.
+
+### Metadata & library system — current vs. planned
+
+**Current (matches code)**: `src-tauri/src/metadata.rs` implements a
+RAWG → IGDB → Steam → GOG → SteamGridDB → Twitch/Kick-category-id lookup
+chain (see Architecture Map above), merge-only-empty-fields, respecting
+per-field `locked_fields`. The on-disk library is a JSON structure
+(`Forge_Database.json` / the Library entries referenced by
+`ForgeLibraryEntry` in `config.rs`), not a database.
+
+**Planned (interview only)**: the interview docs describe IGDB and Steam
+API metadata *enrichment* as "planned" work and separately propose
+migrating the library from its current JSON file to a dedicated SQLite
+database (`status-forge.db` in the interview's terminology) with a games
+table, metadata columns, timestamps, and indices, plus a 24h-TTL metadata
+cache. **Reconciliation note**: this is a partial mismatch with the
+verified code — IGDB and Steam are not merely "planned," they are already
+two of the five sources in the existing `metadata.rs` lookup chain (RAWG →
+IGDB → Steam → GOG → SteamGridDB). What appears to actually be
+planned/missing is (a) a persistent SQLite-backed metadata cache with a TTL
+(today's lookups are done fresh via `metadata::scan()`, not cached in a DB),
+and (b) migrating the *library itself* from JSON to SQLite. No
+`status-forge.db`, `db.rs`, or SQLite dependency was found anywhere in the
+source during the technical read — the interview's assumption of an
+existing SQLite database is not accurate for the current codebase; SQLite
+is roadmap, not implemented.
+
+### `forge-detection` as a shared crate — status
+
+Confirmed by source: `forge-detection` is already a standalone workspace
+crate with no Tauri/axum/keyring dependency, and is already shared between
+StatusForge and the SPARK companion app (see Overview and Architecture Map
+above). The interview material's framing of "extracting a shared detection
+crate" as future/post-MVP work is therefore partially already done — the
+crate boundary exists today. What is still open (per interview, not
+resolved in code) is whether it should be generalized further into a
+StreamerSuite-wide `status-forge-core` with a generic
+`detect_active_game() -> GameDetection` interface usable by tools beyond
+StatusForge/SPARK, versus staying StatusForge-specific. That design
+decision is unmade as of this pass.
+
+### UI — current vs. planned
+
+**Current (matches code)**: browser overlay + OBS widget, served locally by
+`server.rs` (see Architecture Map), gated by `widget_token`.
+
+**Planned (interview only, not in code)**: a manual game-override control
+(pick from library or type a custom title, affecting only the broadcast
+title/category, not the detection engine's internal session
+classification) is explicitly called out in the interview docs as **not
+yet implemented**. No Override button, modal, or corresponding Tauri
+command was found in `src/components/` or `src-tauri/src/` during the
+source read for this pass — consistent with the interview's own "not yet
+implemented" framing, so no conflict here.
+
+Confidence-tuning UI (exposing `confidence_threshold`,
+`score_engine_dna`, `score_fullscreen`, `score_window_title`, `score_ram`
+to the user) is described in the interview docs as "uncertain — likely
+config.json only, not yet a UI." This matches what the technical read
+found: these are `ScannerConfig`/`EngineSettings` fields consumed by Stage 5
+(see the Stage 5 table above) with no dedicated tuning UI located during
+this pass — again consistent, not a conflict.
+
+### MCP tool-surface ideas (conceptual — no design or code exists yet)
+
+The interview docs float an MCP server for StatusForge as a *conceptual,
+not-yet-designed* idea, that would expose game metadata, detection config,
+platform status, and the library to MCP clients. Proposed (unimplemented)
+tools:
+- `lookup_game(title)`
+- `list_platforms()`
+- `get_detection_config()`
+- `add_to_library(game, metadata)`
+- `test_detection(game_title)`
+
+None of these exist in the codebase. If/when this is built, natural
+implementation seams already exist to hang MCP tools off: `metadata.rs`
+for `lookup_game`, `config.rs`'s `EngineSettings`/`ScannerConfig` for
+`get_detection_config`, `ForgeLibraryEntry`/the Library JSON for
+`add_to_library`, and `forge-detection::waterfall::ForgeWaterfall::evaluate()`
+(already a pure, unit-testable function — see Detection Pipeline above) for
+a synchronous `test_detection` call. This is this pass's own observation
+about fit, not something confirmed as planned in the interview docs.
+
+### Reconciliation Notes (interview claims vs. code-verified facts)
+
+These are the specific points where the newly-supplied interview material
+restates something the earlier source read had already checked and found
+to be different. In every case below, the code-verified claim (already
+cited with file:line above) remains primary; the interview's framing is
+kept here only as product/user-facing context, not as a corrected fact.
+
+1. **Token storage "no single source of truth."** Interview docs (all
+   four) describe the token-storage situation as config.json vs. OS
+   keychain with conflicting sources and no clear runtime precedence, and
+   list "fix token storage single source of truth" as the critical pre-MVP
+   item. The code-verified finding (Token Storage section above) is that a
+   source-of-truth rule already exists and is implemented deliberately:
+   config.json wins if non-empty, keychain only fills gaps
+   (`auth::backfill_from_keychain`, `auth.rs:780-852`), and already-migrated
+   fields are kept in sync on every save (`auth::redact_migrated_secrets`,
+   `auth.rs:880-922`). The real residual risk is narrower than "no source of
+   truth": it's an **unlocked read-modify-write race** across concurrent
+   config save call sites (`hub.rs:333-355`, `pusher.rs:207-209`/`283-285`,
+   Settings-save from the frontend) with no mutex around the
+   load→mutate→save cycle — see `status-forge-audit.md` Finding 2. Any fix
+   work driven by the interview's "critical, pre-MVP, allocate time this
+   week" priority should be re-scoped to target that race, not a
+   non-existent missing precedence rule, since the precedence rule already
+   exists and works.
+2. **Migration "doesn't reliably clear config.json."** One interview doc
+   asserts the keychain migration doesn't reliably clear the plaintext
+   config. Source (`migrate_tokens_to_keychain`, `lib.rs:970-1054`) does
+   blank each migrated field in the JSON before writing it back, and
+   ongoing saves keep re-blanking migrated fields via
+   `redact_migrated_secrets`. The one accurate residual gap here (already
+   flagged in the audit doc, Finding 5) is that `migrate_tokens_to_keychain`
+   writes the file via raw `serde_json::Value`, bypassing
+   `save_config_at`/`redact_migrated_secrets`'s shared logging path — a
+   maintainability/consistency issue, not evidence the field fails to
+   clear.
+3. **"Expected" file layout guess** (`game_detection.rs`, `platform_apis.rs`,
+   `db.rs`, `commands/`) in one interview doc is explicitly a guess, not a
+   claim about real files. The verified layout is the Architecture Map
+   table above (`waterfall.rs`, `platform.rs`, `pusher.rs`, `auth.rs`,
+   `config.rs`, `hub.rs`, `server.rs`, `metadata.rs`, `lib.rs`) — no
+   `game_detection.rs`, `platform_apis.rs`, `db.rs`, or `commands/` module
+   was found during the source read. `db.rs` is listed under Post-MVP
+   Next Steps below as a *proposed new file* for the SQLite migration, which
+   is consistent with it not existing yet.
+4. **Error handling** — the interview docs' description of error handling
+   (401 refresh+retry once, 429 skip-no-retry, Kick stale-cache→live-search
+   fallback, 15s cooldown, no exponential backoff) matches the code-verified
+   Error Handling section above essentially exactly. One correction already
+   noted above still applies: HTTP timeouts are **not** uniformly 10s as
+   some interview material states — push/auth calls are 10s, but
+   `metadata.rs` scans and `auth::sync_kick_database` use 15s
+   (`auth.rs:702`, `metadata.rs:71,498`).
+5. **Auto-push wiring** — the interview docs did not surface the
+   `auto_push`-vs-`platform_push_enabled` dead-field issue at all (they
+   describe auto-push as "confirmed detect→broadcast immediately with 15s
+   cooldown," which is true of the *actual* gating field,
+   `platform_push_enabled`). This is not a contradiction so much as a gap:
+   the interview material never distinguished the two fields. See Finding 1
+   in `status-forge-audit.md` for the code-only finding.
+
 ## Config Defaults Worth Knowing
 
 From `config.rs` (`Default for EngineSettings`, `default_*` functions):

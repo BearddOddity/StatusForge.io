@@ -111,7 +111,11 @@ corrections are marked.
    risk, prevents a near-certain future UI bug.
 2. **Add locking around config read-modify-write** (Finding 2) — moderate
    effort, addresses a real (if narrow-window) data-loss/stale-secret race
-   affecting both settings and OAuth tokens.
+   affecting both settings and OAuth tokens. **This is the actual fix target
+   behind the interview material's "token storage has no single source of
+   truth" framing** — see Reconciliation Note below; the precedence rule
+   itself already exists and works, the race condition is the real residual
+   risk.
 3. **Surface permanent auth failures to the UI instead of silent infinite
    retry** (Finding 3) — moderate effort, meaningfully improves the
    experience for the (likely common) case of a user revoking app access on
@@ -124,3 +128,150 @@ corrections are marked.
    entirely (writes raw `serde_json::Value`, `lib.rs:1046-1051`) — functions
    correctly today but means it doesn't benefit from any future
    centralized-locking fix to Finding 2 unless updated alongside it.
+
+### Reconciliation Note: "token storage source-of-truth" vs. the race condition
+
+Interview material (all four supplied planning docs) frames token storage
+as an unresolved config.json-vs-keychain conflict with "no clear runtime
+precedence," and lists it as the single critical pre-MVP blocker. The
+code-verified finding above is different: a precedence rule already exists
+and is implemented deliberately (config.json wins if non-empty, keychain
+only fills gaps — `auth.rs:780-852`, `auth.rs:880-922`). The real bug is
+Finding 2's unlocked read-modify-write race, not a missing precedence rule.
+**Recommendation: point the interview's "critical, allocate time this
+week" urgency at Finding 2 (add a mutex/serialize config
+load-mutate-save), not at redesigning a precedence rule that isn't
+actually broken.** Writing tests for "both keychain-primary and
+config-primary" strategies, as one interview doc suggests, is unnecessary
+extra work if the existing config-wins/keychain-backfills rule is kept —
+tests should instead target the race (concurrent refresh-and-save vs.
+Settings-save) and confirm the last-write-wins failure mode is closed by
+the added lock.
+
+## Additional Findings — Interview-Sourced, Not Yet Investigated Against Code
+
+These items come from the newly-supplied product-interview docs. Unlike
+everything above, they were not independently checked against source in
+this pass (either because they describe roadmap/future work with no
+existing implementation to check, or because checking them was out of
+scope for this merge). They are recorded here as-reported so they aren't
+lost, clearly marked as unverified.
+
+- **Launcher support gaps (interview-reported)**: only Epic/EA/Ubisoft
+  launcher-parent detection is claimed to exist today (matches the
+  verified Stage 4 process-tree parent check — `waterfall.rs:373-393` lists
+  `epicgameslauncher.exe`, `eadesktop.exe`, `upc.exe`). GOG, itch.io, and
+  Microsoft Store launcher-parent support is requested as a high-priority
+  pre-1.0 addition — not present in the verified parent-name list.
+- **No persistent metadata cache (interview-reported)**: `metadata.rs`'s
+  RAWG/IGDB/Steam/GOG/SteamGridDB chain (verified) appears to re-run its
+  lookup chain per scan rather than reading from a TTL'd cache; a SQLite
+  metadata cache with a 24h TTL is requested. Not independently confirmed
+  in this pass whether any caching already exists in `metadata.rs` beyond
+  "merge only empty fields" / `locked_fields` — worth a follow-up read of
+  `metadata.rs` before starting this work.
+- **Emulator detection accuracy** (interview-reported, matches known
+  limitation) — the emulator title-splitter (waterfall.rs, title
+  formatting step 2, `EMULATOR_TAGS`) is a fixed list; broader/community
+  emulator detection improvement is requested but scope not defined.
+- **Confidence scoring false negatives for indie games / tuning feedback
+  loop** (interview-reported) — Stage 5's fixed weights (Engine DNA 0.4,
+  Fullscreen 0.3, Distinct title 0.2, RAM 0.1, threshold 0.5) are
+  code-verified as-is; a user-facing feedback loop to tune these per-user
+  is roadmap only, no code found.
+- **Crate extraction design (generic vs. StatusForge-specific)** — open
+  product/architecture decision, not a code question; see Business/Product
+  Context section of `status-forge-mcp.md`.
+- **IGDB/Steam "integration"** — per the mcp.md reconciliation, IGDB and
+  Steam are already two of the five sources in the existing `metadata.rs`
+  chain; what's actually missing is a persistent cache layer, not the API
+  integrations themselves. Scope any "IGDB/Steam integration" roadmap item
+  accordingly.
+- **YouTube/JoystickTV chat-bot workaround, Rumble platform research** —
+  no code exists for any of these three platforms; pure roadmap.
+- **Manual override UI** — confirmed absent from `src/components/` and
+  `src-tauri/src/` in this pass, consistent with interview's own "not yet
+  implemented" framing (no conflict, just confirming the negative).
+- **Linux detection maturity** — interview docs flag this as an open
+  unknown requiring verification before public launch; the waterfall does
+  have Linux-specific code (`linux_golden_ticket`, `gamemoded`/`flatpak`
+  checks, `registry.vdf` parsing — see Stage 4 above), but this pass did
+  not attempt to assess real-world detection accuracy on Linux, only that
+  the code paths exist and compile under `#[cfg(target_os = "linux")]`.
+
+## Roadmap / Next Steps (from interview material — product priorities, not code findings)
+
+Concise summary of the "next steps" planning doc. These are priorities and
+decisions, not verified code facts — no line-number citations below.
+
+### Pre-MVP (~1 month)
+
+- **[CRITICAL]** Token storage fix — scope should be the read-modify-write
+  race (Finding 2 above), not the precedence rule (already correct). File:
+  `src-tauri/src/auth.rs` (and the call sites in `hub.rs`/`pusher.rs` that
+  race against it).
+- **[MEDIUM, can defer to v1.1]** Manual override UI — Override
+  button/modal in the React overlay, library-or-custom title pick, new
+  Tauri command, persistence optional. Files: `src/components/`,
+  `src-tauri/src/`.
+- **[CRITICAL, likely 1-day task]** Verify Linux detection end-to-end on a
+  real/VM Linux box — confirm the pipeline runs, platform tag extraction
+  works, metadata fallbacks behave. File: `forge-detection/src/waterfall.rs`.
+- **[DEFER, low effort]** Rumble platform research — find API docs, cap at
+  1 week. File: `src-tauri/src/pusher.rs`.
+
+### Post-MVP (1-3 months)
+
+- Design a generic detection crate interface (`detect_active_game() ->
+  GameDetection`) vs. keeping `forge-detection` StatusForge-specific —
+  spec both, decide. Files: `forge-detection/`, new `status-forge-core/lib.rs`.
+- Wire into StreamerSuite's modular architecture — move detection crate to
+  a shared location, expose Tauri commands via a StreamerSuite dispatcher,
+  hybrid shared+tool-specific config DB.
+- Migrate the library from JSON to SQLite — schema design (games table,
+  metadata columns, timestamps, indices), migration code, CRUD updates.
+  New/extended file: `src-tauri/src/db.rs`; migrate
+  `src-tauri/src/library.rs`-equivalent logic (current library storage is
+  inside `config.rs`'s `ForgeLibraryEntry`/JSON, per the verified
+  Architecture Map — there is no separate `library.rs` today).
+- Add a persistent IGDB/Steam-backed metadata cache with 24h TTL — extend
+  `src-tauri/src/metadata.rs` (the API calls already exist; this is the
+  caching layer).
+- Expand launcher support: GOG, itch.io, Microsoft Store — extend Stage 4's
+  parent-process list in `forge-detection/src/waterfall.rs`.
+- YouTube/JoystickTV chat-bot relay workaround — design + document. File:
+  `src-tauri/src/pusher.rs`.
+
+### Long-term (post-1.0)
+
+Exponential backoff on API failures (ties to audit Finding 3), user
+feedback loop for detection accuracy, expanded emulator/community
+detection DB, browser game detection, console detection if there's
+demand, confidence-tuning UI, metadata-lookup caching (see above), and
+event-driven detection (boost scan on window-focus change rather than
+pure polling).
+
+### Decision matrix (as reported in the interview)
+
+| Item | Priority | Blocking MVP | Effort | Impact |
+|---|---|---|---|---|
+| Token storage fix (rescoped to Finding 2) | Critical | Yes | Medium | High |
+| Linux verification | Critical | Maybe | Low | High |
+| Manual override UI | Defer to v1.1 | No | Medium | Medium |
+| Rumble research | Defer | No | Low | Medium |
+| Crate extraction design | Post-MVP | No | High | High |
+| Library → SQLite | Post-MVP | No | Medium | Medium |
+| IGDB/Steam caching layer | Post-MVP | No | High | High |
+| Launcher expansion (GOG/itch.io/MS Store) | Post-MVP | No | Medium | Medium |
+| Chat-bot integration (YouTube/JoystickTV) | Post-MVP | No | High | Low |
+
+### Success criteria for pre-MVP sign-off (as reported)
+
+- Token storage race closed, no lost-update on concurrent refresh+save.
+- Detection verified on Windows (tested) and Linux (needs verification).
+- Metadata broadcasts correctly on push.
+- Overlay/widget reflects live state in real time.
+- 15s cooldown + retry-once-on-401 prevents API hammering (already true
+  per code).
+- Errors logged gracefully, no crashes on 401/429 (already true per code).
+- Library auto-generates and persists (already true per code, JSON-backed).
