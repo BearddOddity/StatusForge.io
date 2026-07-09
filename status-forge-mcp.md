@@ -660,6 +660,24 @@ records, genre cycling, or UI-language config exists in source. Because
 none of this is implemented, there are no file:line citations below —
 everything is spec/proposal only.
 
+**Update (2026-07-09):** the user answered a round of open questions on this
+spec, and separately invited a design proposal for merging this system with
+the existing Stage 1 mechanism. Those answers are folded into this section
+below and are written as authoritative decisions (the user's own words are
+quoted where useful). One subsection — "Proposed: Merging Stage 0 with Stage
+1" — is a Claude-authored proposal offered in response to that invitation
+and is explicitly **not yet decided**; it's kept separate and labeled as
+such throughout. Two very small open items (full-tiebreak-exhaustion
+ordering, and no-`language`-field handling) had no user answer yet and are
+documented as Claude-proposed defaults, not decisions.
+
+**General design goal stated by the user, governing all of the below:**
+"i want each stage to work together to give the user the best experience"
+— i.e. the pipeline stages (including any new Stage 0) are meant to
+cooperate, not simply stack independent, unconditional bypass stages on top
+of each other. This is the rationale behind the Stage 0/Stage 1 merge
+proposal further down.
+
 ### Relationship to the existing Stage 1 alias table (important distinction)
 
 The existing, verified Stage 1 mechanism (`KNOWN_EXE_TITLE_ALIASES` /
@@ -701,17 +719,34 @@ questions (exe name → title, vs. detected title → canonical game).
   under their OS's localized game titles (via the alias system bridging
   localized name → canonical title → platform ID) and use a translated UI.
 
-### Proposed database schema (final — supersedes the first-draft schema)
+### Proposed database schema (final — supersedes the first-draft schema, further corrected this round)
 
 The first-draft spec doc proposed a schema without `platform_id_confidence`
 or `last_id_sync`, and without a `preferred` flag on aliases; the "final
-decisions" doc supersedes it with the following:
+decisions" doc superseded it with a schema that included a single
+`"platform_id": "twitch:12345"` field.
+
+**This round's correction (user decision, supersedes the single
+`platform_id` field above):** the user clarified that Twitch ID and Kick ID
+resolution are separate, independent flows from canonical/platform-identity
+resolution — they exist purely to match each platform's own category IDs
+and are not part of the detection/confidence scoring system (see "Twitch ID
+/ Kick ID resolution" below). This confirms the real, already-verified
+schema is correct as-is: `ForgeLibraryEntry` (`config.rs:190`) already
+stores per-platform fields rather than one collapsed `platform_id` string
+(e.g. `kick_id`, resolved via `resolve_kick_id()`, `pusher.rs:77`, per the
+Token Storage section above). The proposed alias-system schema is corrected
+below to match that real per-platform-field model, drop the single
+`platform_id` field, and add a distinct `identity_confidence` field for the
+Steam > GOG > IGDB > RAWG > `.exe` canonical-identity resolution (see below)
+— which is a different score from any per-platform-ID confidence:
 
 ```javascript
 {
   "title": "Dark Souls III",
-  "platform_id": "twitch:12345",
-  "platform_id_confidence": 0.95,          // NEW vs. first draft
+  "twitch_id": "12345",
+  "kick_id": "6789",
+  "identity_confidence": 0.95,             // canonical-identity resolution score (Steam>GOG>IGDB>RAWG>.exe) — distinct from any platform-ID match confidence
   "genres": ["RPG", "Action"],             // or delimited string, or a genres_cycle array — user's choice
   "aliases": [
     {"name": "DS3", "priority": 1, "language": "en", "confidence_boost": 0.15, "preferred": true},
@@ -729,6 +764,58 @@ delimited string (`"RPG,Action,Fantasy"`), a plain array
 (`["RPG","Action","Fantasy"]`), or an ordered cycling structure
 (`"genres_cycle": [{"name":"RPG","order":1}, ...]` plus
 `genre_rotation_enabled` and `current_genre_index` fields on the entry).
+
+### Canonical-identity resolution chain vs. `metadata.rs` enrichment chain (user decision, clarified)
+
+The user's answer on platform-ID priority: "platform IDs flow should start
+with STEAM > GOG > IGDB > RAWG > .EXE (or = to .EXE)". This defines a
+**canonical-identity / platform-ID-confidence resolution priority chain**:
+Steam > GOG > IGDB > RAWG > `.exe`-name-derived, where the `.exe`-derived
+signal can also be treated as an equal-weight fallback rather than strictly
+last (per the user's "(or = to .EXE)" qualifier) — i.e. `.exe`-derived
+identity is the floor, and any of Steam/GOG/IGDB/RAWG that resolves cleanly
+outranks it, but the `.exe`-derived source is deliberately not slotted below
+RAWG as a distinct fifth tier in a strict sense. This chain feeds the
+proposed `identity_confidence` field above.
+
+**This is explicitly a separate pipeline from the already-implemented
+metadata *enrichment* chain** in `metadata.rs`, which is
+RAWG → IGDB → Steam → GOG → SteamGridDB (verified, Architecture Map above,
+`metadata.rs:441`) and fills in *metadata fields* (genre, year,
+developer/publisher, cover art) rather than resolving canonical
+identity/platform-ID confidence. The two chains order the same handful of
+sources differently on purpose: the enrichment chain is optimized for
+*metadata completeness/quality* (RAWG first because it's typically the
+richest general-purpose game database for descriptive fields), while the
+identity chain is optimized for *platform-ID trustworthiness* (Steam/GOG
+first because a live storefront-owned ID is the most authoritative proof of
+which exact game/edition is installed). Documenting this explicitly so a
+future reader doesn't mistake the differing order for a contradiction or a
+bug — it isn't one; they're two different pipelines serving two different
+purposes.
+
+**Open question flagged, not assumed:** if the user actually intended this
+answer to also reorder the *real*, already-implemented `metadata.rs`
+enrichment chain (rather than only define a new, separate identity-priority
+concept), that would be a real code-change request, not a documentation
+change, and needs explicit confirmation before any code is touched. Nothing
+in `metadata.rs` has been changed as part of this doc update.
+
+### Twitch ID / Kick ID resolution (user decision)
+
+The user's answer, continued: "...then have separate flows for Twitch and
+Kicks IDs they are used to match the Platform's categories not my detection
+score." Twitch ID and Kick ID resolution are **separate, independent flows**
+from the canonical-identity chain above — they exist purely to match each
+platform's own category IDs for broadcasting purposes and are explicitly
+**not** part of the detection/confidence scoring system. This confirms and
+formalizes that the real, already-verified per-platform fields on
+`ForgeLibraryEntry` (`config.rs:190`) — separate `twitch_id` and `kick_id`
+fields, e.g. `db.library[title].kick_id` resolved via `resolve_kick_id()`
+(`pusher.rs:77`, Token Storage section above) — are the correct model, and
+the alias-spec's earlier single `"platform_id": "twitch:12345"` field
+(original spec doc, commit 2995c81) is corrected/dropped in the schema
+above in favor of this real per-platform-field model.
 
 ### Proposed Stage 0 (pre-waterfall alias check)
 
@@ -749,6 +836,45 @@ in the spec: alias lookup must be O(1) (hash map), so Stage 0 doesn't add
 measurable latency to the scan loop (`spawn_engine_loop`, lib.rs:688,
 default 5s tick).
 
+### MAXED confidence tier (user decision, new)
+
+The user's answer to "can confidence scores exceed 1.0?": "yes they can
+exceed 1.0 by having all the confidence MAXED it can shine glass
+transparent gold shimmer and be considered instant bypass to platforms."
+This adds a new top confidence tier, **MAXED** (score ≥ 1.0), on top of the
+existing Stage 5 scoring model.
+
+Arithmetic, using the real, already-verified Stage 5 weights (table above,
+waterfall.rs:395-420): Engine DNA 0.4 + Fullscreen 0.3 + Distinct Title 0.2
++ RAM 0.1 = 1.0 if every Stage 5 signal stacks, before any alias
+contribution. Adding the proposed alias `confidence_boost` (0.10–0.20 per
+the schema above, up to 0.20 at the high end) on top gives a theoretical
+max of **1.20** when every Stage 5 signal plus the maximum alias boost all
+stack simultaneously.
+
+Behavior at MAXED: the game skips the normal 0.80/0.70 confirmation-
+threshold logic (decision #3 below) entirely and is treated as an instant,
+no-confirmation broadcast — the same tier of certainty as a Stage 1 instant
+match (waterfall.rs:271-296 above). Additionally, a cosmetic-only UI
+treatment applies: a "glass transparent gold shimmer" effect (user's own
+words) on the relevant badge/indicator, with no functional effect beyond
+the instant-bypass behavior already described.
+
+### Orphaned aliases on game deletion — reuses the existing exile mechanism (user decision)
+
+The user's answer: "Orphaned aliases on game deletion can be saved in the
+database but not displayed unless relaunched and removed from exile." This
+is defined as reusing the **existing, verified** `delisted_apps`/exile
+concept (Stage 2's kill-list, "Hard kills" section above) rather than
+inventing a new mechanism: deleting a game from the library moves it — and
+its aliases — into a hidden/exiled state. The underlying data persists in
+the database (nothing is destroyed on delete) but is not shown in the UI
+while exiled. Aliases only become visible/active again once the game is
+**both** (a) un-exiled (explicitly removed from the delisted/exile list)
+**and** (b) redetected (the game is relaunched and passes back through the
+waterfall). Being un-exiled alone, without a relaunch, is not sufficient —
+both conditions are required.
+
 ### The 10 final design decisions (from the "final decisions" doc — these supersede the first-draft doc's edge-case section wherever they conflict)
 
 1. **Alias matching priority/tiebreak order** when multiple aliases match
@@ -758,6 +884,15 @@ default 5s tick).
    proposed checking the `preferred`-equivalent ("first match"/language)
    in a different order — the final doc is explicit that language beats
    the preferred flag in the tiebreak, not the other way around.
+   **Two small gaps not yet answered by the user — Claude-proposed
+   defaults, not decisions, easy to override later:**
+   - *Full tiebreak exhaustion* (priority, language, chronological, *and*
+     preferred all tied): default to stable insertion/database-row order
+     as the final deterministic tiebreak.
+   - *No `language` field set on an alias*: treat as "no language
+     preference" — it simply doesn't win or lose the language tiebreak
+     step, falling through to the next step (chronological, then
+     preferred).
 2. **Conflicting aliases** (same alias string could resolve to *different*
    games): highest `confidence_boost` wins, full stop — no further
    tiebreak needed.
@@ -778,6 +913,13 @@ default 5s tick).
    else's alias, with an explicit message pointing the user at the
    canonical name instead. Chaining is explicitly deferred to a v2.0 plan,
    not ruled out architecturally, just not built for v1.0/v1.1.
+   **Extended this round (user decision):** "Canonical is still the Highest
+   tier" — a canonical game title always outranks any alias. The rejection
+   rule above is extended to *also* reject creating an alias whose name
+   collides with any existing **canonical library title**, not just
+   collisions with other aliases — i.e. "X → Y" is rejected if "X" is
+   already a canonical title in the library, exactly as it's already
+   rejected if "X" is already someone else's alias.
 6. **Genre cycling**: storage format (string / array / cycling object) is
    a user choice; cycling supports both a manual "Next Genre" action and
    an optional auto-rotation timer (interval configurable in minutes);
@@ -795,8 +937,22 @@ default 5s tick).
    also alerts the user if a previously-good ID becomes invalid.
 9. **Community alias sharing** (planned Phase 2+/v1.1 post-MVP, not v1.0):
    a proposed public GitHub repo `status-forge/community-aliases` holding
-   one JSON file per game (canonical title, platform_id, aliases array)
+   one JSON file per game (canonical title, platform IDs, aliases array)
    that users could import into their local library.
+   **Formalized this round (user decision) — required contribution unit:**
+   "allow minimum of 1 game and all of its metadata per database file so if
+   users want to send me a list of X amount of games that are separated per
+   file it can help me manage updating the Database website and improve
+   the detection accuracy and support over time so files can look like
+   {game}.{file type}." Each community contribution file must contain at
+   minimum one full game entry (canonical title + platform IDs + full
+   metadata + its aliases), filename pattern `{game}.{filetype}` (e.g.
+   `dark-souls-iii.json`, matching the example already used in this doc).
+   This granularity is explicitly meant to help the user, as project
+   maintainer, manage updates to a "database website" (their words — a
+   separate game-database-management site, distinct from the app itself)
+   and to improve detection accuracy/support over time via incremental,
+   per-game community contributions rather than large bulk files.
 10. **Debug-mode-only confidence visibility**: alias-match confidence,
     platform-ID confidence, which detection stage matched, and a manual
     override of confidence thresholds are all confidence-debugging surface
@@ -816,7 +972,9 @@ default 5s tick).
   "library": [
     {
       "title": "Dark Souls III",
-      "platform_id": "twitch:12345",
+      "twitch_id": "12345",
+      "kick_id": "6789",
+      "identity_confidence": 0.95,
       "genres": ["RPG", "Action"],
       "aliases": [{"name": "DS3", "priority": 1, "language": "en", "confidence_boost": 0.15}],
       "broadcast_name": null,
@@ -826,10 +984,64 @@ default 5s tick).
 }
 ```
 
+Updated this round to match the corrected schema above: `platform_id` is
+dropped in favor of the real per-platform `twitch_id`/`kick_id` fields
+(`ForgeLibraryEntry`, `config.rs:190`), with a separate `identity_confidence`
+field for the canonical-identity chain.
+
 None of `alias_matching_enabled`, `language` (in this sense), `ui_language`,
 `genre_cycling_enabled`, or `genre_rotation_interval_seconds` exist on the
 current `EngineSettings` struct (`config.rs`) — this is a proposed addition,
 not a description of what's there.
+
+### Proposed: Merging Stage 0 (Alias) with Stage 1 (Built-in Aliases) — Claude's proposal, pending sign-off
+
+**This subsection is a Claude-authored design proposal, not a decided
+fact.** It's offered in direct response to the user's invitation: "Alias
+was heavily inspired by what made me make
+KNOWN_EXE_TITLE_ALIASES/listed_apps so if you can improve on this idea do
+give me ideas." It has **not** been approved or decided — everything below
+is a suggestion awaiting the user's sign-off, kept separate from the
+decisions above.
+
+Today's design (per the "Relationship to the existing Stage 1 alias table"
+section above) keeps two permanently-parallel, independent mechanisms: the
+existing, verified Stage 1 `KNOWN_EXE_TITLE_ALIASES`/`listed_apps` lookup,
+and the newly-proposed Stage 0 alias system, each with its own unconditional
+bypass. That satisfies the letter of "let both run" but not the user's
+stated general design goal that "each stage work together to give the user
+the best experience" — two independently-unconditional bypass stages don't
+cooperate, they just both short-circuit everything below them.
+
+**Proposal:** collapse the two mechanisms into a single alias table with a
+trust/provenance tier system:
+
+- **Built-in aliases** (migrated from `KNOWN_EXE_TITLE_ALIASES`): keep
+  today's existing guarantee exactly as-is — instant, unconditional match,
+  bypassing Stage 2 (hard kills) and Stage 3 (behavioral traps) entirely,
+  exactly as Stage 1 already does today. This preserves the behavior
+  covered by the existing, verified test
+  `known_exe_aliases_win_instantly_even_with_low_ram_and_strict_mode`
+  (waterfall.rs:1186, cited in the Stage 1 section above) — nothing about
+  that guarantee would change.
+- **User custom aliases** (new, default behavior for user-created aliases):
+  match at Stage 0, but the match then still flows through Stage 2's hard-
+  kill checks afterward — i.e. Stage 0 identifies the *candidate* game, but
+  doesn't automatically grant Stage 1's unconditional bypass. This is the
+  concrete mechanism for implementing "stages work together" instead of
+  stacking two independent unconditional-bypass stages.
+- **User "locked/trusted" aliases**: a proposed opt-in flag a user can set
+  on their own custom alias to promote it to the same unconditional-bypass
+  tier as a built-in alias — for edge cases where Stage 2/3 keeps
+  false-flagging a legitimate but unusual game and the user wants to force
+  the same guarantee Stage 1 gives built-ins.
+- Resulting trust ladder: **Built-in > user-locked alias > user default
+  alias (still Stage-2-checked) > waterfall discovery (Stages 2-5, as
+  today)**.
+
+**Awaiting user decision.** None of this has been approved; it's an idea in
+response to the user's explicit invitation to improve on the
+`KNOWN_EXE_TITLE_ALIASES`/`listed_apps` concept, not a committed design.
 
 ### Phased roadmap (as specified)
 
