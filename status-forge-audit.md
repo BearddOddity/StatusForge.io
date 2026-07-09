@@ -242,6 +242,29 @@ decisions, not verified code facts — no line-number citations below.
 - YouTube/JoystickTV chat-bot relay workaround — design + document. File:
   `src-tauri/src/pusher.rs`.
 
+### New proposed feature (not yet scoped into the roadmap above): Alias System / Genre Cycling / Multi-Language
+
+A separate pair of design-spec docs (not the interview material above)
+propose a v1.1/v1.2/v1.3 feature set: a per-game alias system (multiple
+alternate titles per Library entry with priority/language/confidence-boost/
+preferred-flag matching, feeding a new pre-waterfall "Stage 0" detection
+check distinct from the existing Stage 1 `KNOWN_EXE_TITLE_ALIASES` table),
+genre cycling (multi-genre broadcast with optional rotation), and
+multi-language UI support (5 target languages, detection bridged through
+the alias system for localized install names). None of it exists in the
+codebase — confirmed by grep, see the full write-up in
+`status-forge-mcp.md` ("Alias System, Genre Cycling & Multi-Language
+Support" section) for the complete schema, the 10 design decisions, and
+the phased roadmap. Unlike most items in this doc's roadmap section, this
+one is unusual in that every edge case already has a documented,
+non-speculative resolution (matching/tiebreak order, conflicting-alias
+resolution, platform-ID confidence thresholds, sync triggers, an explicit
+no-alias-chaining rule with validation behavior, genre cycling storage
+choice, multi-language scope, community alias sharing plan, and
+debug-mode-only confidence visibility) — so it's ready to scope directly
+into implementation tickets whenever prioritized, rather than needing a
+design pass first.
+
 ### Long-term (post-1.0)
 
 Exponential backoff on API failures (ties to audit Finding 3), user

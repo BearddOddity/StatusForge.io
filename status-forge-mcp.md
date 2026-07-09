@@ -640,6 +640,220 @@ kept here only as product/user-facing context, not as a corrected fact.
    the interview material never distinguished the two fields. See Finding 1
    in `status-forge-audit.md` for the code-only finding.
 
+## Alias System, Genre Cycling & Multi-Language Support (Proposed — Design Spec, Not Yet Implemented)
+
+Everything in this section comes from two design-spec documents supplied
+after the interview material above (`StatusForgeAliasSystemSpec.md` and
+`StatusForgeAliasFinalDecisions.md`), describing a proposed feature set
+targeted for v1.1 (alias system), v1.2 (genre cycling), and v1.3
+(multi-language UI). **None of it exists in the codebase today.** This was
+verified by grepping `forge-detection/`, `src-tauri/src/`, and `src/` for
+`alias`, `genres_cycle`, `confidence_boost`, `ui_language`,
+`platform_id_confidence`, `genre_rotation`, `last_id_sync`, and
+`broadcast_name`. The only hits were the two *existing, already-documented*
+built-in alias tables — `KNOWN_EXE_TITLE_ALIASES` (waterfall.rs:103, Stage 1
+above) and `KNOWN_WINDOW_TITLE_ALIASES` (waterfall.rs:121, title-formatting
+step 1 above) — plus a couple of unrelated code comments using the word
+"alias" in passing (`waterfall.rs:14`, `server.rs:217-219`). Nothing
+resembling per-game alias priority/language/confidence-boost/preferred-flag
+records, genre cycling, or UI-language config exists in source. Because
+none of this is implemented, there are no file:line citations below —
+everything is spec/proposal only.
+
+### Relationship to the existing Stage 1 alias table (important distinction)
+
+The existing, verified Stage 1 mechanism (`KNOWN_EXE_TITLE_ALIASES` /
+`kw.listed_apps`, waterfall.rs:52-72) and the proposed alias system
+described below are **two different mechanisms that happen to share the
+word "alias"** — do not conflate them:
+
+- **Stage 1 (real, in the pipeline today)**: a flat `exe_name → title`
+  lookup table, merging a small built-in list with the user's own
+  `Forge_Database.json` `listed_apps` map. It runs first in the actual
+  waterfall, has no concept of priority, language, confidence score, or a
+  "preferred" flag, and its only job is fixing misleading executable names
+  (`gtaiv.exe` → "Grand Theft Auto IV").
+- **Proposed alias system (spec only, described below)**: a much richer
+  per-game *title*-alias system attached to Library entries — multiple
+  aliases per game, each with `priority`, `language`, `confidence_boost`,
+  and `preferred`, intended to run as a new "Stage 0" *even earlier* than
+  the existing Stage 1, and feeding into Stage 5's confidence score rather
+  than being a simple exe-name lookup.
+
+If this is ever built, Stage 0 would sit in front of the entire pipeline
+described above — including Stage 1 — not replace or merge with it; a
+`listed_apps`/`KNOWN_EXE_TITLE_ALIASES` hit and a proposed per-game alias
+hit would remain two independent lookup tables answering two different
+questions (exe name → title, vs. detected title → canonical game).
+
+### Purpose / use cases
+
+- **Alias system**: improve detection accuracy and readability by letting
+  users attach multiple alternate names to a library game — fixing failed
+  detections (wrong title detected → user aliases it to the correct game),
+  shorthand names ("DS3" = "Dark Souls III"), regional/language name
+  variants, and a feedback loop where user corrections improve future
+  confidence scoring.
+- **Genre cycling**: let users broadcast multiple genres for a game that
+  has more than one (e.g. RPG + Action), with an optional cycling/rotation
+  behavior instead of forcing a single fixed genre string.
+- **Multi-language support**: enable non-English users to both detect games
+  under their OS's localized game titles (via the alias system bridging
+  localized name → canonical title → platform ID) and use a translated UI.
+
+### Proposed database schema (final — supersedes the first-draft schema)
+
+The first-draft spec doc proposed a schema without `platform_id_confidence`
+or `last_id_sync`, and without a `preferred` flag on aliases; the "final
+decisions" doc supersedes it with the following:
+
+```javascript
+{
+  "title": "Dark Souls III",
+  "platform_id": "twitch:12345",
+  "platform_id_confidence": 0.95,          // NEW vs. first draft
+  "genres": ["RPG", "Action"],             // or delimited string, or a genres_cycle array — user's choice
+  "aliases": [
+    {"name": "DS3", "priority": 1, "language": "en", "confidence_boost": 0.15, "preferred": true},
+    {"name": "Dark Souls III Remastered", "priority": 2, "language": "en", "confidence_boost": 0.10, "preferred": false},
+    {"name": "ダークソウルズ3", "priority": 1, "language": "ja", "confidence_boost": 0.15, "preferred": false}
+  ],
+  "broadcast_name": null,
+  "last_id_sync": "2025-07-09T12:00:00Z",  // NEW vs. first draft
+  "metadata": {"year": 2016, "developer": "FromSoftware", "cover_art": "url", "description": "..."}
+}
+```
+
+Genre storage is deliberately left as a user choice among three formats: a
+delimited string (`"RPG,Action,Fantasy"`), a plain array
+(`["RPG","Action","Fantasy"]`), or an ordered cycling structure
+(`"genres_cycle": [{"name":"RPG","order":1}, ...]` plus
+`genre_rotation_enabled` and `current_genre_index` fields on the entry).
+
+### Proposed Stage 0 (pre-waterfall alias check)
+
+```
+Input: detected_name = "DS3"
+1. Search library aliases for "DS3"
+2. If found → return matched game + apply confidence_boost
+3. If not found → proceed to the existing 5-stage waterfall (Stage 1 onward, as documented above)
+```
+
+Confidence math if a Stage 0 alias match occurs: base confidence 0.4 (the
+existing Stage 5 "Engine DNA" weight, reused conceptually) plus the
+matched alias's `confidence_boost` (0.10–0.20), landing at 0.50–0.60 —
+intended to be enough to clear the existing default `confidence_threshold`
+of 0.5 (config.rs:349-351, per the Stage 5 table above) for a detection
+that would otherwise have failed outright. Performance requirement stated
+in the spec: alias lookup must be O(1) (hash map), so Stage 0 doesn't add
+measurable latency to the scan loop (`spawn_engine_loop`, lib.rs:688,
+default 5s tick).
+
+### The 10 final design decisions (from the "final decisions" doc — these supersede the first-draft doc's edge-case section wherever they conflict)
+
+1. **Alias matching priority/tiebreak order** when multiple aliases match
+   the same game: (1) `priority` (1 = highest) → (2) `language` (matches
+   user's current UI language) → (3) chronological (oldest alias wins) →
+   (4) `preferred` flag. **Supersedes the first-draft doc**, which had
+   proposed checking the `preferred`-equivalent ("first match"/language)
+   in a different order — the final doc is explicit that language beats
+   the preferred flag in the tiebreak, not the other way around.
+2. **Conflicting aliases** (same alias string could resolve to *different*
+   games): highest `confidence_boost` wins, full stop — no further
+   tiebreak needed.
+3. **Platform-ID confidence thresholds**: `≥ 0.80` → auto-broadcast with no
+   prompt; `0.70–0.79` → auto-select best guess but let the user override;
+   `< 0.70` → show the user the candidate options and require an explicit
+   pick. Low-confidence flags are visible only in debug mode (see #10) —
+   normal users get a silent background flag, no UI warning icon.
+4. **Platform-ID sync triggers**: automatic on library add (fetch from
+   IGDB/Steam immediately, no user action), plus a weekly background
+   re-validation job, plus a manual user-triggered refresh option. Source
+   preference order: IGDB then Steam, using whichever returns the higher
+   confidence; falls back to manual user entry if neither has a match.
+5. **No alias chaining (v1.0/v1.1)**: an alias must point directly to a
+   canonical game name, never to another alias — this avoids infinite-loop
+   risk and keeps Stage 0 lookup O(1). Validation rule: creating alias
+   "X → Y" is rejected if "Y" is itself already registered as someone
+   else's alias, with an explicit message pointing the user at the
+   canonical name instead. Chaining is explicitly deferred to a v2.0 plan,
+   not ruled out architecturally, just not built for v1.0/v1.1.
+6. **Genre cycling**: storage format (string / array / cycling object) is
+   a user choice; cycling supports both a manual "Next Genre" action and
+   an optional auto-rotation timer (interval configurable in minutes);
+   cycling can be enabled/disabled per game independently.
+7. **Multi-language scope**: covers both detection (the alias system
+   bridges a localized-install detected name to the canonical title) and
+   UI translation (Phase 3: settings, library editor, widgets, help text).
+   Target languages: English, Japanese, German, French, Spanish. Config
+   field: `"ui_language": "ja"`. Broadcasting is explicitly
+   language-agnostic — it always uses the platform ID, never the
+   UI-language string.
+8. **Platform-ID guessing uses confidence scoring**, not exact-match-only:
+   IGDB and Steam each supply candidate IDs with confidence scores; the
+   same 0.80/0.70 thresholds from #3 apply; the weekly re-validation job
+   also alerts the user if a previously-good ID becomes invalid.
+9. **Community alias sharing** (planned Phase 2+/v1.1 post-MVP, not v1.0):
+   a proposed public GitHub repo `status-forge/community-aliases` holding
+   one JSON file per game (canonical title, platform_id, aliases array)
+   that users could import into their local library.
+10. **Debug-mode-only confidence visibility**: alias-match confidence,
+    platform-ID confidence, which detection stage matched, and a manual
+    override of confidence thresholds are all confidence-debugging surface
+    area that is visible *only* in a debug mode. The normal UI stays clean
+    with silent background flags and no visible scores or warning icons.
+
+### Proposed config.json shape
+
+```json
+{
+  "engine_settings": {
+    "alias_matching_enabled": true,
+    "language": "en",
+    "genre_cycling_enabled": false,
+    "genre_rotation_interval_seconds": 1800
+  },
+  "library": [
+    {
+      "title": "Dark Souls III",
+      "platform_id": "twitch:12345",
+      "genres": ["RPG", "Action"],
+      "aliases": [{"name": "DS3", "priority": 1, "language": "en", "confidence_boost": 0.15}],
+      "broadcast_name": null,
+      "metadata": {}
+    }
+  ]
+}
+```
+
+None of `alias_matching_enabled`, `language` (in this sense), `ui_language`,
+`genre_cycling_enabled`, or `genre_rotation_interval_seconds` exist on the
+current `EngineSettings` struct (`config.rs`) — this is a proposed addition,
+not a description of what's there.
+
+### Phased roadmap (as specified)
+
+- **v1.1 (alias system, MVP for this feature)**: DB schema update, library
+  metadata editor UI, detection Stage 0 (check aliases before the
+  waterfall), confidence-scoring alias boost. Not started.
+- **v1.1 post-MVP**: debug mode with confidence display (#10), community
+  alias sharing via the GitHub repo + import flow (#9), auto-rotation for
+  genre cycling.
+- **v1.2 (genre cycling)**: storage-format options, cycling UI, broadcast
+  logic changes. Not started.
+- **v1.3 (multi-language UI)**: i18n strings file (`i18n/ja.json` etc.),
+  `ui_language` config, widget/overlay localization for the five target
+  languages. Not started.
+- **v2.0 (future)**: alias chaining with cycle detection, alias versioning,
+  alias "families," ML-based confidence scoring improvements.
+
+Design decisions themselves (matching/tiebreak order, conflict resolution,
+the 0.80/0.70 thresholds, sync triggers, the no-chaining rule + validation
++ v2.0 deferral, genre cycling format choice, multi-language scope,
+platform-ID confidence scoring, community sharing, debug-mode-only
+visibility) are all already resolved per the final-decisions doc — what
+remains is implementation, not design.
+
 ## Config Defaults Worth Knowing
 
 From `config.rs` (`Default for EngineSettings`, `default_*` functions):
