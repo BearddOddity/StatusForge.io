@@ -796,21 +796,25 @@ in `src-tauri/src/metadata.rs`:
   RAWG for any field they'd otherwise all populate, matching the user's
   stated priority.
 - `fetch_sgdb()` now takes the `steam_id` resolved by the earlier Steam step
-  (`Option<&str>`) and, when present, queries SteamGridDB directly by Steam
-  AppID — `GET /api/v2/grids/steam/{steam_id}` and
-  `GET /api/v2/logos/steam/{steam_id}` — instead of doing a fuzzy
-  title-based autocomplete search first. This matches the user's "SGDB will
-  detect Steam's ID and find the covers/logos" instruction, and is more
-  accurate than the title-search path (no ambiguity from similarly-named
-  games). The old title-autocomplete + `grids/game/{sgdb_id}`/
-  `logos/game/{sgdb_id}` path is kept as the fallback for titles with no
-  resolved `steam_id` (GOG-only/DRM-free/indie games not on Steam), since
-  that's the only way to discover SteamGridDB's own internal game id and
-  populate `sgdb_id` at all. The `/grids/steam/{id}` and `/logos/steam/{id}`
-  endpoint shapes were verified against a mature third-party SteamGridDB API
-  wrapper's source and test assertions (pattern `{base}/{type}/{platform}/
-  {ids}`, e.g. `grids/game/13136` and `grids/egs/Salt,14065` — steam is one
-  of the supported platform slugs alongside egs/bnet/etc.), not guessed.
+  (`Option<&str>`) and, when present, calls the documented
+  `GET /api/v2/games/steam/{steam_id}` endpoint to resolve SteamGridDB's own
+  internal game id directly from the Steam AppID (exact, no fuzzy title
+  match), then reuses the existing by-game-id
+  `grids/game/{id}`/`logos/game/{id}` calls with that resolved id — so
+  `sgdb_id` still gets populated correctly on the Steam-ID path, not left
+  empty. This matches the user's "SGDB will detect Steam's ID and find the
+  covers/logos" instruction. Falls back to the title-based
+  `search/autocomplete/{title}` path (used to resolve the same by-game-id
+  calls) when `steam_id` is `None` (GOG-only/DRM-free/indie titles not on
+  Steam) or the `games/steam/{id}` lookup finds nothing. All of the above
+  endpoint shapes were confirmed against the official SteamGridDB API
+  reference (`steamgriddb.com/api/v2` — fetched via Nimble's extract tool
+  with a render wait, since a plain fetch only returns the JS-loading shell)
+  rather than guessed: `GET /games/{platform}/{platformId}` returns
+  `{"success":true,"data":{"id":...}}` (a single object — the internal SGDB
+  id), `GET /grids/{platform}/{id}` and `GET /logos/{platform}/{id}` accept
+  `steam` as one of the documented `platform` enum values alongside
+  origin/egs/bnet/uplay/flashpoint/eshop.
 - The module doc comment at the top of `metadata.rs` was rewritten to
   describe the new order and explain the exe-derived-title-as-seed framing
   above.

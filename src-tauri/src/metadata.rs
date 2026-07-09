@@ -434,50 +434,58 @@ async fn fetch_kick_id(
     }
 }
 
+/// Resolve SteamGridDB's own internal game id from a Steam AppID via the
+/// documented `GET /games/{platform}/{platformId}` endpoint (response
+/// shape: `{"success":true,"data":{"id":0,"name":"...","types":[...],
+/// "verified":true}}` — a single object, not the array shape `/search/...`
+/// returns). Confirmed against the official SteamGridDB API docs
+/// (steamgriddb.com/api/v2) rather than guessed.
+async fn resolve_sgdb_id_from_steam(
+    client: &reqwest::Client,
+    key: &str,
+    steam_id: &str,
+) -> Result<u64, String> {
+    let url = format!(
+        "https://www.steamgriddb.com/api/v2/games/steam/{}",
+        urlencoding::encode(steam_id)
+    );
+    let json = get_json(client.get(&url).bearer_auth(key)).await?;
+    json["data"]["id"]
+        .as_u64()
+        .ok_or_else(|| "no SteamGridDB game for this Steam AppID".to_string())
+}
+
 /// Returns (sgdb_id, cover_url, logo_url) — cover/logo may be empty if
 /// SteamGridDB has no 600x900 grid / no logo for this game.
 ///
 /// When `steam_id` is known (Steam was already resolved earlier in the
-/// scan), grids/logos are looked up directly by Steam AppID
-/// (`/grids/steam/{id}`, `/logos/steam/{id}`) — exact, no fuzzy title
-/// matching, and skips the autocomplete search entirely. That platform
-/// lookup doesn't return SteamGridDB's own internal game id, so `sgdb_id`
-/// is left empty on that path; only the title-autocomplete fallback below
-/// (used when `steam_id` is `None`, e.g. non-Steam/DRM-free titles) resolves
-/// and returns a real `sgdb_id`.
+/// scan), SteamGridDB's internal game id is resolved directly from the
+/// Steam AppID via `/games/steam/{id}` (exact, no fuzzy title matching) and
+/// reused for the same by-game-id grids/logos calls below — so `sgdb_id`
+/// still gets populated correctly on this path, unlike a naive
+/// platform-only grids/logos lookup which doesn't return SGDB's own id.
+/// Falls back to the title-based `/search/autocomplete/{title}` path when
+/// `steam_id` is `None` (non-Steam/DRM-free titles) or the platform lookup
+/// above finds nothing.
 async fn fetch_sgdb(
     client: &reqwest::Client,
     title: &str,
     key: &str,
     steam_id: Option<&str>,
 ) -> Result<(String, String, String), String> {
-    if let Some(steam_id) = steam_id {
-        let grids_url = format!(
-            "https://www.steamgriddb.com/api/v2/grids/steam/{}?dimensions=600x900",
-            steam_id
-        );
-        let grids = get_json(client.get(&grids_url).bearer_auth(key)).await?;
-        let cover = grids["data"][0]["url"].as_str().unwrap_or("").to_string();
-
-        let logos_url = format!("https://www.steamgriddb.com/api/v2/logos/steam/{}", steam_id);
-        let logo = match get_json(client.get(&logos_url).bearer_auth(key)).await {
-            Ok(logos) => logos["data"][0]["url"].as_str().unwrap_or("").to_string(),
+    let id = match steam_id {
+        Some(steam_id) => match resolve_sgdb_id_from_steam(client, key, steam_id).await {
+            Ok(id) => id,
             Err(e) => {
-                log::warn!("[META] SteamGridDB logo lookup (by steam_id) failed: {}", e);
-                String::new()
+                log::warn!(
+                    "[META] SteamGridDB games/steam lookup failed, falling back to title search: {}",
+                    e
+                );
+                fetch_sgdb_id_by_title(client, title, key).await?
             }
-        };
-        return Ok((String::new(), cover, logo));
-    }
-
-    let search_url = format!(
-        "https://www.steamgriddb.com/api/v2/search/autocomplete/{}",
-        urlencoding::encode(title)
-    );
-    let json = get_json(client.get(&search_url).bearer_auth(key)).await?;
-    let id = json["data"][0]["id"]
-        .as_u64()
-        .ok_or("no SteamGridDB results")?;
+        },
+        None => fetch_sgdb_id_by_title(client, title, key).await?,
+    };
 
     let grids_url = format!(
         "https://www.steamgriddb.com/api/v2/grids/game/{}?dimensions=600x900",
@@ -498,6 +506,21 @@ async fn fetch_sgdb(
     };
 
     Ok((id.to_string(), cover, logo))
+}
+
+async fn fetch_sgdb_id_by_title(
+    client: &reqwest::Client,
+    title: &str,
+    key: &str,
+) -> Result<u64, String> {
+    let search_url = format!(
+        "https://www.steamgriddb.com/api/v2/search/autocomplete/{}",
+        urlencoding::encode(title)
+    );
+    let json = get_json(client.get(&search_url).bearer_auth(key)).await?;
+    json["data"][0]["id"]
+        .as_u64()
+        .ok_or_else(|| "no SteamGridDB results".to_string())
 }
 
 #[cfg(test)]
