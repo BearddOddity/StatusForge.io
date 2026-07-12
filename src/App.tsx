@@ -208,6 +208,9 @@ function App() {
         }
         webhook("game-cleared", e.payload);
       }),
+      listen<string>("override-cleared", (e) => {
+        toast(`Override cleared — resuming automatic detection (was ${e.payload})`, "info");
+      }),
     ];
     return () => {
       subs.forEach((s) => s.then((u) => u()).catch(() => {}));

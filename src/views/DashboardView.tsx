@@ -142,6 +142,24 @@ export default function DashboardView({
   toast: (msg: string, type?: ToastType) => void;
   onNavigate: (view: ViewId) => void;
 }) {
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideText, setOverrideText] = useState("");
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+
+  const submitOverride = async () => {
+    const name = overrideText.trim();
+    if (!name) return;
+    setOverrideSubmitting(true);
+    try {
+      const r = await tauriApi("override_game", { title: name });
+      toast(typeof r === "string" ? r : "Failed to override", typeof r === "string" ? "success" : "error");
+      setOverrideOpen(false);
+      setOverrideText("");
+    } finally {
+      setOverrideSubmitting(false);
+    }
+  };
+
   const [overlayUrls, setOverlayUrls] = useState<{ id: string; url: string; label: string }[]>([]);
   const [overlayIdCounter, setOverlayIdCounter] = useState(0);
   const [overlayPickerOpen, setOverlayPickerOpen] = useState(false);
@@ -394,7 +412,35 @@ export default function DashboardView({
                   🚫 Exile to Apps
                 </Btn>
               )}
+              <Btn variant="ghost" onClick={() => setOverrideOpen((o) => !o)}>
+                🎮 Override Game
+              </Btn>
             </div>
+            {overrideOpen && (
+              <div className="flex items-center gap-2 mt-3">
+                <input
+                  autoFocus
+                  type="text"
+                  value={overrideText}
+                  onChange={(e) => setOverrideText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitOverride();
+                    if (e.key === "Escape") setOverrideOpen(false);
+                  }}
+                  placeholder="Enter game name..."
+                  className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/40"
+                />
+                <Btn
+                  onClick={submitOverride}
+                  disabled={overrideSubmitting || !overrideText.trim()}
+                >
+                  Broadcast
+                </Btn>
+                <Btn variant="ghost" onClick={() => setOverrideOpen(false)}>
+                  Cancel
+                </Btn>
+              </div>
+            )}
           </div>
         </div>
       </Card>

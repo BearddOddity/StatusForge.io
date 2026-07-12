@@ -437,6 +437,10 @@ pub struct NativeEngineState {
     pub start_time: Mutex<f64>,
     /// Grace period tracker
     pub lost_focus_time: Mutex<Option<f64>>,
+    /// Manual override: (title, expires-at unix-epoch-seconds). While set
+    /// and unexpired, spawn_engine_loop skips normal detection entirely so
+    /// the waterfall can't immediately overwrite what the user forced.
+    pub override_until: Mutex<Option<(String, f64)>>,
     /// Live status feed for WebSocket widget subscribers
     pub status_tx: tokio::sync::watch::Sender<serde_json::Value>,
 }
@@ -455,6 +459,7 @@ impl Default for NativeEngineState {
             is_playing: Mutex::new(false),
             start_time: Mutex::new(0.0),
             lost_focus_time: Mutex::new(None),
+            override_until: Mutex::new(None),
             status_tx,
         }
     }
@@ -693,6 +698,55 @@ pub fn on_game_detected(
     });
 }
 
+/// Force a game, bypassing the detection waterfall entirely: broadcasts it
+/// to Twitch/Kick immediately (via the same `on_game_detected` path normal
+/// detection uses — library upsert + metadata scan included), and holds it
+/// for 5 minutes so the next detection tick can't immediately overwrite it.
+/// Calling this again while an override is already active just resets the
+/// 5-minute window against the new title.
+#[tauri::command]
+fn override_game(
+    title: String,
+    state: tauri::State<Arc<NativeEngineState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("Game name cannot be empty".to_string());
+    }
+
+    let base = app_base_dir()?;
+    let config = auth::load_config_at(&base)?;
+
+    let game = GameDetection {
+        title: title.clone(),
+        process: "manual-override".to_string(),
+        platform: "Manual Override".to_string(),
+    };
+    state.set_playing(&game);
+    let _ = app_handle.emit("game-detected", &game);
+    state.push_status();
+
+    on_game_detected(&base, &config, &title, &game.process, state.inner(), &app_handle);
+
+    let expires_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+        + 300.0;
+    *state.override_until.lock().unwrap() = Some((title.clone(), expires_at));
+
+    Ok(format!("Broadcasting \"{}\" — override active for 5 minutes", title))
+}
+
+/// Cancel an active manual override early so normal detection resumes on
+/// the next tick, instead of waiting out the full 5 minutes.
+#[tauri::command]
+fn clear_override_game(state: tauri::State<Arc<NativeEngineState>>) -> Result<String, String> {
+    *state.override_until.lock().unwrap() = None;
+    Ok("Override cleared".to_string())
+}
+
 /// Start the native engine detection loop in a background thread.
 /// Runs natively on Windows, macOS, and Linux.
 #[tauri::command]
@@ -809,6 +863,30 @@ fn spawn_engine_loop(
                 }
                 std::thread::sleep(Duration::from_secs(scan_interval));
                 continue;
+            }
+
+            // Manual override active: hold the forced title and skip normal
+            // detection entirely this tick, so the waterfall can't immediately
+            // overwrite what the user just forced via override_game(). Keeps
+            // the loop's local current_game in sync so a later expiry falls
+            // through to normal detection cleanly instead of tripping the
+            // grace-period "game closed" path against a stale value.
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64();
+            let override_snapshot = state_arc.override_until.lock().unwrap().clone();
+            if let Some((override_title, expires_at)) = override_snapshot {
+                if now < expires_at {
+                    current_game = Some(override_title);
+                    lost_focus_time = None;
+                    std::thread::sleep(Duration::from_secs(scan_interval));
+                    continue;
+                } else {
+                    *state_arc.override_until.lock().unwrap() = None;
+                    log::info!("[NATIVE] Manual override expired: {}", override_title);
+                    let _ = app_handle.emit("override-cleared", &override_title);
+                }
             }
 
             // Load full forge DB (listed/delisted for the scanner, library for category push)
@@ -2026,6 +2104,8 @@ pub fn run() {
             start_native_engine_loop,
             stop_native_engine_loop,
             get_native_engine_status,
+            override_game,
+            clear_override_game,
             kick_login,
             twitch_login,
             kick_refresh_token,
