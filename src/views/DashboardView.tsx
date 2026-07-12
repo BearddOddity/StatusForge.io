@@ -152,7 +152,10 @@ export default function DashboardView({
     setOverrideSubmitting(true);
     try {
       const r = await tauriApi("override_game", { title: name });
-      toast(typeof r === "string" ? r : "Failed to override", typeof r === "string" ? "success" : "error");
+      toast(
+        typeof r === "string" ? r : "Failed to override",
+        typeof r === "string" ? "success" : "error"
+      );
       setOverrideOpen(false);
       setOverrideText("");
     } finally {
@@ -430,10 +433,7 @@ export default function DashboardView({
                   placeholder="Enter game name..."
                   className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/40"
                 />
-                <Btn
-                  onClick={submitOverride}
-                  disabled={overrideSubmitting || !overrideText.trim()}
-                >
+                <Btn onClick={submitOverride} disabled={overrideSubmitting || !overrideText.trim()}>
                   Broadcast
                 </Btn>
                 <Btn variant="ghost" onClick={() => setOverrideOpen(false)}>

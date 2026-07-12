@@ -19,6 +19,7 @@
 //! On macOS, reading window titles requires the Screen Recording permission;
 //! see `platform::permission_error`.
 
+pub mod alias;
 pub mod platform;
 pub mod waterfall;
 

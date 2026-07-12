@@ -318,8 +318,8 @@ fn export_config(payload: Option<ConfigExportPayload>) -> Result<serde_json::Val
         let p = std::path::PathBuf::from(p);
         assert_path_in_base(&p, &base)?;
         return if p.exists() {
-            let content = std::fs::read_to_string(&p)
-                .map_err(|e| format!("Failed to read config: {}", e))?;
+            let content =
+                std::fs::read_to_string(&p).map_err(|e| format!("Failed to read config: {}", e))?;
             let config: AppConfig = serde_json::from_str(&content)
                 .map_err(|e| format!("Failed to parse config: {}", e))?;
             Ok(serde_json::json!(config))
@@ -714,6 +714,12 @@ fn override_game(
     if title.is_empty() {
         return Err("Game name cannot be empty".to_string());
     }
+    // Stage 0 alias resolution — typing "DS3" into the override box should
+    // land on the same canonical title detection would.
+    let title = server::load_db()
+        .ok()
+        .and_then(|db| config::resolve_title_alias(&db, &title))
+        .unwrap_or(title);
 
     let base = app_base_dir()?;
     let config = auth::load_config_at(&base)?;
@@ -727,7 +733,14 @@ fn override_game(
     let _ = app_handle.emit("game-detected", &game);
     state.push_status();
 
-    on_game_detected(&base, &config, &title, &game.process, state.inner(), &app_handle);
+    on_game_detected(
+        &base,
+        &config,
+        &title,
+        &game.process,
+        state.inner(),
+        &app_handle,
+    );
 
     let expires_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -736,7 +749,10 @@ fn override_game(
         + 300.0;
     *state.override_until.lock().unwrap() = Some((title.clone(), expires_at));
 
-    Ok(format!("Broadcasting \"{}\" — override active for 5 minutes", title))
+    Ok(format!(
+        "Broadcasting \"{}\" — override active for 5 minutes",
+        title
+    ))
 }
 
 /// Cancel an active manual override early so normal detection resumes on
@@ -924,6 +940,18 @@ fn spawn_engine_loop(
 
             let detected = scout.scout_active_session();
 
+            // Stage 0: user-created aliases map a raw detected title to its
+            // canonical library title before it reaches state, broadcasting,
+            // or the library upsert — so "ダークソウルズ3" or "DS3" becomes
+            // "Dark Souls III" everywhere downstream.
+            let detected = detected.map(|mut game| {
+                if let Some(canonical) = config::resolve_title_alias(&forge_db, &game.title) {
+                    log::info!("[NATIVE] Alias: \"{}\" → \"{}\"", game.title, canonical);
+                    game.title = canonical;
+                }
+                game
+            });
+
             if let Some(game) = detected {
                 lost_focus_time = None;
 
@@ -1070,8 +1098,16 @@ fn delete_secret_token(service_name: String) -> Result<String, String> {
 #[tauri::command]
 fn disconnect_platform(platform: String) -> Result<String, String> {
     let keychain_names: &[&str] = match platform.as_str() {
-        "twitch" => &["twitch_access_token", "twitch_refresh_token", "twitch_client_secret"],
-        "kick" => &["kick_access_token", "kick_refresh_token", "kick_client_secret"],
+        "twitch" => &[
+            "twitch_access_token",
+            "twitch_refresh_token",
+            "twitch_client_secret",
+        ],
+        "kick" => &[
+            "kick_access_token",
+            "kick_refresh_token",
+            "kick_client_secret",
+        ],
         _ => return Err(format!("Unknown platform: {}", platform)),
     };
     for name in keychain_names {

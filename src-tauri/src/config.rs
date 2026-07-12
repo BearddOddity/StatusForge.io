@@ -184,6 +184,34 @@ pub enum RoutingMode {
     Native,
 }
 
+/// A user-created alternative name for a game (language variant,
+/// abbreviation, misleading window title, ...). Stored on the canonical
+/// library entry itself, so an alias can only point at a canonical title —
+/// alias→alias chaining is unrepresentable by construction.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[serde(default)]
+pub struct GameAlias {
+    pub name: String,
+    /// 1 = highest; resolution tie-breaker #1.
+    #[serde(default = "default_alias_priority")]
+    pub priority: u8,
+    /// Language tag ("en", "ja", ...); resolution tie-breaker #2.
+    #[serde(default = "default_alias_language")]
+    pub language: String,
+    /// Sortable creation timestamp (zero-padded unix seconds — no chrono
+    /// dep here); final resolution tie-breaker (oldest wins, string order).
+    pub added_at: String,
+    /// User-flagged preferred alias; resolution tie-breaker #3.
+    pub preferred: bool,
+}
+
+fn default_alias_priority() -> u8 {
+    1
+}
+fn default_alias_language() -> String {
+    "en".to_string()
+}
+
 /// Forge database entry
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(default)]
@@ -238,6 +266,12 @@ pub struct ForgeLibraryEntry {
     /// until they edit that field again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locked_fields: Vec<String>,
+    /// User-created alternative names that resolve to this entry's title
+    /// during detection (Stage 0, before broadcasting/library upsert).
+    /// Absent from serialized output when empty, so pre-alias
+    /// Forge_Database.json files round-trip byte-identically.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<GameAlias>,
 }
 
 /// Forge database
@@ -273,6 +307,39 @@ pub fn find_library_key(db: &ForgeDatabase, title: &str) -> Option<String> {
         .keys()
         .find(|k| k.trim().to_lowercase() == needle_lower)
         .cloned()
+}
+
+/// Stage 0 of detection: resolve a raw detected title through the library's
+/// user-created aliases to its canonical title. Returns `None` when no alias
+/// matches — the caller keeps the raw title as-is. A raw title that already
+/// IS a canonical library title never goes through aliases (its own entry
+/// wins outright), so an alias can never shadow a real library title.
+///
+/// Only "en" is selectable as UI language today, so the system-language
+/// tie-breaker is pinned to "en" here; thread the real locale through when
+/// more languages ship.
+pub fn resolve_title_alias(db: &ForgeDatabase, raw_title: &str) -> Option<String> {
+    if find_library_key(db, raw_title).is_some() {
+        return None;
+    }
+    let records: Vec<forge_detection::alias::AliasRecord> = db
+        .library
+        .values()
+        .flat_map(|entry| {
+            entry
+                .aliases
+                .iter()
+                .map(|a| forge_detection::alias::AliasRecord {
+                    canonical: entry.title.clone(),
+                    name: a.name.clone(),
+                    priority: a.priority,
+                    language: a.language.clone(),
+                    added_at: a.added_at.clone(),
+                    preferred: a.preferred,
+                })
+        })
+        .collect();
+    forge_detection::alias::resolve_alias(raw_title, &records, "en")
 }
 
 /// Engine status returned to frontend

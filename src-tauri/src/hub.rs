@@ -136,8 +136,15 @@ pub fn apply_heartbeat(
 
     match (&hb.game, &hb.process) {
         (Some(game), process) => {
+            // Stage 0 alias resolution, same as the local engine loop —
+            // SPARK forwards raw titles and this app owns the library, so
+            // a SPARK-sourced "DS3" must land as "Dark Souls III" too.
+            let title = crate::server::load_db()
+                .ok()
+                .and_then(|db| crate::config::resolve_title_alias(&db, game))
+                .unwrap_or_else(|| game.clone());
             let detection = GameDetection {
-                title: game.clone(),
+                title,
                 process: process.clone().unwrap_or_default(),
                 platform: format!("SPARK ({})", hb.hostname),
             };

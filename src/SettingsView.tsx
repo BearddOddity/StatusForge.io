@@ -1867,7 +1867,9 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                             ? disconnectRoute(entry as (typeof ROUTING_CATALOG)[number])
                             : removeRouteEntry(entry as (typeof ROUTING_CATALOG)[number])
                         }
-                        removeLabel={managedFields && managedFields.length > 0 ? "Disconnect" : "Remove"}
+                        removeLabel={
+                          managedFields && managedFields.length > 0 ? "Disconnect" : "Remove"
+                        }
                       />
                     </div>
 

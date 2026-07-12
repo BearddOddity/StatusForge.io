@@ -98,6 +98,17 @@ export interface AppConfig {
   broadcaster: BroadcasterConfig;
 }
 
+// A user-created alternative name that detection resolves to the entry's
+// canonical title (Stage 0). Metadata beyond `name` is managed backend-side;
+// the editor round-trips names as a comma-separated string.
+export interface GameAlias {
+  name: string;
+  priority: number;
+  language: string;
+  added_at: string;
+  preferred: boolean;
+}
+
 export interface ForgeLibraryEntry {
   title: string;
   genre: string;
@@ -118,6 +129,8 @@ export interface ForgeLibraryEntry {
   xbox_title_id: string;
   epic_id: string;
   executables: string;
+  // Absent on entries with no aliases (backend skips serializing empty).
+  aliases?: GameAlias[];
 }
 
 export interface ForgeDatabase {

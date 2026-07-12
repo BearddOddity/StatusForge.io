@@ -182,6 +182,18 @@ pub fn upsert_library_entry(
         .and_then(|k| db.library.remove(k))
         .unwrap_or_default();
 
+    // The editor sends `aliases` as a comma-separated string (same shape as
+    // `executables`); resolve it into structured GameAlias values BEFORE the
+    // serde overlay below, which would reject a bare string where the entry
+    // expects a Vec. An array body (future richer editor / import) passes
+    // through the overlay untouched.
+    let parsed_aliases = match body.get("aliases") {
+        Some(serde_json::Value::String(s)) => {
+            Some(parse_alias_names(db, &title, s, &existing.aliases)?)
+        }
+        _ => None,
+    };
+
     // Overlay on the serialized existing entry — serde ignores unknown keys,
     // so arbitrary extra body fields are dropped and known ones merge in.
     let mut obj = match serde_json::to_value(&existing) {
@@ -196,6 +208,12 @@ pub fn upsert_library_entry(
             other => other,
         };
         obj.insert(key.to_string(), v.clone());
+    }
+    if let Some(aliases) = parsed_aliases {
+        obj.insert(
+            "aliases".to_string(),
+            serde_json::to_value(aliases).map_err(|e| format!("alias serialize failed: {}", e))?,
+        );
     }
     obj.insert(
         "title".to_string(),
@@ -260,6 +278,66 @@ fn split_executables(s: &str) -> Vec<String> {
         })
         .filter(|p| !p.is_empty())
         .collect()
+}
+
+/// Parse the editor's comma-separated alias field into structured
+/// `GameAlias` values for the entry being saved (`entry_title`).
+///
+/// - A name already on the entry keeps its metadata (priority/language/
+///   added_at/preferred survive a round-trip through the text field).
+/// - A new name gets defaults + a fresh timestamp.
+/// - The entry's own title and within-entry duplicates are dropped silently
+///   (both are no-ops, not user errors worth failing a whole save over).
+/// - A name that matches a DIFFERENT entry's canonical title is rejected:
+///   resolve_title_alias gives canonical titles precedence over aliases, so
+///   such an alias could never fire — saving it would only mislead.
+fn parse_alias_names(
+    db: &ForgeDatabase,
+    entry_title: &str,
+    raw: &str,
+    existing: &[crate::config::GameAlias],
+) -> Result<Vec<crate::config::GameAlias>, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let entry_title_norm = forge_detection::alias::normalize_alias_name(entry_title);
+
+    let mut seen: Vec<String> = Vec::new();
+    let mut out: Vec<crate::config::GameAlias> = Vec::new();
+    for part in raw.split(',') {
+        let name = part.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let norm = forge_detection::alias::normalize_alias_name(name);
+        if norm == entry_title_norm || seen.contains(&norm) {
+            continue;
+        }
+        if let Some(other) = crate::config::find_library_key(db, name) {
+            if forge_detection::alias::normalize_alias_name(&other) != entry_title_norm {
+                return Err(format!(
+                    "\"{}\" is already a game in your library — an alias can't shadow another game's title",
+                    name
+                ));
+            }
+        }
+        seen.push(norm.clone());
+        out.push(
+            existing
+                .iter()
+                .find(|a| forge_detection::alias::normalize_alias_name(&a.name) == norm)
+                .cloned()
+                .unwrap_or_else(|| crate::config::GameAlias {
+                    name: name.to_string(),
+                    priority: 1,
+                    language: "en".to_string(),
+                    added_at: format!("{:010}", now),
+                    preferred: false,
+                }),
+        );
+    }
+    Ok(out)
 }
 
 /// Remove a process (case-insensitive) from the delisted list.
@@ -829,6 +907,93 @@ mod tests {
             db.listed_apps.get("apblauncher.exe"),
             Some(&"APB Reloaded".to_string())
         );
+    }
+
+    #[test]
+    fn aliases_string_field_parses_into_structured_aliases() {
+        let mut db = ForgeDatabase::default();
+        let body = serde_json::json!({
+            "title": "Dark Souls III",
+            "aliases": "DS3, Dark Souls 3, ",
+        });
+        upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+        let aliases = &db.library["Dark Souls III"].aliases;
+        assert_eq!(aliases.len(), 2);
+        assert_eq!(aliases[0].name, "DS3");
+        assert_eq!(aliases[0].priority, 1);
+        assert_eq!(aliases[0].language, "en");
+        assert!(!aliases[0].added_at.is_empty());
+        assert_eq!(aliases[1].name, "Dark Souls 3");
+    }
+
+    #[test]
+    fn alias_reedit_preserves_metadata_and_dedupes() {
+        let mut db = ForgeDatabase::default();
+        let first = serde_json::json!({ "title": "Dark Souls III", "aliases": "DS3" });
+        upsert_library_entry(&mut db, first.as_object().unwrap()).unwrap();
+        let original_added_at = db.library["Dark Souls III"].aliases[0].added_at.clone();
+
+        // Re-save with the same name (different case), a duplicate, the
+        // entry's own title, and one new name.
+        let second = serde_json::json!({
+            "title": "Dark Souls III",
+            "aliases": "ds3, DS3, Dark Souls III, Souls III",
+        });
+        upsert_library_entry(&mut db, second.as_object().unwrap()).unwrap();
+        let aliases = &db.library["Dark Souls III"].aliases;
+        assert_eq!(aliases.len(), 2);
+        assert_eq!(aliases[0].added_at, original_added_at); // metadata survives
+        assert_eq!(aliases[1].name, "Souls III");
+    }
+
+    #[test]
+    fn alias_shadowing_another_library_title_is_rejected() {
+        let mut db = ForgeDatabase::default();
+        let other = serde_json::json!({ "title": "Elden Ring" });
+        upsert_library_entry(&mut db, other.as_object().unwrap()).unwrap();
+
+        let body = serde_json::json!({
+            "title": "Dark Souls III",
+            "aliases": "elden ring",
+        });
+        assert!(upsert_library_entry(&mut db, body.as_object().unwrap()).is_err());
+        // The failed save must not have inserted a half-built entry.
+        assert!(db.library.get("Dark Souls III").is_none());
+    }
+
+    #[test]
+    fn entry_without_aliases_serializes_without_aliases_key() {
+        // Backward compat: pre-alias Forge_Database.json round-trips with no
+        // new keys appearing on entries that have no aliases.
+        let mut db = ForgeDatabase::default();
+        let body = serde_json::json!({ "title": "Celeste" });
+        upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+        let json = serde_json::to_value(&db.library["Celeste"]).unwrap();
+        assert!(json.get("aliases").is_none());
+    }
+
+    #[test]
+    fn resolve_title_alias_prefers_canonical_titles_over_aliases() {
+        let mut db = ForgeDatabase::default();
+        let a = serde_json::json!({ "title": "Dark Souls III", "aliases": "DS3" });
+        upsert_library_entry(&mut db, a.as_object().unwrap()).unwrap();
+
+        // A raw title that IS a library title resolves to itself (None).
+        assert_eq!(
+            crate::config::resolve_title_alias(&db, "Dark Souls III"),
+            None
+        );
+        assert_eq!(
+            crate::config::resolve_title_alias(&db, "dark souls iii "),
+            None
+        );
+        // An alias resolves to the canonical title, case-insensitively.
+        assert_eq!(
+            crate::config::resolve_title_alias(&db, " ds3"),
+            Some("Dark Souls III".to_string())
+        );
+        // Unknown titles stay unresolved.
+        assert_eq!(crate::config::resolve_title_alias(&db, "Elden Ring"), None);
     }
 
     #[test]

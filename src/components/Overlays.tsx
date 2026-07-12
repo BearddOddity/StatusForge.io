@@ -22,6 +22,7 @@ interface OverlayMetadataPanelProps {
         rawg_id: string;
         twitch_id: string;
         kick_id: string;
+        aliases?: { name: string }[];
       }
     | undefined;
   isOpen: boolean;
@@ -47,6 +48,12 @@ const FIELD_SECTIONS = [
         label: "File Name(s)",
         placeholder: "e.g. FalloutNV.exe",
         hint: "The exact .exe the scanner should match to this title (comma-separate more than one, full paths are fine too — only the file name is used). Fixes a game that's detected under the wrong name or not detected at all.",
+      },
+      {
+        key: "aliases",
+        label: "Detection Aliases",
+        placeholder: "e.g. DS3, Dark Souls 3",
+        hint: "Alternative names (abbreviations, other languages, odd window titles) that should resolve to this game — comma-separate more than one. Matching is case-insensitive.",
       },
     ],
   },
@@ -95,6 +102,7 @@ export function OverlayMetadataPanel({
         cover_url: entry.cover_url || "",
         logo_url: entry.logo_url || "",
         executables: entry.executables || "",
+        aliases: (entry.aliases || []).map((a) => a.name).join(", "),
         steam_id: entry.steam_id || "",
         igdb_id: entry.igdb_id || "",
         rawg_id: entry.rawg_id || "",
@@ -264,7 +272,10 @@ export function OverlayMetadataPanel({
                       }
                       onSave={(val) => onSave({ title: editData.title, [field.key]: val })}
                       onSearch={
-                        field.key !== "title" && field.key !== "executables" && entry.title
+                        field.key !== "title" &&
+                        field.key !== "executables" &&
+                        field.key !== "aliases" &&
+                        entry.title
                           ? () => runScan(field.key)
                           : undefined
                       }
