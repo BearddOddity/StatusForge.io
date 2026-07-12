@@ -958,7 +958,7 @@ mod tests {
         });
         assert!(upsert_library_entry(&mut db, body.as_object().unwrap()).is_err());
         // The failed save must not have inserted a half-built entry.
-        assert!(db.library.get("Dark Souls III").is_none());
+        assert!(!db.library.contains_key("Dark Souls III"));
     }
 
     #[test]
