@@ -5,12 +5,16 @@ import { relaunch } from "@tauri-apps/plugin-process";
 // Checks for a StatusForge update once per app launch. A failed/offline
 // check is silent — it's a background convenience, not something that
 // should ever interrupt someone trying to use the app.
-export function useUpdater(toast: (msg: string, type?: "success" | "error" | "info") => void) {
+export function useUpdater(
+  toast: (msg: string, type?: "success" | "error" | "info") => void,
+  autoCheckEnabled: boolean = true
+) {
   const [update, setUpdate] = useState<Update | null>(null);
   const [installing, setInstalling] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    if (!autoCheckEnabled) return;
     let cancelled = false;
     check()
       .then((result) => {
@@ -22,7 +26,7 @@ export function useUpdater(toast: (msg: string, type?: "success" | "error" | "in
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [autoCheckEnabled]);
 
   const install = useCallback(async () => {
     if (!update) return;

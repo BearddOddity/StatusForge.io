@@ -311,20 +311,30 @@ async fn get_widget_token() -> Result<String, String> {
 fn export_config(payload: Option<ConfigExportPayload>) -> Result<serde_json::Value, String> {
     let payload = payload.unwrap_or_default();
     let base = app_base_dir()?;
-    let config_path = if let Some(ref p) = payload.path {
+
+    // Explicit path override (backup/import file, not the live Config.json):
+    // read it raw, exactly as written — no keychain involvement.
+    if let Some(ref p) = payload.path {
         let p = std::path::PathBuf::from(p);
         assert_path_in_base(&p, &base)?;
-        p
-    } else {
-        base.join("Config.json")
-    };
+        return if p.exists() {
+            let content = std::fs::read_to_string(&p)
+                .map_err(|e| format!("Failed to read config: {}", e))?;
+            let config: AppConfig = serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse config: {}", e))?;
+            Ok(serde_json::json!(config))
+        } else {
+            Ok(serde_json::json!({}))
+        };
+    }
 
-    if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path)
-            .map_err(|e| format!("Failed to read config: {}", e))?;
-        let config: AppConfig =
-            serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
-        // Return full config — this is a local Tauri app, no need to redact
+    // Live Config.json: go through auth::load_config_at so tokens already
+    // migrated to the OS keychain are backfilled into the returned config —
+    // otherwise Settings would show Twitch/Kick as disconnected the moment
+    // migrate_tokens_to_keychain blanks them out of the file, even though
+    // the engine (which does load through this path) is broadcasting fine.
+    if base.join("Config.json").exists() {
+        let config = auth::load_config_at(&base)?;
         Ok(serde_json::json!(config))
     } else {
         Ok(serde_json::json!({}))
@@ -356,6 +366,15 @@ fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
         if let Err(e) = std::fs::copy(&config_path, config_path.with_extension("json.bak")) {
             log::warn!("Config backup failed: {}", e);
         }
+    }
+
+    // Saving the live Config.json (no explicit override path): export_config
+    // backfills keychain-migrated secrets into what the frontend edits, so
+    // saving an unrelated setting must not let that backfilled value round-trip
+    // back into plaintext on disk — re-sync it into the keychain and blank it
+    // here first, same as auth::save_config_at does for every other writer.
+    if payload.path.is_none() {
+        auth::redact_migrated_secrets(&mut config);
     }
 
     // Write with atomic temp-file-then-rename
@@ -962,6 +981,48 @@ fn delete_secret_token(service_name: String) -> Result<String, String> {
         .delete_credential()
         .map_err(|e| format!("Failed to delete token from keychain: {}", e))?;
     Ok(format!("Token '{}' deleted from OS keychain", service_name))
+}
+
+/// Disconnect a broadcaster platform: purge its OAuth secrets from the OS
+/// keychain and clear them from Config.json. A prior "Remove" in Settings
+/// only cleared the in-memory/on-disk fields — since redact_migrated_secrets
+/// only *syncs* a non-empty field into the keychain, clearing to "" never
+/// deleted the keychain entry, so the next `load_config_at` backfilled the
+/// token right back in. This deletes the keychain entry outright.
+#[tauri::command]
+fn disconnect_platform(platform: String) -> Result<String, String> {
+    let keychain_names: &[&str] = match platform.as_str() {
+        "twitch" => &["twitch_access_token", "twitch_refresh_token", "twitch_client_secret"],
+        "kick" => &["kick_access_token", "kick_refresh_token", "kick_client_secret"],
+        _ => return Err(format!("Unknown platform: {}", platform)),
+    };
+    for name in keychain_names {
+        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, name) {
+            match entry.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => {}
+                Err(e) => log::warn!("[KEYCHAIN] Failed to delete {} on disconnect: {}", name, e),
+            }
+        }
+    }
+
+    let base = app_base_dir()?;
+    let mut config = auth::load_config_at(&base).unwrap_or_default();
+    match platform.as_str() {
+        "twitch" => {
+            config.broadcaster.twitch_token.clear();
+            config.broadcaster.twitch_refresh.clear();
+            config.broadcaster.twitch_secret.clear();
+        }
+        "kick" => {
+            config.broadcaster.kick_token.clear();
+            config.broadcaster.kick_refresh.clear();
+            config.broadcaster.kick_secret.clear();
+        }
+        _ => unreachable!("validated above"),
+    }
+    auth::save_config_at(&base, &config)?;
+
+    Ok(format!("{} disconnected", platform))
 }
 
 /// Migrate all OAuth tokens from Config.json to OS keychain.
@@ -1955,6 +2016,7 @@ pub fn run() {
             store_secret_token,
             get_secret_token,
             delete_secret_token,
+            disconnect_platform,
             migrate_tokens_to_keychain,
             get_all_keychain_tokens,
             hub::hub_get_status,

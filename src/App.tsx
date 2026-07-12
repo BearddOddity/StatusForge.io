@@ -23,7 +23,7 @@ import DevView from "@/dev/DevView";
 function App() {
   const [currentView, setCurrentView] = useState<ViewId>("dashboard");
   const { toasts, add: toast } = useToasts();
-  const updater = useUpdater(toast);
+  const updater = useUpdater(toast, loadSystemPrefs().autoUpdateCheckEnabled);
 
   // Dev Tools sidebar tab visibility is a persisted System setting (Settings >
   // System > Developer Tools > "Dev Tools Tab"), not a hidden unlock gesture.

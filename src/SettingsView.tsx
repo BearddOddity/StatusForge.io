@@ -1348,6 +1348,26 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
     toast("Integration removed — save to confirm", "info");
   };
 
+  // OAuth-backed entries (Twitch/Kick) route through disconnect_platform,
+  // which deletes the token from the OS keychain, not just Config.json —
+  // clearing fields alone leaves the keychain entry in place, so the next
+  // config load backfills the "removed" token right back in. Runs and
+  // persists immediately, unlike removeRouteEntry's "save to confirm".
+  const disconnectRoute = async (entry: (typeof ROUTING_CATALOG)[number]) => {
+    try {
+      await tauriApi("disconnect_platform", { platform: entry.key });
+    } catch (e) {
+      toast(`Failed to disconnect ${entry.label}: ${e}`, "error");
+      return;
+    }
+    if (editingKey === entry.key) setEditingKey(null);
+    // disconnect_platform already persisted the change to disk — reload
+    // rather than locally clearing fields, so state matches what's saved.
+    const res = await tauriApi("export_config").catch(() => null);
+    if (res) setConfig(res as AppConfig);
+    toast(`${entry.label} disconnected. Reconnect any time in API & Routing.`, "success");
+  };
+
   // If a manually-pasted access token is already present, validate it
   // directly instead of launching the OAuth popup — that's the whole point
   // of the "Access Token (Optional)" field as an alternate connection path.
@@ -1842,7 +1862,12 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                       <EditRemoveButtons
                         isEditing={isEditing}
                         onToggleEdit={() => setEditingKey(isEditing ? null : entry.key)}
-                        onRemove={() => removeRouteEntry(entry as (typeof ROUTING_CATALOG)[number])}
+                        onRemove={() =>
+                          managedFields && managedFields.length > 0
+                            ? disconnectRoute(entry as (typeof ROUTING_CATALOG)[number])
+                            : removeRouteEntry(entry as (typeof ROUTING_CATALOG)[number])
+                        }
+                        removeLabel={managedFields && managedFields.length > 0 ? "Disconnect" : "Remove"}
                       />
                     </div>
 
@@ -2552,6 +2577,20 @@ function SystemSubTab({
               value={prefs.language}
               options={[{ value: "en", label: "English (US)" }]}
               onChange={(v) => set("language", v)}
+            />
+          </div>
+          <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
+            <div>
+              <span className="text-xs text-white/75 font-medium font-sans">
+                Automatically Check for Updates
+              </span>
+              <p className="text-[10px] text-white/35 mt-0.5">
+                Check GitHub releases once per launch. Installing an update is always your call.
+              </p>
+            </div>
+            <Toggle
+              on={prefs.autoUpdateCheckEnabled}
+              onToggle={() => toggle("autoUpdateCheckEnabled")}
             />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">

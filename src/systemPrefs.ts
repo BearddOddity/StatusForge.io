@@ -22,6 +22,7 @@ export interface SystemPrefs {
   // (latest.json). Feed this into per-channel manifests once signing/releases
   // publish them.
   updateChannel: "stable" | "beta" | "closed-beta";
+  autoUpdateCheckEnabled: boolean;
   showDevTools: boolean;
   // Reveals the OAuth-managed token previews in Settings > API & Routing
   // (Access/Refresh Token). Off by default — those values stay masked.
@@ -43,6 +44,7 @@ export const defaultSystemPrefs: SystemPrefs = {
   customWebhookUrl: "",
   wsAutoReconnect: true,
   updateChannel: "stable",
+  autoUpdateCheckEnabled: true,
   showDevTools: false,
   showAccessTokens: false,
 };

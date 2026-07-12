@@ -877,7 +877,7 @@ pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<
 /// (picks up a refreshed token) and blank it before it's serialized — so
 /// Config.json never regains a plaintext secret once migrated, regardless
 /// of which code path loaded (and keychain-backfilled) this config first.
-fn redact_migrated_secrets(config: &mut AppConfig) {
+pub(crate) fn redact_migrated_secrets(config: &mut AppConfig) {
     let sync = |field: &mut String, keychain_name: &str| {
         if field.is_empty() {
             return;
