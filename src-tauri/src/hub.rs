@@ -84,7 +84,7 @@ fn read_pairing() -> (String, String) {
 /// when a SPARK-sourced game clears, mirroring the native loop's
 /// grace-period-expired path. Never errors — logs and gives up quietly,
 /// same as every other pusher call site.
-fn push_idle_category(base: &std::path::Path) {
+fn push_idle_category(base: &std::path::Path, app_handle: Option<&tauri::AppHandle>) {
     let Ok(config) = crate::auth::load_config_at(base) else {
         return;
     };
@@ -93,12 +93,15 @@ fn push_idle_category(base: &std::path::Path) {
             .ok()
             .and_then(|c| serde_json::from_str(&c).ok())
             .unwrap_or_default();
-    crate::pusher::push_category(
+    let health_events = crate::pusher::push_category(
         base,
         &config,
         &forge_db,
         &config.engine_settings.idle_category,
     );
+    if let Some(app) = app_handle {
+        crate::emit_health_events(app, &health_events);
+    }
 }
 
 /// Apply a validated heartbeat to the shared engine state so overlays and the
@@ -187,7 +190,7 @@ pub fn apply_heartbeat(
                     let _ = app.emit("game-cleared", "SPARK idle");
                 }
                 if let Ok(base) = crate::app_base_dir() {
-                    push_idle_category(&base);
+                    push_idle_category(&base, app_handle);
                 }
             }
         }

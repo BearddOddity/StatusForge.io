@@ -211,6 +211,18 @@ function App() {
       listen<string>("override-cleared", (e) => {
         toast(`Override cleared — resuming automatic detection (was ${e.payload})`, "info");
       }),
+      // Platform API downtime: the backend queues category pushes while a
+      // platform is unreachable and probes every 30s; these fire once per
+      // transition, not per failed attempt.
+      listen<string>("platform-down", (e) => {
+        toast(
+          `⚠️ ${e.payload} API unreachable — broadcasting paused, retrying automatically`,
+          "error"
+        );
+      }),
+      listen<string>("platform-recovered", (e) => {
+        toast(`✅ ${e.payload} API recovered — broadcasting resumed`, "success");
+      }),
     ];
     return () => {
       subs.forEach((s) => s.then((u) => u()).catch(() => {}));

@@ -583,6 +583,21 @@ fn ensure_idle_library_entry(base: &std::path::Path) {
     }
 }
 
+/// Forward pusher health transitions to the frontend as toastable events.
+/// "platform-down" fires once when a platform's API stops answering (the
+/// pusher then queues detections instead of pushing); "platform-recovered"
+/// fires once when the 30s health probe gets through again.
+pub(crate) fn emit_health_events(app: &tauri::AppHandle, events: &[pusher::HealthEvent]) {
+    for e in events {
+        let name = if e.recovered {
+            "platform-recovered"
+        } else {
+            "platform-down"
+        };
+        let _ = app.emit(name, e.platform);
+    }
+}
+
 /// Shared by the native engine loop and the LAN Hub (hub.rs): whichever
 /// detects a new game — this PC's own scanner or a paired SPARK agent on a
 /// second PC — funnels through here for the exact same treatment. SPARK
@@ -608,7 +623,8 @@ pub fn on_game_detected(
         .and_then(|c| serde_json::from_str(&c).ok())
         .unwrap_or_default();
 
-    pusher::push_category(base, config, &forge_db, game_title);
+    let health_events = pusher::push_category(base, config, &forge_db, game_title);
+    emit_health_events(app_handle, &health_events);
 
     // Reload fresh rather than reusing the snapshot above, to avoid
     // clobbering a concurrent write from the axum server. Resolve through
@@ -1010,7 +1026,9 @@ fn spawn_engine_loop(
 
                         // Native category push back to the idle category
                         if let Some(cfg) = config.as_ref() {
-                            pusher::push_category(&base, cfg, &forge_db, &idle_category);
+                            let health_events =
+                                pusher::push_category(&base, cfg, &forge_db, &idle_category);
+                            emit_health_events(&app_handle, &health_events);
                         }
                     }
                 }
@@ -1703,7 +1721,10 @@ fn export_game_database(app: tauri::AppHandle) -> Result<String, String> {
 /// player to switch games again — call this right after flipping the toggle
 /// so the platform picks up the in-progress session immediately.
 #[tauri::command]
-fn refresh_platform_push(state: tauri::State<Arc<NativeEngineState>>) -> Result<bool, String> {
+fn refresh_platform_push(
+    state: tauri::State<Arc<NativeEngineState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<bool, String> {
     let game = state.current_game.lock().unwrap().clone();
     let Some(game) = game else {
         return Ok(false);
@@ -1714,7 +1735,8 @@ fn refresh_platform_push(state: tauri::State<Arc<NativeEngineState>>) -> Result<
         return Ok(false);
     }
     let forge_db = server::load_db()?;
-    pusher::push_category(&base, &config, &forge_db, &game.title);
+    let health_events = pusher::push_category(&base, &config, &forge_db, &game.title);
+    emit_health_events(&app_handle, &health_events);
     Ok(true)
 }
 
@@ -2074,6 +2096,28 @@ pub fn run() {
                 if let Err(e) = server::start_server(server_state).await {
                     log::error!("[SERVER] Failed to start widget/OAuth server: {}", e);
                 }
+            });
+
+            // Platform API health monitor: while a platform is marked down
+            // (pusher's HealthTracker), probe it every 30s by re-pushing the
+            // latest queued detection. Detection itself keeps running during
+            // an outage — push_category just queues instead of pushing — so
+            // this loop is what notices recovery and broadcasts what the
+            // user is playing now. A dedicated std::thread (not the async
+            // runtime): pusher uses blocking reqwest by design.
+            let health_app_handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                if !pusher::any_platform_down() {
+                    continue;
+                }
+                let Ok(base) = app_base_dir() else { continue };
+                let Ok(config) = auth::load_config_at(&base) else {
+                    continue;
+                };
+                let db = server::load_db().unwrap_or_default();
+                let events = pusher::retry_pending(&base, &config, &db);
+                emit_health_events(&health_app_handle, &events);
             });
 
             // Periodic Kick category database refresh. Kick's category list
