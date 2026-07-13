@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import type { EngineStatus, ToastType, SystemStats, ViewId } from "@/types";
 import {
   tauriApi,
@@ -161,6 +162,66 @@ export default function DashboardView({
     } finally {
       setOverrideSubmitting(false);
     }
+  };
+
+  // Post-broadcast feedback: "Detected X — correct?" after each automatic
+  // detection. A "No" correction is logged (per-method accuracy stats),
+  // teaches the alias system, and re-broadcasts the right game.
+  const [feedback, setFeedback] = useState<{ title: string; method: string } | null>(null);
+  const [feedbackCorrecting, setFeedbackCorrecting] = useState(false);
+  const [feedbackActual, setFeedbackActual] = useState("");
+
+  useEffect(() => {
+    const subs = [
+      listen<{ title: string; platform?: string }>("game-detected", (e) => {
+        const title = e.payload?.title ?? "";
+        const method = e.payload?.platform ?? "";
+        // Manual overrides are the user's own word — nothing to confirm.
+        if (!title || method === "Manual Override") {
+          setFeedback(null);
+          return;
+        }
+        setFeedback({ title, method });
+        setFeedbackCorrecting(false);
+        setFeedbackActual("");
+      }),
+      listen("game-cleared", () => setFeedback(null)),
+    ];
+    return () => {
+      subs.forEach((s) => s.then((u) => u()).catch(() => {}));
+    };
+  }, []);
+
+  const confirmDetection = async () => {
+    if (!feedback) return;
+    try {
+      await tauriApi("log_detection_feedback", {
+        detectedTitle: feedback.title,
+        method: feedback.method,
+        actualTitle: null,
+      });
+    } catch {
+      // Tally failure isn't worth interrupting the user over.
+    }
+    setFeedback(null);
+  };
+
+  const submitCorrection = async () => {
+    if (!feedback) return;
+    const actual = feedbackActual.trim();
+    if (!actual) return;
+    try {
+      const r = await tauriApi("log_detection_feedback", {
+        detectedTitle: feedback.title,
+        method: feedback.method,
+        actualTitle: actual,
+      });
+      toast(typeof r === "string" ? r : "Correction saved", "success");
+      await tauriApi("override_game", { title: actual });
+    } catch (e) {
+      toast(`Failed to save correction: ${e}`, "error");
+    }
+    setFeedback(null);
   };
 
   const [overlayUrls, setOverlayUrls] = useState<{ id: string; url: string; label: string }[]>([]);
@@ -439,6 +500,44 @@ export default function DashboardView({
                 <Btn variant="ghost" onClick={() => setOverrideOpen(false)}>
                   Cancel
                 </Btn>
+              </div>
+            )}
+            {feedback && isPlaying && (
+              <div className="flex items-center gap-2 mt-3">
+                {!feedbackCorrecting ? (
+                  <>
+                    <span className="text-[11px] text-white/45 truncate">
+                      Detected “{feedback.title}” — is that right?
+                    </span>
+                    <Btn variant="success" onClick={confirmDetection}>
+                      Yes
+                    </Btn>
+                    <Btn variant="ghost" onClick={() => setFeedbackCorrecting(true)}>
+                      No
+                    </Btn>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={feedbackActual}
+                      onChange={(e) => setFeedbackActual(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitCorrection();
+                        if (e.key === "Escape") setFeedback(null);
+                      }}
+                      placeholder="What game is it actually?"
+                      className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/40"
+                    />
+                    <Btn onClick={submitCorrection} disabled={!feedbackActual.trim()}>
+                      Fix &amp; Broadcast
+                    </Btn>
+                    <Btn variant="ghost" onClick={() => setFeedback(null)}>
+                      Dismiss
+                    </Btn>
+                  </>
+                )}
               </div>
             )}
           </div>

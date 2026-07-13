@@ -1,5 +1,6 @@
 mod auth;
 pub mod config;
+pub mod feedback;
 pub mod pusher;
 pub use forge_detection as scanner;
 pub mod hub;
@@ -777,6 +778,76 @@ fn override_game(
 fn clear_override_game(state: tauri::State<Arc<NativeEngineState>>) -> Result<String, String> {
     *state.override_until.lock().unwrap() = None;
     Ok("Override cleared".to_string())
+}
+
+/// Post-broadcast feedback ("Is this detection correct?"). `actual_title`
+/// is None for a confirmation; Some(actual game) for a correction. A
+/// correction also teaches the alias system — the misdetected title becomes
+/// a Detection Alias of the actual game, so the same raw title resolves
+/// correctly on every future detection pass. The caller (frontend) follows
+/// a correction up with `override_game(actual)` to fix the live broadcast.
+#[tauri::command]
+fn log_detection_feedback(
+    detected_title: String,
+    method: String,
+    actual_title: Option<String>,
+) -> Result<String, String> {
+    let base = app_base_dir()?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let detected = detected_title.trim();
+    if detected.is_empty() {
+        return Err("Detected title cannot be empty".to_string());
+    }
+    let actual = actual_title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case(detected));
+
+    let mut store = feedback::load(&base);
+    store.record(detected, method.trim(), actual, now);
+    feedback::save(&base, &store)?;
+
+    if let Some(actual) = actual {
+        // Teach the alias system: append the misdetected title to the actual
+        // game's Detection Aliases (upsert_library_entry creates the entry if
+        // it's new, validates shadowing, and dedupes repeats).
+        let mut db = server::load_db()?;
+        let existing_names: Vec<String> = config::find_library_key(&db, actual)
+            .and_then(|k| db.library.get(&k))
+            .map(|e| e.aliases.iter().map(|a| a.name.clone()).collect())
+            .unwrap_or_default();
+        let alias_csv = existing_names
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(detected))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let body = serde_json::json!({ "title": actual, "aliases": alias_csv });
+        match server::upsert_library_entry(&mut db, body.as_object().unwrap()) {
+            Ok(_) => server::save_db(&db)?,
+            // e.g. the misdetected title IS another real game's title —
+            // alias would shadow it, so skip teaching but keep the tally.
+            Err(e) => log::warn!("[FEEDBACK] Correction alias not saved: {}", e),
+        }
+        Ok(format!(
+            "Correction saved — \"{}\" will now resolve to \"{}\"",
+            detected, actual
+        ))
+    } else {
+        Ok("Detection confirmed".to_string())
+    }
+}
+
+/// Per-method detection accuracy tallies + recent corrections, for Dev Tools.
+#[tauri::command]
+fn get_detection_feedback_stats() -> Result<serde_json::Value, String> {
+    let base = app_base_dir()?;
+    let store = feedback::load(&base);
+    serde_json::to_value(&store).map_err(|e| format!("Failed to serialize stats: {}", e))
 }
 
 /// Start the native engine detection loop in a background thread.
@@ -2186,6 +2257,8 @@ pub fn run() {
             get_native_engine_status,
             override_game,
             clear_override_game,
+            log_detection_feedback,
+            get_detection_feedback_stats,
             kick_login,
             twitch_login,
             kick_refresh_token,
