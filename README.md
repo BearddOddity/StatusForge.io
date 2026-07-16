@@ -8,7 +8,7 @@ StatusForge watches what game you're playing and keeps your stream's category up
 - **Learns your library.** Every detected game gets a library entry with cover art, genre, developer, and release year pulled from Steam, IGDB, RAWG, GOG, SteamGridDB, and TheGamesDB.
 - **Handles the edge cases.** Detection aliases teach it that "DS3" and "Dark Souls III" are the same game. A manual override lets you force a category when detection guesses wrong. If Twitch or Kick's API goes down, it keeps detecting locally and catches back up automatically once the API's back.
 - **Asks when it's not sure.** After a detection, you can confirm it or correct it — corrections teach the alias system so the same mistake doesn't happen twice.
-- **Works across two PCs.** The optional SPARK companion agent runs on a separate gaming PC and forwards detections to StatusForge on your streaming PC.
+- **Works across two PCs.** The optional Blipy companion agent runs on a separate gaming PC and forwards detections to StatusForge on your streaming PC.
 - **Ships overlays.** Browser-source widgets for your streaming software, driven by the same detection engine.
 
 ## Platform support

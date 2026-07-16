@@ -1,5 +1,5 @@
 //! Dual-PC LAN path test without two machines: runs the Hub packet handler
-//! against a real SPARK-style sender over localhost UDP.
+//! against a real Blipy-style sender over localhost UDP.
 //!
 //! Asserts that a signed, correct-PIN heartbeat updates Hub status, and that
 //! wrong-PIN / bad-signature / legacy-unsigned packets are rejected.
@@ -8,8 +8,8 @@ use std::net::UdpSocket;
 use std::sync::Arc;
 use std::time::Duration;
 
+use app_lib::blipy_protocol::{build_heartbeat, Heartbeat, HeartbeatError};
 use app_lib::hub::{handle_packet, HubState};
-use app_lib::spark_protocol::{build_heartbeat, Heartbeat, HeartbeatError};
 use app_lib::EngineState;
 
 const PIN: &str = "4242";
@@ -24,8 +24,8 @@ fn udp_roundtrip(payload: &[u8]) -> Vec<u8> {
         .unwrap();
     let hub_addr = hub_socket.local_addr().unwrap();
 
-    let spark_socket = UdpSocket::bind("127.0.0.1:0").expect("bind spark socket");
-    spark_socket
+    let blipy_socket = UdpSocket::bind("127.0.0.1:0").expect("bind blipy socket");
+    blipy_socket
         .send_to(payload, hub_addr)
         .expect("send heartbeat");
 
@@ -67,10 +67,10 @@ fn valid_heartbeat_updates_hub_status_over_udp() {
         .expect("game set");
     assert_eq!(game.title, "ELDEN RING");
     assert_eq!(game.process, "eldenring.exe");
-    assert!(game.platform.starts_with("SPARK"));
+    assert!(game.platform.starts_with("Blipy"));
     assert!(*engine.is_playing.lock().unwrap());
 
-    // Idle heartbeat clears the SPARK-sourced game
+    // Idle heartbeat clears the Blipy-sourced game
     let idle = build_heartbeat("GAMING-PC", None, None, PIN, KEY);
     let wire = serde_json::to_vec(&idle).unwrap();
     handle_packet(&hub, &engine, &udp_roundtrip(&wire), PIN, KEY, None).expect("idle accepted");

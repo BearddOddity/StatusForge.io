@@ -1,14 +1,14 @@
-//! SPARK — the dual-PC gaming-side agent.
+//! Blipy — the dual-PC gaming-side agent.
 //!
 //! Runs on the gaming PC, detects the current game with the shared
 //! `forge-detection` crate, and broadcasts signed v2 heartbeats over the LAN
-//! to the StatusForge Hub (see `spark_protocol`). Detect & forward only — no
+//! to the StatusForge Hub (see `blipy_protocol`). Detect & forward only — no
 //! game database, no storage.
 
-// Identical copy of the main app's spark_protocol.rs — SPARK only builds
+// Identical copy of the main app's blipy_protocol.rs — Blipy only builds
 // heartbeats; the Hub-side validate path is exercised by this module's tests.
 #[allow(dead_code)]
-mod spark_protocol;
+mod blipy_protocol;
 
 use forge_detection::waterfall::{GameDetector, LogFn};
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ use std::sync::{
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager};
 
-use spark_protocol::{HubAnnounce, DISCOVERY_PORT, HEARTBEAT_PORT};
+use blipy_protocol::{HubAnnounce, DISCOVERY_PORT, HEARTBEAT_PORT};
 
 /// A discovered Hub goes stale after this many seconds without an announce
 /// (the Hub announces every 5s).
@@ -31,7 +31,7 @@ const HUB_STALE_SECS: f64 = 30.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct SparkConfig {
+pub struct BlipyConfig {
     pub pin: String,
     /// Optional user-set pairing key mixed into the HMAC secret.
     pub pairing_key: String,
@@ -39,7 +39,7 @@ pub struct SparkConfig {
     pub auto_push: bool,
 }
 
-impl Default for SparkConfig {
+impl Default for BlipyConfig {
     fn default() -> Self {
         Self {
             pin: "0000".to_string(),
@@ -51,17 +51,29 @@ impl Default for SparkConfig {
 }
 
 fn config_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|d| d.join("StatusForge Blipy").join("config.json"))
+}
+
+/// Old installs kept their config under "StatusForge Spark" before the
+/// rename -- checked as a one-time fallback so an upgrade doesn't force
+/// re-pairing. The next save_config() call writes to the new location.
+fn legacy_config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join("StatusForge Spark").join("config.json"))
 }
 
-fn load_config() -> SparkConfig {
+fn load_config() -> BlipyConfig {
     config_path()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|s| serde_json::from_str(&s).ok())
+        .or_else(|| {
+            legacy_config_path()
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .and_then(|s| serde_json::from_str(&s).ok())
+        })
         .unwrap_or_default()
 }
 
-fn save_config(config: &SparkConfig) {
+fn save_config(config: &BlipyConfig) {
     if let Some(path) = config_path() {
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
@@ -69,10 +81,10 @@ fn save_config(config: &SparkConfig) {
         match serde_json::to_string_pretty(config) {
             Ok(json) => {
                 if let Err(e) = std::fs::write(&path, json) {
-                    log::warn!("[SPARK] Failed to save config: {}", e);
+                    log::warn!("[BLIPY] Failed to save config: {}", e);
                 }
             }
-            Err(e) => log::warn!("[SPARK] Failed to serialize config: {}", e),
+            Err(e) => log::warn!("[BLIPY] Failed to serialize config: {}", e),
         }
     }
 }
@@ -86,8 +98,8 @@ pub struct GameInfo {
     pub is_playing: bool,
 }
 
-pub struct SparkState {
-    pub config: Mutex<SparkConfig>,
+pub struct BlipyState {
+    pub config: Mutex<BlipyConfig>,
     pub current_game: Mutex<Option<GameInfo>>,
     /// (hub_name, last_seen_secs) of the most recently discovered Hub.
     pub hub: Mutex<Option<(String, f64)>>,
@@ -96,13 +108,13 @@ pub struct SparkState {
     pub running: Arc<AtomicBool>,
 }
 
-pub fn init_state() -> SparkState {
+pub fn init_state() -> BlipyState {
     let hostname = hostname::get()
         .ok()
         .and_then(|h| h.into_string().ok())
         .unwrap_or_else(|| "Unknown-PC".to_string());
 
-    SparkState {
+    BlipyState {
         config: Mutex::new(load_config()),
         current_game: Mutex::new(None),
         hub: Mutex::new(None),
@@ -119,7 +131,7 @@ fn now_secs() -> f64 {
         .as_secs_f64()
 }
 
-impl SparkState {
+impl BlipyState {
     /// Hub name if one announced itself recently.
     fn live_hub(&self) -> Option<String> {
         self.hub
@@ -147,15 +159,15 @@ impl SparkState {
     }
 }
 
-// ─── UDP Heartbeat (SPARK → Hub, signed v2) ──────────────────────────────────
+// ─── UDP Heartbeat (Blipy → Hub, signed v2) ──────────────────────────────────
 
-fn send_heartbeat(socket: &UdpSocket, state: &SparkState) -> Result<(), String> {
+fn send_heartbeat(socket: &UdpSocket, state: &BlipyState) -> Result<(), String> {
     let (pin, pairing_key) = {
         let config = state.config.lock().unwrap();
         (config.pin.clone(), config.pairing_key.clone())
     };
     let game = state.current_game.lock().unwrap().clone();
-    let hb = spark_protocol::build_heartbeat(
+    let hb = blipy_protocol::build_heartbeat(
         &state.hostname,
         game.as_ref().map(|g| g.title.as_str()),
         game.as_ref().map(|g| g.process.as_str()),
@@ -181,23 +193,23 @@ fn broadcast_socket() -> Result<UdpSocket, String> {
 // ─── Background loops ────────────────────────────────────────────────────────
 
 /// Scanner + heartbeat loop: detect with GameDetector, broadcast signed
-/// heartbeats. SPARK is featherweight — the waterfall only refreshes the
+/// heartbeats. Blipy is featherweight — the waterfall only refreshes the
 /// processes it actually inspects.
-fn start_scanner_loop(state: Arc<SparkState>, app_handle: tauri::AppHandle) {
+fn start_scanner_loop(state: Arc<BlipyState>, app_handle: tauri::AppHandle) {
     let running = state.running.clone();
     std::thread::spawn(move || {
         let log: LogFn = Box::new(|msg: &str, level: &str, _cd: u64| {
-            log::info!("[SPARK] {} {}", level, msg);
+            log::info!("[BLIPY] {} {}", level, msg);
         });
         let mut scout = GameDetector::new(log);
         if let Some(err) = scout.permission_error() {
-            log::warn!("[SPARK] {}", err);
+            log::warn!("[BLIPY] {}", err);
         }
 
         let socket = match broadcast_socket() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("[SPARK] Failed to open broadcast socket: {}", e);
+                log::error!("[BLIPY] Failed to open broadcast socket: {}", e);
                 None
             }
         };
@@ -219,7 +231,7 @@ fn start_scanner_loop(state: Arc<SparkState>, app_handle: tauri::AppHandle) {
 
                 if let Some(socket) = &socket {
                     if let Err(e) = send_heartbeat(socket, &state) {
-                        log::warn!("[SPARK] Heartbeat failed: {}", e);
+                        log::warn!("[BLIPY] Heartbeat failed: {}", e);
                     }
                 }
             }
@@ -227,24 +239,27 @@ fn start_scanner_loop(state: Arc<SparkState>, app_handle: tauri::AppHandle) {
             let _ = app_handle.emit("status-update", state.status_json());
             std::thread::sleep(Duration::from_secs(scan_interval));
         }
-        log::info!("[SPARK] Scanner loop stopped");
+        log::info!("[BLIPY] Scanner loop stopped");
     });
 }
 
 /// Discovery listener: Hub announces on UDP 53736; remember who is out there
 /// so the UI can show "BROADCASTING TO <hub>".
-fn start_discovery_loop(state: Arc<SparkState>) {
+fn start_discovery_loop(state: Arc<BlipyState>) {
     let running = state.running.clone();
     std::thread::spawn(move || {
         let socket = match UdpSocket::bind(("0.0.0.0", DISCOVERY_PORT)) {
             Ok(s) => s,
             Err(e) => {
-                log::error!("[SPARK] Failed to bind UDP {}: {}", DISCOVERY_PORT, e);
+                log::error!("[BLIPY] Failed to bind UDP {}: {}", DISCOVERY_PORT, e);
                 return;
             }
         };
         let _ = socket.set_read_timeout(Some(Duration::from_secs(2)));
-        log::info!("[SPARK] Listening for Hub announcements on udp/{}", DISCOVERY_PORT);
+        log::info!(
+            "[BLIPY] Listening for Hub announcements on udp/{}",
+            DISCOVERY_PORT
+        );
         let mut buf = [0u8; 1024];
         while running.load(Ordering::Relaxed) {
             // recv errors are read-timeouts — loop to re-check `running`
@@ -252,9 +267,12 @@ fn start_discovery_loop(state: Arc<SparkState>) {
                 if let Ok(announce) = serde_json::from_slice::<HubAnnounce>(&buf[..len]) {
                     if announce.app == "StatusForge_Hub" && !announce.hub_name.is_empty() {
                         let mut hub = state.hub.lock().unwrap();
-                        let is_new = hub.as_ref().map(|(n, _)| n != &announce.hub_name).unwrap_or(true);
+                        let is_new = hub
+                            .as_ref()
+                            .map(|(n, _)| n != &announce.hub_name)
+                            .unwrap_or(true);
                         if is_new {
-                            log::info!("[SPARK] Discovered Hub '{}'", announce.hub_name);
+                            log::info!("[BLIPY] Discovered Hub '{}'", announce.hub_name);
                         }
                         *hub = Some((announce.hub_name, now_secs()));
                     }
@@ -267,12 +285,12 @@ fn start_discovery_loop(state: Arc<SparkState>) {
 // ─── Tauri Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
-fn get_status(state: tauri::State<Arc<SparkState>>) -> serde_json::Value {
+fn get_status(state: tauri::State<Arc<BlipyState>>) -> serde_json::Value {
     state.status_json()
 }
 
 #[tauri::command]
-fn set_pin(state: tauri::State<Arc<SparkState>>, pin: String) -> Result<String, String> {
+fn set_pin(state: tauri::State<Arc<BlipyState>>, pin: String) -> Result<String, String> {
     if pin.len() != 4 || !pin.chars().all(|c| c.is_ascii_digit()) {
         return Err("PIN must be exactly 4 digits".to_string());
     }
@@ -283,7 +301,7 @@ fn set_pin(state: tauri::State<Arc<SparkState>>, pin: String) -> Result<String, 
 }
 
 #[tauri::command]
-fn set_pairing_key(state: tauri::State<Arc<SparkState>>, key: String) -> Result<String, String> {
+fn set_pairing_key(state: tauri::State<Arc<BlipyState>>, key: String) -> Result<String, String> {
     if key.len() > 128 {
         return Err("Pairing key too long (max 128 chars)".to_string());
     }
@@ -294,7 +312,7 @@ fn set_pairing_key(state: tauri::State<Arc<SparkState>>, key: String) -> Result<
 }
 
 #[tauri::command]
-fn set_scan_interval(state: tauri::State<Arc<SparkState>>, secs: u64) -> Result<String, String> {
+fn set_scan_interval(state: tauri::State<Arc<BlipyState>>, secs: u64) -> Result<String, String> {
     let secs = secs.clamp(1, 60);
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     config.scan_interval_secs = secs;
@@ -303,7 +321,7 @@ fn set_scan_interval(state: tauri::State<Arc<SparkState>>, secs: u64) -> Result<
 }
 
 #[tauri::command]
-fn toggle_auto_push(state: tauri::State<Arc<SparkState>>) -> Result<bool, String> {
+fn toggle_auto_push(state: tauri::State<Arc<BlipyState>>) -> Result<bool, String> {
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     config.auto_push = !config.auto_push;
     save_config(&config);
@@ -312,7 +330,7 @@ fn toggle_auto_push(state: tauri::State<Arc<SparkState>>) -> Result<bool, String
 
 /// Force an immediate heartbeat with the latest detection.
 #[tauri::command]
-fn manual_push(state: tauri::State<Arc<SparkState>>) -> Result<String, String> {
+fn manual_push(state: tauri::State<Arc<BlipyState>>) -> Result<String, String> {
     let socket = broadcast_socket()?;
     send_heartbeat(&socket, &state)?;
     match state.live_hub() {
@@ -322,7 +340,7 @@ fn manual_push(state: tauri::State<Arc<SparkState>>) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn shutdown_scanner(state: tauri::State<Arc<SparkState>>) -> Result<String, String> {
+fn shutdown_scanner(state: tauri::State<Arc<BlipyState>>) -> Result<String, String> {
     state.running.store(false, Ordering::Relaxed);
     Ok("Scanner stopped".to_string())
 }
@@ -356,10 +374,10 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Kill", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &stow, &quit])?;
 
-    let mut builder = TrayIconBuilder::with_id("spark-tray")
+    let mut builder = TrayIconBuilder::with_id("blipy-tray")
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .tooltip("StatusForge Spark")
+        .tooltip("StatusForge Blipy")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 if let Some(w) = app.get_webview_window("main") {
@@ -373,7 +391,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                 }
             }
             "quit" => {
-                if let Some(state) = app.try_state::<Arc<SparkState>>() {
+                if let Some(state) = app.try_state::<Arc<BlipyState>>() {
                     state.running.store(false, Ordering::Relaxed);
                 }
                 app.exit(0);
@@ -399,7 +417,7 @@ pub fn run() {
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("spark".to_string()),
+                        file_name: Some("blipy".to_string()),
                     }),
                 ])
                 .build(),
@@ -430,5 +448,5 @@ pub fn run() {
             set_autostart,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Spark")
+        .expect("error while running Blipy")
 }

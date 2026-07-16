@@ -218,31 +218,31 @@ function EngineSubTab({
                 )}
               </p>
 
-              {/* SPARK dual-PC pairing (Hub side) */}
+              {/* Blipy dual-PC pairing (Hub side) */}
               <div className="mt-2 p-3 bg-blue-500/[0.04] border border-blue-500/15 rounded-xl">
                 <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-xs text-white/80 font-medium">SPARK Dual-PC Link</span>
+                  <span className="text-xs text-white/80 font-medium">Blipy Dual-PC Link</span>
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 font-semibold">
                     OPTIONAL
                   </span>
                 </div>
                 <p className="text-[10px] text-white/30 mb-2">
-                  Streaming from two PCs? Run the SPARK agent on the gaming PC — this hub receives
-                  its detections over the LAN and updates overlays exactly like local detection.
+                  Streaming from two PCs? Run Blipy on the gaming PC — this hub receives its
+                  detections over the LAN and updates overlays exactly like local detection.
                 </p>
 
                 <div className="flex items-center justify-between p-2.5 mb-3 bg-white/[0.02] border border-white/5 rounded-lg">
                   <div>
                     <p className="text-xs text-white/70">Activate Link</p>
                     <p className="text-[10px] text-white/30 mt-0.5">
-                      While active, this PC's local detection pauses — SPARK is the only engine
+                      While active, this PC's local detection pauses — Blipy is the only engine
                       running, preventing the two sources from crosswiring.
                     </p>
                   </div>
                   <Toggle
-                    on={config.engine_settings.spark_link_active}
+                    on={config.engine_settings.blipy_link_active}
                     onToggle={() =>
-                      setEngine("spark_link_active", !config.engine_settings.spark_link_active)
+                      setEngine("blipy_link_active", !config.engine_settings.blipy_link_active)
                     }
                   />
                 </div>
@@ -253,15 +253,15 @@ function EngineSubTab({
                 <input
                   type="text"
                   maxLength={4}
-                  value={config.engine_settings.spark_pin}
+                  value={config.engine_settings.blipy_pin}
                   onChange={(e) =>
-                    setEngine("spark_pin", e.target.value.replace(/\D/g, "").slice(0, 4))
+                    setEngine("blipy_pin", e.target.value.replace(/\D/g, "").slice(0, 4))
                   }
                   placeholder="0000"
                   className="input-glass !w-24 tracking-[0.5em] text-center placeholder:tracking-normal font-mono"
                 />
                 <p className="text-[10px] text-white/25 mt-1.5">
-                  4-digit PIN — must match the PIN shown in the SPARK agent on your gaming PC.
+                  4-digit PIN — must match the PIN shown in Blipy on your gaming PC.
                 </p>
               </div>
 
@@ -1028,9 +1028,9 @@ const defaultConfig: AppConfig = {
     strict_forge_mode: false,
     sb_action_name: "UpdateCategory",
     widget_token: "",
-    spark_pin: "0000",
-    spark_pairing_key: "",
-    spark_link_active: false,
+    blipy_pin: "0000",
+    blipy_pairing_key: "",
+    blipy_link_active: false,
     emulator_detection: true,
     ram_threshold: 80,
     process_filter_bypass: false,

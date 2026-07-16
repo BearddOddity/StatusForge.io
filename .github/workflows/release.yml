@@ -1,4 +1,4 @@
-# Release builds — one installer per OS for BOTH apps (StatusForge + SPARK).
+# Release builds — one installer per OS for BOTH apps (StatusForge + Blipy).
 # This is the canonical build path: Tauri bundles are produced on their own
 # OS runner (no local cross-compilation).
 #
@@ -8,9 +8,9 @@
 # Releases:
 # - StatusForge → release "v__VERSION__" (regular release, so
 #   /releases/latest/download/latest.json always resolves to StatusForge)
-# - SPARK       → moving tag "spark-latest" (marked prerelease so it never
+# - Blipy       → moving tag "blipy-latest" (marked prerelease so it never
 #   claims /releases/latest); its updater endpoint is
-#   /releases/download/spark-latest/latest.json
+#   /releases/download/blipy-latest/latest.json
 #
 # Secrets required (updater artifact signing — minisign, independent of
 # Apple code signing):
@@ -48,10 +48,10 @@ jobs:
             tagName: v__VERSION__
             releaseName: "StatusForge v__VERSION__"
             prerelease: false
-          - name: Spark
-            path: spark-app
-            tagName: spark-latest
-            releaseName: "Spark v__VERSION__"
+          - name: Blipy
+            path: blipy-app
+            tagName: blipy-latest
+            releaseName: "Blipy v__VERSION__"
             prerelease: true
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.app.name }} (${{ matrix.os }})
@@ -71,7 +71,7 @@ jobs:
         with:
           workspaces: |
             src-tauri
-            spark-app/src-tauri
+            blipy-app/src-tauri
             forge-detection
 
       - name: Install Linux dependencies
@@ -126,24 +126,24 @@ jobs:
             debName: statusforge.deb
             manifest: com.bearddoddity.statusforge.yml
             versionFile: src-tauri/tauri.conf.json
-            isSpark: false
-          - name: Spark
-            id: com.bearddoddity.spark
-            debName: spark.deb
-            manifest: com.bearddoddity.spark.yml
-            versionFile: spark-app/src-tauri/tauri.conf.json
-            isSpark: true
+            isBlipy: false
+          - name: Blipy
+            id: com.bearddoddity.blipy
+            debName: blipy.deb
+            manifest: com.bearddoddity.blipy.yml
+            versionFile: blipy-app/src-tauri/tauri.conf.json
+            isBlipy: true
     name: Flatpak (${{ matrix.app.name }})
     steps:
       - uses: actions/checkout@v4
 
       # StatusForge tags as v<version> (tauri-action expands __VERSION__ at
-      # build time); Spark always tags as the moving spark-latest.
+      # build time); Blipy always tags as the moving blipy-latest.
       - name: Resolve release tag
         id: tag
         run: |
-          if [ "${{ matrix.app.isSpark }}" = "true" ]; then
-            echo "tag=spark-latest" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.app.isBlipy }}" = "true" ]; then
+            echo "tag=blipy-latest" >> "$GITHUB_OUTPUT"
           else
             VERSION=$(node -p "require('./${{ matrix.app.versionFile }}').version")
             echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"

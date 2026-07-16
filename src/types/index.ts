@@ -56,10 +56,10 @@ export interface EngineSettings {
   strict_forge_mode: boolean;
   sb_action_name: string;
   widget_token: string;
-  // Spark / dual-PC
-  spark_pin: string;
-  spark_pairing_key: string;
-  spark_link_active: boolean;
+  // Blipy / dual-PC
+  blipy_pin: string;
+  blipy_pairing_key: string;
+  blipy_link_active: boolean;
   // Detection pipeline
   emulator_detection: boolean;
   ram_threshold: number;

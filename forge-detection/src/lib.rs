@@ -1,7 +1,7 @@
 //! forge-detection — game detection engine (`GameDetector`).
 //!
 //! Standalone library crate shared by StatusForge (single-PC local detection),
-//! SPARK (the dual-PC gaming-side agent), and StreamerSuite. No Tauri, axum,
+//! Blipy (the dual-PC gaming-side agent), and StreamerSuite. No Tauri, axum,
 //! keyring, or OAuth dependencies — just `serde`, `sysinfo`, and per-OS crates.
 //! The host app owns all I/O: it loads the game database and feeds it in via
 //! [`waterfall::GameDetector::update_forge_knowledge`], and it controls

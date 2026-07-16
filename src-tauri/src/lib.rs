@@ -3,10 +3,10 @@ pub mod config;
 pub mod feedback;
 pub mod pusher;
 pub use forge_detection as scanner;
+pub mod blipy_protocol;
 pub mod hub;
 pub mod metadata;
 pub mod server;
-pub mod spark_protocol;
 use config::{AppConfig, EngineStatus};
 
 use serde::Deserialize;
@@ -636,8 +636,8 @@ async fn run_weekly_library_sync(app: &tauri::AppHandle) {
 }
 
 /// Shared by the engine loop and the LAN Hub (hub.rs): whichever
-/// detects a new game — this PC's own scanner or a paired SPARK agent on a
-/// second PC — funnels through here for the exact same treatment. SPARK
+/// detects a new game — this PC's own scanner or a paired Blipy agent on a
+/// second PC — funnels through here for the exact same treatment. Blipy
 /// itself never touches metadata or platform pushes (detect-and-forward
 /// only); this app is what finds metadata and pushes categories, regardless
 /// of which PC the detection came from.
@@ -667,7 +667,7 @@ pub fn on_game_detected(
     // clobbering a concurrent write from the axum server. Resolve through
     // find_library_key so a title that only differs from an existing entry
     // by case/whitespace (raw OS window titles from the scanner or a paired
-    // SPARK agent vary run to run) updates that entry instead of minting a
+    // Blipy agent vary run to run) updates that entry instead of minting a
     // second one.
     let (title, needs_metadata) = match server::load_db() {
         Ok(mut db) => match config::find_library_key(&db, game_title) {
@@ -973,17 +973,17 @@ fn spawn_engine_loop(
                 .map(|c| c.engine_settings.idle_category.clone())
                 .unwrap_or_else(|| "Just Chatting".to_string());
 
-            // SPARK Dual-PC Link active: this PC defers entirely to the
-            // paired SPARK agent (see hub.rs) so the two sources never
+            // Blipy Dual-PC Link active: this PC defers entirely to the
+            // paired Blipy agent (see hub.rs) so the two sources never
             // crosswire. Drop any local detection still held and skip
             // scanning this iteration.
-            let spark_link_active = config
+            let blipy_link_active = config
                 .as_ref()
-                .map(|c| c.engine_settings.spark_link_active)
+                .map(|c| c.engine_settings.blipy_link_active)
                 .unwrap_or(false);
-            if spark_link_active {
+            if blipy_link_active {
                 if current_game.is_some() {
-                    log::info!("[ENGINE] SPARK Dual-PC Link active — pausing local detection.");
+                    log::info!("[ENGINE] Blipy Dual-PC Link active — pausing local detection.");
                     current_game = None;
                     lost_focus_time = None;
                     state_arc.clear_playing();
@@ -1077,7 +1077,7 @@ fn spawn_engine_loop(
                     state_arc.push_status();
 
                     // Category push, Library upsert, and metadata scan —
-                    // shared with the LAN Hub so a SPARK-detected game on a
+                    // shared with the LAN Hub so a Blipy-detected game on a
                     // second PC gets identical treatment.
                     if let Some(cfg) = config.as_ref() {
                         on_game_detected(
@@ -1917,7 +1917,7 @@ fn dev_get_diagnostics(
         "current_game": state.current_game.lock().unwrap().clone(),
         "current_process": state.current_process.lock().unwrap().clone(),
         "is_playing": *state.is_playing.lock().unwrap(),
-        "hub_paired_spark": hub.paired.lock().unwrap().clone(),
+        "hub_paired_blipy": hub.paired.lock().unwrap().clone(),
         "permission_error": scanner::platform::permission_error(),
     })
 }
@@ -2152,7 +2152,7 @@ pub fn run() {
                 ensure_idle_library_entry(&base);
             }
 
-            // LAN Hub: announce on udp/53736, receive SPARK heartbeats on udp/53735
+            // LAN Hub: announce on udp/53736, receive Blipy heartbeats on udp/53735
             hub::start_hub(
                 hub_state.clone(),
                 engine_state.clone(),
@@ -2314,7 +2314,7 @@ mod config_command_tests {
         let mut config = config::AppConfig::default();
         config.engine_settings.widget_poll_rate = 4;
         config.engine_settings.idle_category = "Art".into();
-        config.engine_settings.spark_pin = "12".into(); // half-typed → sanitized to 0000
+        config.engine_settings.blipy_pin = "12".into(); // half-typed → sanitized to 0000
         config.api_keys.rawg = "rawg-key".into();
         config.broadcaster.routing_mode = config::RoutingMode::Native;
         config.broadcaster.twitch_client = "twitch-only".into(); // kick empty must still save
@@ -2332,7 +2332,7 @@ mod config_command_tests {
         let es = &out["engine_settings"];
         assert_eq!(es["widget_poll_rate"], 4);
         assert_eq!(es["idle_category"], "Art");
-        assert_eq!(es["spark_pin"], "0000");
+        assert_eq!(es["blipy_pin"], "0000");
         assert_eq!(out["api_keys"]["rawg"], "rawg-key");
         assert_eq!(out["broadcaster"]["routing_mode"], "native");
         assert_eq!(out["broadcaster"]["twitch_client"], "twitch-only");

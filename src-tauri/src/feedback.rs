@@ -1,7 +1,7 @@
 //! Post-broadcast detection feedback: "Is this detection correct? Yes / No".
 //!
 //! Confirmations and corrections get logged per detection method (the
-//! source in `GameDetection.platform`, e.g. "Steam", "SPARK (host)") into
+//! source in `GameDetection.platform`, e.g. "Steam", "Blipy (host)") into
 //! `detection_feedback.json`, so per-method accuracy shows up in Dev Tools.
 //! A correction also teaches the alias system — the misdetected title
 //! becomes an alias of the actual game, so it resolves correctly next time.

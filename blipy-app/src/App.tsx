@@ -21,8 +21,11 @@ interface Status {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function getStatus(): Promise<Status | null> {
-  try { return await invoke<Status>("get_status"); }
-  catch { return null; }
+  try {
+    return await invoke<Status>("get_status");
+  } catch {
+    return null;
+  }
 }
 
 // ─── App ─────────────────────────────────────────────────────────────────────
@@ -33,7 +36,9 @@ export default function App() {
   const [autostart, setAutostart] = useState(false);
 
   useEffect(() => {
-    invoke<boolean>("get_autostart").then(setAutostart).catch(() => setAutostart(false));
+    invoke<boolean>("get_autostart")
+      .then(setAutostart)
+      .catch(() => setAutostart(false));
   }, []);
 
   const refresh = useCallback(async () => {
@@ -42,11 +47,15 @@ export default function App() {
     if (s) setPin(s.pin);
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   useEffect(() => {
     const unlisten = listen<Status>("status-update", (e) => setStatus(e.payload));
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   const online = status?.connected === true;
@@ -54,85 +63,94 @@ export default function App() {
   const autoPush = status?.auto_push !== false;
 
   return (
-    <div className="spark-root">
+    <div className="blipy-root">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="spark-header drag-region">
-        <div className="spark-header-left">
+      <div className="blipy-header drag-region">
+        <div className="blipy-header-left">
           <span
-            className="spark-dot animate-pulse-dot"
+            className="blipy-dot animate-pulse-dot"
             style={{ background: online ? "rgb(52, 199, 89)" : "rgba(255, 59, 48, 0.6)" }}
           />
-          <span className="spark-brand">Spark</span>
+          <span className="blipy-brand">Blipy</span>
         </div>
-        <span className="spark-host">{status?.hostname ?? "..."}</span>
+        <span className="blipy-host">{status?.hostname ?? "..."}</span>
       </div>
 
       {/* ── Body ───────────────────────────────────────────────────────── */}
-      <div className="spark-body">
-
+      <div className="blipy-body">
         {/* ── Now Playing + Connection ─────────────────────────────────── */}
-        <div className="spark-card">
-          <div className="spark-now-info">
-            <span className="spark-now-subtitle">
+        <div className="blipy-card">
+          <div className="blipy-now-info">
+            <span className="blipy-now-subtitle">
               {hasGame ? "Playing" : status?.connected ? "Idling" : "Offline"}
             </span>
-            <span className="spark-now-title">
-              {hasGame ? status!.current_game!.title : status?.connected ? "Just Chatting" : "Offline"}
+            <span className="blipy-now-title">
+              {hasGame
+                ? status!.current_game!.title
+                : status?.connected
+                  ? "Just Chatting"
+                  : "Offline"}
             </span>
           </div>
 
-          <div className="spark-status-row" style={{ marginTop: 10 }}>
-            <span className="spark-status-label">
+          <div className="blipy-status-row" style={{ marginTop: 10 }}>
+            <span className="blipy-status-label">
               {online ? `Broadcasting to ${status?.hub_name ?? "Hub"}` : "Not connected"}
             </span>
           </div>
         </div>
 
         {/* ── Controls ─────────────────────────────────────────────────── */}
-        <div className="spark-controls">
+        <div className="blipy-controls">
           {/* PIN row */}
-          <div className="spark-pin-row">
-            <span className="spark-pin-label">PIN</span>
+          <div className="blipy-pin-row">
+            <span className="blipy-pin-label">PIN</span>
             <input
               value={pin}
               onChange={(e) => setPin(e.target.value.slice(0, 4))}
               maxLength={4}
-              className="spark-pin-input"
+              className="blipy-pin-input"
             />
             <button
-              onClick={async () => { await invoke("set_pin", { pin: pin.slice(0, 4) }); }}
-              className="spark-btn spark-btn-primary"
+              onClick={async () => {
+                await invoke("set_pin", { pin: pin.slice(0, 4) });
+              }}
+              className="blipy-btn blipy-btn-primary"
             >
               Save
             </button>
           </div>
 
           {/* Push + Auto toggle */}
-          <div className="spark-push-row">
+          <div className="blipy-push-row">
             <button
-              onClick={async () => { await invoke("manual_push"); }}
-              className="spark-btn spark-btn-push"
+              onClick={async () => {
+                await invoke("manual_push");
+              }}
+              className="blipy-btn blipy-btn-push"
             >
               ⚡ Push
             </button>
             <button
               onClick={async () => {
                 const enabled = await invoke<boolean>("toggle_auto_push");
-                setStatus((s) => s ? { ...s, auto_push: enabled } : s);
+                setStatus((s) => (s ? { ...s, auto_push: enabled } : s));
               }}
-              className={`spark-btn ${autoPush ? "spark-btn-success" : "spark-btn-ghost"}`}
+              className={`blipy-btn ${autoPush ? "blipy-btn-success" : "blipy-btn-ghost"}`}
             >
               {autoPush ? "Auto ●" : "Auto ○"}
             </button>
             <button
-              title="Start Spark when you log in (off by default)"
+              title="Start Blipy when you log in (off by default)"
               onClick={async () => {
                 try {
                   const next = await invoke<boolean>("set_autostart", { enabled: !autostart });
                   setAutostart(next);
-                } catch { /* leave toggle unchanged */ }
+                } catch {
+                  /* leave toggle unchanged */
+                }
               }}
-              className={`spark-btn ${autostart ? "spark-btn-success" : "spark-btn-ghost"}`}
+              className={`blipy-btn ${autostart ? "blipy-btn-success" : "blipy-btn-ghost"}`}
             >
               {autostart ? "Boot ●" : "Boot ○"}
             </button>
@@ -141,16 +159,18 @@ export default function App() {
       </div>
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <div className="spark-footer">
-        <span className="spark-footer-stat">
+      <div className="blipy-footer">
+        <span className="blipy-footer-stat">
           Last scan {status ? timeAgo(status.last_scan) : "—"}
         </span>
         <button
           onClick={async () => {
-            try { await invoke("shutdown_scanner"); } catch {}
+            try {
+              await invoke("shutdown_scanner");
+            } catch {}
             await getCurrentWindow().destroy();
           }}
-          className="spark-btn spark-btn-danger"
+          className="blipy-btn blipy-btn-danger"
           style={{ padding: "4px 10px", fontSize: 10 }}
         >
           ⏻ Exit

@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for Spark",
+  "description": "Default capabilities for Blipy",
   "windows": ["main"],
   "permissions": [
     "core:default",

@@ -2,8 +2,8 @@
 # whatever StatusForge release is actually published — the page previously
 # had hand-updated links that silently went stale.
 #
-# Runs automatically for the StatusForge release itself, not Spark (Spark
-# always publishes to the moving "spark-latest" tag as a prerelease; the
+# Runs automatically for the StatusForge release itself, not Blipy (Blipy
+# always publishes to the moving "blipy-latest" tag as a prerelease; the
 # `if:` below filters it out). Can also be run manually (Actions tab ->
 # this workflow -> "Run workflow") to sync against whatever the current
 # /releases/latest is, e.g. to verify the deploy key/secret are set up

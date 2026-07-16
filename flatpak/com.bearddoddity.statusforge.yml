@@ -10,8 +10,8 @@ finish-args:
   - --socket=fallback-x11
   - --device=dri
   - --share=ipc
-  # Native detection engine talks to 127.0.0.1:53735 (widget/OAuth server) and
-  # the SPARK LAN Hub over UDP 53735/53736 — both are loopback/LAN, not a
+  # The detection engine talks to 127.0.0.1:53735 (widget/OAuth server) and
+  # the Blipy LAN Hub over UDP 53735/53736 — both are loopback/LAN, not a
   # remote service, but Flatpak's sandbox still needs --share=network to
   # allow any socket at all (localhost included).
   - --share=network

@@ -254,7 +254,7 @@ export default function DashboardView({
   // expired access token) — the signal that a manual reconnect is actually
   // needed, distinct from a transient "Offline".
   const [needsReauth, setNeedsReauth] = useState({ twitch: false, kick: false });
-  const [sparkPaired, setSparkPaired] = useState<{ hostname: string } | null>(null);
+  const [blipyPaired, setBlipyPaired] = useState<{ hostname: string } | null>(null);
   const [platformPushEnabled, setPlatformPushEnabled] = useState(true);
   const togglePlatformPush = async () => {
     const config = await fetchConfig();
@@ -321,10 +321,10 @@ export default function DashboardView({
         kick: liveStatus.kick_needs_reauth,
       });
       const paired =
-        hub && typeof hub === "object" && "paired_spark" in hub
-          ? (hub as { paired_spark: { hostname: string } | null }).paired_spark
+        hub && typeof hub === "object" && "paired_blipy" in hub
+          ? (hub as { paired_blipy: { hostname: string } | null }).paired_blipy
           : null;
-      setSparkPaired(paired);
+      setBlipyPaired(paired);
     };
     refresh();
     const interval = setInterval(refresh, 10000);
@@ -625,31 +625,31 @@ export default function DashboardView({
               <span className="text-xs font-medium text-white/70">Platform Detection</span>
               <Toggle on={platformPushEnabled} onToggle={togglePlatformPush} />
             </div>
-            {/* Spark Pulse */}
+            {/* Blipy Pulse */}
             <div className="mt-3 pt-3 border-t border-white/5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
                     <span
-                      className={`absolute inline-flex h-full w-full rounded-full ${sparkPaired ? "bg-cyan-400/60" : "bg-white/10"}`}
+                      className={`absolute inline-flex h-full w-full rounded-full ${blipyPaired ? "bg-cyan-400/60" : "bg-white/10"}`}
                       style={{
-                        animation: sparkPaired
+                        animation: blipyPaired
                           ? "var(--user-status-pulse, ping 2s cubic-bezier(0, 0, 0.2, 1) infinite)"
                           : "none",
                       }}
                     />
                     <span
-                      className={`relative inline-flex h-2 w-2 rounded-full ${sparkPaired ? "bg-cyan-400" : "bg-white/20"}`}
+                      className={`relative inline-flex h-2 w-2 rounded-full ${blipyPaired ? "bg-cyan-400" : "bg-white/20"}`}
                     />
                   </span>
                   <span className="text-[10px] font-semibold tracking-wider text-white/40">
-                    {sparkPaired ? `SPARK · ${sparkPaired.hostname}` : "SPARK"}
+                    {blipyPaired ? `Blipy · ${blipyPaired.hostname}` : "Blipy"}
                   </span>
                 </div>
                 <span
-                  className={`text-[10px] font-mono ${sparkPaired ? "text-cyan-400/60" : "text-white/20"}`}
+                  className={`text-[10px] font-mono ${blipyPaired ? "text-cyan-400/60" : "text-white/20"}`}
                 >
-                  {sparkPaired ? "SYNCED" : "STANDBY"}
+                  {blipyPaired ? "SYNCED" : "STANDBY"}
                 </span>
               </div>
             </div>

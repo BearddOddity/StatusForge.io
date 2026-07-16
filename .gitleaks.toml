@@ -18,5 +18,5 @@ useDefault = true
 description = "Tauri updater minisign public keys (not secrets)"
 paths = [
   '''src-tauri[/\\]tauri\.conf\.json''',
-  '''spark-app[/\\]src-tauri[/\\]tauri\.conf\.json''',
+  '''blipy-app[/\\]src-tauri[/\\]tauri\.conf\.json''',
 ]

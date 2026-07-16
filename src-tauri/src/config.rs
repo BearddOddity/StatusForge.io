@@ -74,16 +74,18 @@ pub struct EngineSettings {
     pub sb_action_name: String,
     #[serde(default = "default_widget_token")]
     pub widget_token: String,
-    #[serde(default = "default_spark_pin")]
-    pub spark_pin: String,
-    /// Optional user-set pairing key mixed into the SPARK heartbeat HMAC secret.
-    #[serde(default)]
-    pub spark_pairing_key: String,
+    /// Old configs saved before the SPARK → Blipy rename still load fine —
+    /// `alias` accepts the old JSON key, new saves write the new one.
+    #[serde(default = "default_blipy_pin", alias = "spark_pin")]
+    pub blipy_pin: String,
+    /// Optional user-set pairing key mixed into the Blipy heartbeat HMAC secret.
+    #[serde(default, alias = "spark_pairing_key")]
+    pub blipy_pairing_key: String,
     /// When true, this PC's local scanner stops reporting detections —
-    /// only the paired SPARK agent drives the game state. Prevents the two
+    /// only the paired Blipy agent drives the game state. Prevents the two
     /// detection sources from crosswiring when a dual-PC link is in use.
-    #[serde(default)]
-    pub spark_link_active: bool,
+    #[serde(default, alias = "spark_link_active")]
+    pub blipy_link_active: bool,
     #[serde(default = "default_emulator_detection")]
     pub emulator_detection: bool,
     #[serde(default = "default_ram_threshold")]
@@ -125,9 +127,9 @@ impl Default for EngineSettings {
             strict_forge_mode: false,
             sb_action_name: default_sb_action_name(),
             widget_token: default_widget_token(),
-            spark_pin: default_spark_pin(),
-            spark_pairing_key: String::new(),
-            spark_link_active: false,
+            blipy_pin: default_blipy_pin(),
+            blipy_pairing_key: String::new(),
+            blipy_link_active: false,
             emulator_detection: default_emulator_detection(),
             ram_threshold: default_ram_threshold(),
             process_filter_bypass: false,
@@ -310,7 +312,7 @@ pub struct ForgeDatabase {
 
 /// Finds the existing `library` key for `title`, tolerating the whitespace/
 /// casing drift that different sources (raw OS window titles from the
-/// native scanner and a paired SPARK agent, vs. hand-typed titles in the
+/// native scanner and a paired Blipy agent, vs. hand-typed titles in the
 /// Library editor) can introduce for what a human would call the same
 /// game. Every insertion site should resolve through this first instead of
 /// keying on the raw title directly — otherwise "Half-Life" and "half-life "
@@ -418,7 +420,7 @@ fn default_widget_token() -> String {
         })
         .collect()
 }
-fn default_spark_pin() -> String {
+fn default_blipy_pin() -> String {
     "0000".to_string()
 }
 fn default_emulator_detection() -> bool {
@@ -512,14 +514,14 @@ impl AppConfig {
         if self.engine_settings.sb_action_name.len() > 100 {
             errors.push("sb_action_name too long (max 100 chars)".to_string());
         }
-        if self.engine_settings.spark_pin.len() != 4
+        if self.engine_settings.blipy_pin.len() != 4
             || !self
                 .engine_settings
-                .spark_pin
+                .blipy_pin
                 .chars()
                 .all(|c| c.is_ascii_digit())
         {
-            errors.push("spark_pin must be 4 digits".to_string());
+            errors.push("blipy_pin must be 4 digits".to_string());
         }
 
         // No "at least one platform client" rule here on purpose: pusher.rs's
@@ -565,14 +567,14 @@ impl AppConfig {
         // Truncate strings
         self.engine_settings.idle_category.truncate(100);
         self.engine_settings.sb_action_name.truncate(100);
-        if self.engine_settings.spark_pin.len() != 4
+        if self.engine_settings.blipy_pin.len() != 4
             || !self
                 .engine_settings
-                .spark_pin
+                .blipy_pin
                 .chars()
                 .all(|c| c.is_ascii_digit())
         {
-            self.engine_settings.spark_pin = "0000".to_string();
+            self.engine_settings.blipy_pin = "0000".to_string();
         }
 
         // Truncate API keys
@@ -611,14 +613,14 @@ mod tests {
         // cleared number fields) must be repaired by sanitize(), not fail the
         // whole config save.
         let mut c = AppConfig::default();
-        c.engine_settings.spark_pin = "12".into();
+        c.engine_settings.blipy_pin = "12".into();
         c.engine_settings.widget_fade_timer = 0;
         c.engine_settings.widget_poll_rate = 0;
         c.engine_settings.scan_interval = 0;
         c.engine_settings.confidence_threshold = 5.0;
         c.engine_settings.ram_threshold = 900;
         c.sanitize();
-        assert_eq!(c.engine_settings.spark_pin, "0000");
+        assert_eq!(c.engine_settings.blipy_pin, "0000");
         assert_eq!(c.engine_settings.widget_fade_timer, 1);
         assert_eq!(c.engine_settings.widget_poll_rate, 1);
         assert_eq!(c.engine_settings.scan_interval, 2);
@@ -630,9 +632,9 @@ mod tests {
     #[test]
     fn sanitize_resets_non_numeric_pin() {
         let mut c = AppConfig::default();
-        c.engine_settings.spark_pin = "abcd".into();
+        c.engine_settings.blipy_pin = "abcd".into();
         c.sanitize();
-        assert_eq!(c.engine_settings.spark_pin, "0000");
+        assert_eq!(c.engine_settings.blipy_pin, "0000");
     }
 
     #[test]
@@ -653,7 +655,7 @@ mod tests {
     #[test]
     fn config_survives_json_round_trip() {
         let mut c = AppConfig::default();
-        c.engine_settings.spark_pairing_key = "pair-key".into();
+        c.engine_settings.blipy_pairing_key = "pair-key".into();
         c.engine_settings.idle_category = "Art".into();
         c.api_keys.steamgrid = "sg".into();
         c.broadcaster.twitch_client = "tc".into();
@@ -663,6 +665,24 @@ mod tests {
             serde_json::to_value(&back).unwrap(),
             serde_json::to_value(&c).unwrap()
         );
+    }
+
+    /// A Config.json saved before the SPARK → Blipy rename still has to load
+    /// correctly — old installs shouldn't need to re-pair just because the
+    /// field got renamed.
+    #[test]
+    fn old_spark_keys_still_load_into_renamed_blipy_fields() {
+        let json = r#"{
+            "engine_settings": {
+                "spark_pin": "4242",
+                "spark_pairing_key": "old-key",
+                "spark_link_active": true
+            }
+        }"#;
+        let c: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(c.engine_settings.blipy_pin, "4242");
+        assert_eq!(c.engine_settings.blipy_pairing_key, "old-key");
+        assert!(c.engine_settings.blipy_link_active);
     }
 
     /// Regression guard against Config.json.template silently drifting out

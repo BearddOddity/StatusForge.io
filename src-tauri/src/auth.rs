@@ -855,7 +855,7 @@ pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<
     let config_path = base_dir.join("Config.json");
     // `config` may carry secrets that `load_config_at` backfilled in-memory
     // from the OS keychain (e.g. a caller loaded, tweaked one unrelated
-    // field like the SPARK pin, and is saving the whole struct back). Never
+    // field like the Blipy pin, and is saving the whole struct back). Never
     // let an already-migrated field regain a plaintext copy on disk here —
     // re-sync the (possibly refreshed, e.g. after a token-refresh-and-save)
     // value into the keychain instead and blank it in what actually gets

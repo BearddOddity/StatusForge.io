@@ -9,7 +9,7 @@
     <p>
       StatusForge.io detects the game you're playing and automatically
       updates your Twitch/Kick stream category, with an optional dual-PC
-      SPARK companion agent for gaming-PC/streaming-PC setups.
+      Blipy companion agent for gaming-PC/streaming-PC setups.
     </p>
   </description>
   <launchable type="desktop-id">com.bearddoddity.statusforge.desktop</launchable>

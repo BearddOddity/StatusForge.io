@@ -3753,7 +3753,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spark"
+name = "blipy"
 version = "1.0.0"
 dependencies = [
  "dirs 5.0.1",

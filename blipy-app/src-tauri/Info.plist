@@ -7,16 +7,16 @@
        Privacy & Security → Screen Recording). macOS shows its own prompt on
        first use; these strings document intent for users and App Review. -->
   <key>NSScreenCaptureUsageDescription</key>
-  <string>Spark reads the title of the active game window to detect what you are playing. No screen content is recorded.</string>
+  <string>Blipy reads the title of the active game window to detect what you are playing. No screen content is recorded.</string>
   <key>NSAccessibilityUsageDescription</key>
-  <string>Spark inspects window metadata to detect the active game.</string>
-  <!-- SPARK broadcasts signed heartbeats to a StatusForge hub on udp/53735
+  <string>Blipy inspects window metadata to detect the active game.</string>
+  <!-- Blipy broadcasts signed heartbeats to a StatusForge hub on udp/53735
        and listens for the hub's discovery announce on udp/53736 — macOS
        gates any local-subnet traffic behind the Local Network permission
        (Sequoia 15+) separately from Screen Recording above; without this
        key macOS silently drops the traffic or endlessly re-prompts instead
        of asking once. -->
   <key>NSLocalNetworkUsageDescription</key>
-  <string>Spark sends game-detection updates over your local network to a paired StatusForge hub on another PC.</string>
+  <string>Blipy sends game-detection updates over your local network to a paired StatusForge hub on another PC.</string>
 </dict>
 </plist>

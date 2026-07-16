@@ -1,16 +1,21 @@
-//! SPARK ⇄ Hub LAN wire protocol (UDP).
+//! Blipy ⇄ Hub LAN wire protocol (UDP).
 //!
-//! NOTE: an identical copy of this file lives in `spark-app/src-tauri/src/`.
+//! NOTE: an identical copy of this file lives in `blipy-app/src-tauri/src/`.
 //! Keep the two in sync when bumping `PROTOCOL_VERSION`.
 //!
 //! Ports:
-//! - **53735/udp** — SPARK → Hub heartbeats (broadcast)
-//! - **53736/udp** — Hub → SPARK discovery announcements (broadcast)
+//! - **53735/udp** — Blipy → Hub heartbeats (broadcast)
+//! - **53736/udp** — Hub → Blipy discovery announcements (broadcast)
 //!
-//! v1 (legacy Python spark.py): `{app, hostname, game, process, pin, command}`
+//! v1 (legacy Python prototype, spark.py — predates the Blipy rename):
+//! `{app, hostname, game, process, pin, command}`
 //! v2 (current): adds `version`, `timestamp`, and an HMAC-SHA256 signature so
 //! nobody on the LAN can spoof a fake game onto the overlay. Fields are
 //! additive — a v2 Hub logs-and-rejects v1 packets instead of misbehaving.
+//! The `app` identifier changed from "StatusForge_Spark" to
+//! "StatusForge_Blipy" with the rename; both are still recognized as valid
+//! heartbeats so a genuinely old v1 client gets a clear version-mismatch
+//! error instead of being treated as garbage.
 
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -19,12 +24,12 @@ use sha2::Sha256;
 /// Current LAN protocol version.
 pub const PROTOCOL_VERSION: u32 = 2;
 
-/// SPARK → Hub heartbeat port.
+/// Blipy → Hub heartbeat port.
 pub const HEARTBEAT_PORT: u16 = 53735;
-/// Hub → SPARK discovery port.
+/// Hub → Blipy discovery port.
 pub const DISCOVERY_PORT: u16 = 53736;
 
-/// SPARK → Hub heartbeat packet.
+/// Blipy → Hub heartbeat packet.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Heartbeat {
     pub app: String,
@@ -44,7 +49,7 @@ pub struct Heartbeat {
     pub hmac: Option<String>,
 }
 
-/// Hub → SPARK discovery packet.
+/// Hub → Blipy discovery packet.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HubAnnounce {
     pub app: String,
@@ -65,7 +70,7 @@ pub enum HeartbeatError {
 impl std::fmt::Display for HeartbeatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NotAHeartbeat => write!(f, "not a SPARK heartbeat"),
+            Self::NotAHeartbeat => write!(f, "not a Blipy heartbeat"),
             Self::VersionMismatch(v) => write!(f, "protocol version {} not supported", v),
             Self::WrongPin => write!(f, "wrong PIN"),
             Self::MissingSignature => write!(f, "missing HMAC signature"),
@@ -109,7 +114,7 @@ fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-/// Build a signed v2 heartbeat (used by SPARK).
+/// Build a signed v2 heartbeat (used by Blipy).
 pub fn build_heartbeat(
     hostname: &str,
     game: Option<&str>,
@@ -118,7 +123,7 @@ pub fn build_heartbeat(
     pairing_key: &str,
 ) -> Heartbeat {
     let mut hb = Heartbeat {
-        app: "StatusForge_Spark".to_string(),
+        app: "StatusForge_Blipy".to_string(),
         version: Some(PROTOCOL_VERSION),
         hostname: hostname.to_string(),
         game: game.map(|s| s.to_string()),
@@ -146,7 +151,8 @@ pub fn validate_heartbeat(
     pairing_key: &str,
 ) -> Result<Heartbeat, HeartbeatError> {
     let hb: Heartbeat = serde_json::from_slice(data).map_err(|_| HeartbeatError::NotAHeartbeat)?;
-    if hb.app != "StatusForge_Spark" || hb.command != "heartbeat" {
+    let is_known_app = hb.app == "StatusForge_Blipy" || hb.app == "StatusForge_Spark";
+    if !is_known_app || hb.command != "heartbeat" {
         return Err(HeartbeatError::NotAHeartbeat);
     }
     match hb.version {
@@ -230,6 +236,20 @@ mod tests {
             validate_heartbeat(&bytes, "4242", "").unwrap_err(),
             HeartbeatError::BadSignature
         );
+    }
+
+    #[test]
+    fn old_branded_v2_client_still_pairs_during_the_rename() {
+        // An agent that hasn't updated past the SPARK -> Blipy rename yet
+        // still sends a fully valid, signed v2 packet -- just under the old
+        // app name. The Hub (already updated) must still accept it.
+        let mut hb = build_heartbeat("PC", Some("Celeste"), Some("celeste.exe"), "4242", "");
+        hb.app = "StatusForge_Spark".to_string();
+        hb.hmac = None;
+        hb.hmac = Some(compute_hmac(&hb, &shared_secret("4242", "")));
+        let bytes = serde_json::to_vec(&hb).unwrap();
+        let out = validate_heartbeat(&bytes, "4242", "").unwrap();
+        assert_eq!(out.game.as_deref(), Some("Celeste"));
     }
 
     #[test]

@@ -112,7 +112,7 @@ Simulate an outage without touching your router: add to
 ## 9. Regression sweep (10 min)
 
 - [ ] Overlays/widgets still render and update on game change
-- [ ] SPARK dual-PC link (if you use it) still forwards detections
+- [ ] Blipy dual-PC link (if you use it) still forwards detections
 - [ ] Library editor: add/edit/delete, metadata scan, cover art — all unchanged
 - [ ] Exile to Apps still works
 - [ ] Settings import/export config backup still works

@@ -1,5 +1,5 @@
 //! Stage-0 alias resolution: takes whatever title got detected — a raw
-//! window title, an exe-name guess, something SPARK forwarded, a manual
+//! window title, an exe-name guess, something Blipy forwarded, a manual
 //! entry — and maps it to the canonical library title the user actually set
 //! an alias up for. This runs before broadcasting or the library upsert
 //! ever see the title.
