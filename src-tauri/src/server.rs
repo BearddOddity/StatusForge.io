@@ -1,4 +1,4 @@
-//! Local widget/status server — native replacement for the Python Flask server.
+//! Local widget/status server.
 //!
 //! One listener on 127.0.0.1:53735 serves BOTH protocols by peeking the first
 //! byte of each connection:
@@ -27,14 +27,14 @@ use tokio::sync::watch;
 
 use crate::auth::SharedOAuthState;
 use crate::config::{AppConfig, ForgeDatabase};
-use crate::NativeEngineState;
+use crate::EngineState;
 
 pub const SERVER_ADDR: &str = "127.0.0.1:53735";
 
 /// Shared state for the widget/status server.
 #[derive(Clone)]
 pub struct ServerState {
-    pub engine: Arc<NativeEngineState>,
+    pub engine: Arc<EngineState>,
     pub oauth: SharedOAuthState,
 }
 
@@ -528,9 +528,9 @@ async fn twitch_login_handler(State(state): State<ServerState>) -> Result<Redire
     )))
 }
 
-/// Build the status payload the overlays consume — game info from the native
+/// Build the status payload the overlays consume — game info from the
 /// engine (or LAN Hub), enriched with Forge_Database library metadata.
-pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
+pub fn build_status(engine: &EngineState) -> serde_json::Value {
     let game = engine.current_game.lock().unwrap().clone();
     let process = engine.current_process.lock().unwrap().clone();
     let is_playing = *engine.is_playing.lock().unwrap();

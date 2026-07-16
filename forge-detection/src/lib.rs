@@ -1,10 +1,10 @@
-//! forge-detection — the ForgeWaterfall native game detection engine.
+//! forge-detection — game detection engine (`GameDetector`).
 //!
 //! Standalone library crate shared by StatusForge (single-PC local detection),
 //! SPARK (the dual-PC gaming-side agent), and StreamerSuite. No Tauri, axum,
 //! keyring, or OAuth dependencies — just `serde`, `sysinfo`, and per-OS crates.
 //! The host app owns all I/O: it loads the game database and feeds it in via
-//! [`waterfall::ForgeWaterfall::update_forge_knowledge`], and it controls
+//! [`waterfall::GameDetector::update_forge_knowledge`], and it controls
 //! logging through the [`waterfall::LogFn`] callback.
 //!
 //! Multi-stage detection pipeline:
@@ -12,10 +12,10 @@
 //! 2. Forge database lookup (listed apps = instant match)
 //! 3. System exiles + banned paths filter
 //! 4. Behavioral traps (RAM floor, Chromium/Electron, cmdline, UI framework, geometry)
-//! 5. Golden tickets (Steam registry, process tree)
+//! 5. Steam registry / process tree checks
 //! 6. Confidence scoring for DRM-free / indie games
 //!
-//! Platform support: Windows, macOS, and Linux — fully native, no sidecar.
+//! Platform support: Windows, macOS, and Linux — no sidecar process.
 //! On macOS, reading window titles requires the Screen Recording permission;
 //! see `platform::permission_error`.
 
@@ -23,7 +23,7 @@ pub mod alias;
 pub mod platform;
 pub mod waterfall;
 
-pub use waterfall::{ForgeWaterfall, LogFn};
+pub use waterfall::{GameDetector, LogFn};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

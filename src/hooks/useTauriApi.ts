@@ -73,11 +73,6 @@ export async function getSystemStats(): Promise<SystemStats | null> {
   return null;
 }
 
-export async function getDetectionMode(): Promise<string> {
-  const res = await tauriApi("get_detection_mode");
-  return typeof res === "string" ? res : "native";
-}
-
 export async function getKeychainStatus(): Promise<KeychainStatus> {
   try {
     const map = await invoke<Record<string, string>>("get_all_keychain_tokens");

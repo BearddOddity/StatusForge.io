@@ -142,9 +142,9 @@ impl Default for EngineSettings {
     }
 }
 
-// Detection is always native (Rust) — the legacy Python/Spark detection-mode
-// selector was removed. Old configs containing a `detection` section or an
-// `engine_settings.detection_mode` field still parse: unknown keys are ignored.
+// An old config containing a `detection` section or an
+// `engine_settings.detection_mode` field still parses fine: unknown keys
+// are ignored.
 
 /// Broadcaster/platform configuration. Same skip-empty-on-serialize reasoning
 /// as `ApiKeys` — removing a routing integration must actually make it

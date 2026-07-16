@@ -155,7 +155,7 @@ function App() {
     applySystemPrefs(prefs);
     tauriApi("set_log_level", { level: prefs.logLevel });
     if (prefs.autoStartEngine) {
-      tauriApi("start_native_engine_loop").then(() => fetchStatus());
+      tauriApi("start_engine").then(() => fetchStatus());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

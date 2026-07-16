@@ -1,7 +1,6 @@
-//!  the core detection orchestrator.
+//! GameDetector — the core detection orchestrator.
 //!
-//! Rust port of the original forge_scanner.py, with the
-//! same staged pipeline:
+//! Staged detection pipeline:
 //!
 //! 1. Active window / foreground process identification (OS-specific)
 //! 2. listed_apps VIP lookup (instant match)
@@ -11,7 +10,7 @@
 //! 5. Steam running-app id, wrapper/launcher parent process
 //! 6. Confidence scoring for DRM-free / indie games
 //!
-//! The `LogFn` type alias is also used by the native engine loop in the host app.
+//! The `LogFn` type alias is also used by the engine loop in the host app.
 
 use std::collections::HashMap;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
@@ -176,13 +175,13 @@ pub struct ProcessSnapshot {
     pub parent_name: String,
 }
 
-pub struct ForgeWaterfall {
+pub struct GameDetector {
     log: LogFn,
     knowledge: Option<ForgeKnowledge>,
     sys: System,
 }
 
-impl ForgeWaterfall {
+impl GameDetector {
     pub fn new(log: LogFn) -> Self {
         Self {
             log,
@@ -280,6 +279,14 @@ impl ForgeWaterfall {
             .map(|s| s.as_str())
             .or_else(|| known_exe_title_alias(exe_name))
         {
+            (self.log)(
+                &format!(
+                    "[MATCH] Stage 1 listed_apps/alias: \"{}\" -> \"{}\"",
+                    exe_name, title
+                ),
+                "debug",
+                60,
+            );
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -304,6 +311,11 @@ impl ForgeWaterfall {
             if window_title.trim().eq_ignore_ascii_case("settings") {
                 return None;
             }
+            (self.log)(
+                &format!("[MATCH] Xbox Game Pass piercer: \"{}\"", window_title),
+                "debug",
+                60,
+            );
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -316,9 +328,19 @@ impl ForgeWaterfall {
         // ── Stage 2:(hard kills) ─────────────────────────────
         if !kw.config.process_filter_bypass {
             if kw.delisted_apps.contains(exe_name) || SYSTEM_EXILES.contains(&exe_name.as_str()) {
+                (self.log)(
+                    &format!("[FILTER] \"{}\" is delisted or a system exile", exe_name),
+                    "debug",
+                    300,
+                );
                 return None;
             }
             if BANNED_PATHS.iter().any(|b| exe_path.contains(b)) {
+                (self.log)(
+                    &format!("[FILTER] \"{}\" is a banned path", exe_path),
+                    "debug",
+                    300,
+                );
                 return None;
             }
         }
@@ -333,6 +355,11 @@ impl ForgeWaterfall {
         .iter()
         .any(|s| title_lower.contains(s))
         {
+            (self.log)(
+                &format!("[FILTER] Browser/chat window title: \"{}\"", window_title),
+                "debug",
+                300,
+            );
             return None;
         }
 
@@ -353,6 +380,14 @@ impl ForgeWaterfall {
                 .then(|| extract_rom_name_from_cmdline(&proc.cmdline))
                 .flatten();
             let effective_title = rom_title.as_deref().unwrap_or(window_title);
+            (self.log)(
+                &format!(
+                    "[MATCH] Known emulator \"{}\": title=\"{}\"",
+                    exe_name, effective_title
+                ),
+                "debug",
+                60,
+            );
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -363,7 +398,7 @@ impl ForgeWaterfall {
         }
 
         // ── Stage 3: (behavioral traps) ───────────────────
-        if !self.survives_great_filter(window, proc, &kw.config) {
+        if !self.survives_behavioral_traps(window, proc, &kw.config) {
             return None;
         }
 
@@ -371,6 +406,11 @@ impl ForgeWaterfall {
         if exe_path.contains("steamapps") {
             if let Some(app_id) = platform::read_steam_running_app_id() {
                 if app_id > 0 {
+                    (self.log)(
+                        &format!("[MATCH] Steam Registry app_id={}: \"{}\"", app_id, exe_name),
+                        "debug",
+                        60,
+                    );
                     return Some(format_game_output(
                         exe_name,
                         exe_path,
@@ -384,7 +424,15 @@ impl ForgeWaterfall {
 
         #[cfg(target_os = "linux")]
         {
-            if let Some(platform_tag) = linux_golden_ticket(window.pid) {
+            if let Some(platform_tag) = linux_launch_context(window.pid) {
+                (self.log)(
+                    &format!(
+                        "[MATCH] Linux launch context ({}): \"{}\"",
+                        platform_tag, exe_name
+                    ),
+                    "debug",
+                    60,
+                );
                 return Some(format_game_output(
                     exe_name,
                     exe_path,
@@ -399,6 +447,14 @@ impl ForgeWaterfall {
         if !proc.parent_name.is_empty() {
             let parent = proc.parent_name.as_str();
             if ["wine64-preloader", "proton", "wine"].contains(&parent) || parent.ends_with(".sh") {
+                (self.log)(
+                    &format!(
+                        "[MATCH] Proton/Wine wrapper (parent={}): \"{}\"",
+                        parent, exe_name
+                    ),
+                    "debug",
+                    60,
+                );
                 return Some(format_game_output(
                     exe_name,
                     exe_path,
@@ -408,6 +464,14 @@ impl ForgeWaterfall {
                 ));
             }
             if ["epicgameslauncher.exe", "eadesktop.exe", "upc.exe"].contains(&parent) {
+                (self.log)(
+                    &format!(
+                        "[MATCH] Official launcher (parent={}): \"{}\"",
+                        parent, exe_name
+                    ),
+                    "debug",
+                    60,
+                );
                 return Some(format_game_output(
                     exe_name,
                     exe_path,
@@ -420,20 +484,45 @@ impl ForgeWaterfall {
 
         // ── Stage 5: Confidence scoring (indies / DRM-free) ────────────────
         let mut confidence: f64 = 0.0;
+        let mut factors: Vec<&str> = Vec::new();
         if kw.config.score_engine_dna && has_engine_dna(exe_path) {
             confidence += 0.4;
+            factors.push("engine_dna=+0.4");
         }
         if kw.config.score_fullscreen && window.is_fullscreen {
             confidence += 0.3;
+            factors.push("fullscreen=+0.3");
         }
         if kw.config.score_window_title && !window_title.is_empty() && title_lower != *exe_name {
             confidence += 0.2;
+            factors.push("window_title=+0.2");
         }
         if kw.config.score_ram && proc.memory_mb > kw.config.ram_threshold_mb {
             confidence += 0.1;
+            factors.push("ram=+0.1");
         }
+        (self.log)(
+            &format!(
+                "[SCORE] \"{}\": {} (total {:.1} / threshold {:.1})",
+                exe_name,
+                if factors.is_empty() {
+                    "no factors matched".to_string()
+                } else {
+                    factors.join(", ")
+                },
+                confidence,
+                kw.config.confidence_threshold
+            ),
+            "debug",
+            60,
+        );
 
         if confidence >= kw.config.confidence_threshold {
+            (self.log)(
+                &format!("[MATCH] Stage 5 confidence pass: \"{}\"", exe_name),
+                "debug",
+                60,
+            );
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -443,12 +532,20 @@ impl ForgeWaterfall {
             ));
         }
 
+        (self.log)(
+            &format!(
+                "[FILTER] Stage 5 confidence below threshold: \"{}\"",
+                exe_name
+            ),
+            "debug",
+            60,
+        );
         None
     }
 
     // ── Behavioral traps ───────────────────────────────────────────────────
 
-    fn survives_great_filter(
+    fn survives_behavioral_traps(
         &self,
         window: &ActiveWindow,
         proc: &ProcessSnapshot,
@@ -603,8 +700,7 @@ pub fn extract_true_game_name(exe_path: &str) -> String {
     }
 }
 
-/// Title-case each word ("elden ring" → "Elden Ring"), mirroring Python's
-/// `str.title()` closely enough for game folder names.
+/// Title-case each word ("elden ring" → "Elden Ring") for game folder names.
 fn title_case(s: &str) -> String {
     s.split_whitespace()
         .map(|w| {
@@ -673,7 +769,6 @@ pub fn format_game_output(
         && EMULATOR_TAGS.iter().any(|emu| exe_name.contains(emu))
         && !window_title.is_empty()
     {
-        // Python: window_title.split(' - ')[0].split(' | ')[-1]
         let first = window_title.split(" - ").next().unwrap_or(window_title);
         let clean = first
             .split(" | ")
@@ -740,7 +835,7 @@ fn macos_bundle_display_name(exe_path: &str) -> Option<String> {
 
 /// Linux: Feral GameMode and Flatpak sandbox membership.
 #[cfg(target_os = "linux")]
-fn linux_golden_ticket(pid: u32) -> Option<String> {
+fn linux_launch_context(pid: u32) -> Option<String> {
     use std::process::Command;
 
     if let Ok(out) = Command::new("gamemoded").arg("-s").output() {
@@ -767,18 +862,18 @@ fn linux_golden_ticket(pid: u32) -> Option<String> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tests — ported from the Python test_forge_scanner.py suite
+// Tests
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn scout() -> ForgeWaterfall {
-        ForgeWaterfall::new(Box::new(|_, _, _| {}))
+    fn scout() -> GameDetector {
+        GameDetector::new(Box::new(|_, _, _| {}))
     }
 
-    fn scout_with(listed: &[(&str, &str)], delisted: &[&str], strict: bool) -> ForgeWaterfall {
+    fn scout_with(listed: &[(&str, &str)], delisted: &[&str], strict: bool) -> GameDetector {
         let mut s = scout();
         s.update_forge_knowledge(
             listed
@@ -1085,7 +1180,7 @@ mod tests {
     // ── Stage 4: ─────────────────────────────────────────
 
     #[test]
-    fn proton_parent_is_golden() {
+    fn proton_parent_matches() {
         let s = scout_with(&[], &[], false);
         let mut p = proc("game.exe", "z:\\games\\common\\Elden Ring\\game.exe", 900);
         p.parent_name = "proton".to_string();
@@ -1095,7 +1190,7 @@ mod tests {
     }
 
     #[test]
-    fn launcher_parent_is_golden() {
+    fn launcher_parent_matches() {
         let s = scout_with(&[], &[], false);
         let mut p = proc("fortnite.exe", "d:\\epic\\fortnite\\fortnite.exe", 2000);
         p.parent_name = "epicgameslauncher.exe".to_string();

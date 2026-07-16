@@ -153,8 +153,7 @@ function EngineSubTab({
         }
       >
         <p className="text-xs text-white/50 mb-5 leading-relaxed">
-          The detection engine runs on port 53735. Mode:{" "}
-          <strong className="text-white/70">Native (Rust)</strong>. Platform:{" "}
+          The detection engine runs on port 53735. Platform:{" "}
           <strong className="text-white/70">{platform}</strong>.
           {platform === "macos" && (
             <span className="text-yellow-400/70">
@@ -195,18 +194,17 @@ function EngineSubTab({
           return (
             <CollapsibleSection
               title="Detection Engine & Pipeline"
-              description="Native Rust detection engine and the ForgeWaterfall process pipeline."
+              description="How the detection engine decides what you're playing."
               icon="🔄"
               badge={
                 <span className="text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 border transition-all duration-300 bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  NATIVE
+                  {engineStatus.running ? "RUNNING" : "STOPPED"}
                 </span>
               }
             >
               <p className="text-xs text-white/40 mb-4 leading-relaxed">
-                Detection runs <strong className="text-emerald-300/80">natively in Rust</strong> on
-                Windows, macOS, and Linux — no Python required.
+                Detection runs on Windows, macOS, and Linux.
                 {isMacOS && (
                   <>
                     {" "}
@@ -277,14 +275,14 @@ function EngineSubTab({
                       Detection Pipeline
                     </h4>
                     <p className="text-[11px] text-white/40 mt-0.5">
-                      Configure the 6-stage ForgeWaterfall process pipeline.
+                      Configure the 6-stage detection pipeline.
                     </p>
                   </div>
                 </div>
 
                 <p className="text-xs text-white/40 mb-4 leading-relaxed">
-                  The multi-stage ForgeWaterfall checks each running process and decides whether
-                  it's a game, gets filtered out, or needs a closer look.
+                  Each running process passes through these stages, which decide whether it's a
+                  game, gets filtered out, or needs a closer look.
                 </p>
 
                 {/* Pipeline flow indicator */}
@@ -2022,7 +2020,7 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         <div className="grid grid-cols-2 gap-4">
           {[
             { label: "App Version", value: appVersion || "…", icon: "🚀" },
-            { label: "Tauri Version", value: "2.x Native", icon: "🦀" },
+            { label: "Tauri Version", value: "2.x", icon: "🦀" },
             { label: "Platform", value: navigator.platform, icon: "💻" },
             { label: "Local Database", value: "Forge_Database.json", icon: "📂" },
             { label: "Keychain", value: "Active", icon: "🛡️" },

@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use app_lib::hub::{handle_packet, HubState};
 use app_lib::spark_protocol::{build_heartbeat, Heartbeat, HeartbeatError};
-use app_lib::NativeEngineState;
+use app_lib::EngineState;
 
 const PIN: &str = "4242";
 const KEY: &str = "pairing-key";
@@ -37,7 +37,7 @@ fn udp_roundtrip(payload: &[u8]) -> Vec<u8> {
 #[test]
 fn valid_heartbeat_updates_hub_status_over_udp() {
     let hub = HubState::new();
-    let engine = Arc::new(NativeEngineState::default());
+    let engine = Arc::new(EngineState::default());
 
     let hb = build_heartbeat(
         "GAMING-PC",
@@ -81,7 +81,7 @@ fn valid_heartbeat_updates_hub_status_over_udp() {
 #[test]
 fn wrong_pin_heartbeat_is_rejected() {
     let hub = HubState::new();
-    let engine = Arc::new(NativeEngineState::default());
+    let engine = Arc::new(EngineState::default());
 
     let hb = build_heartbeat(
         "EVIL-PC",
@@ -102,7 +102,7 @@ fn wrong_pin_heartbeat_is_rejected() {
 #[test]
 fn bad_signature_heartbeat_is_rejected() {
     let hub = HubState::new();
-    let engine = Arc::new(NativeEngineState::default());
+    let engine = Arc::new(EngineState::default());
 
     // Correct PIN but signed with the wrong pairing key, then tampered game.
     let mut hb = build_heartbeat("EVIL-PC", Some("Real Game"), Some("g.exe"), PIN, KEY);
@@ -118,7 +118,7 @@ fn bad_signature_heartbeat_is_rejected() {
 #[test]
 fn legacy_unsigned_v1_packet_is_rejected_gracefully() {
     let hub = HubState::new();
-    let engine = Arc::new(NativeEngineState::default());
+    let engine = Arc::new(EngineState::default());
 
     let legacy = br#"{"app":"StatusForge_Spark","hostname":"OLD-PC","game":"X","process":"x.exe","pin":"4242","command":"heartbeat"}"#;
     let err = handle_packet(&hub, &engine, &udp_roundtrip(legacy), PIN, KEY, None).unwrap_err();

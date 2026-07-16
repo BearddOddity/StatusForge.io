@@ -257,10 +257,10 @@ fn get_system_stats(monitor: tauri::State<SystemMonitor>) -> Result<SystemStats,
     Ok(inner.last_stats.clone())
 }
 
-/// Engine status for the frontend — built directly from the in-process native
-/// engine state (no HTTP round-trip; the Python sidecar is gone).
+/// Engine status for the frontend, built directly from in-process engine
+/// state (no HTTP round-trip).
 #[tauri::command]
-fn get_engine_status(state: tauri::State<Arc<NativeEngineState>>) -> Result<EngineStatus, String> {
+fn get_engine_status(state: tauri::State<Arc<EngineState>>) -> Result<EngineStatus, String> {
     let status = server::build_status(&state);
     let s = |k: &str| {
         status
@@ -388,45 +388,38 @@ fn import_config(payload: ConfigImportPayload) -> Result<String, String> {
     Ok("Config saved successfully".to_string())
 }
 
-/// Start the detection engine. Detection is always native (Rust) — the
-/// Python sidecar has been removed.
+/// Start the detection engine.
 #[tauri::command]
 fn start_engine(
-    state: tauri::State<Arc<NativeEngineState>>,
+    state: tauri::State<Arc<EngineState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     spawn_engine_loop(Arc::clone(&state), app_handle)
 }
 
-/// Detection mode is always "native" now. Kept for frontend compatibility.
 #[tauri::command]
-fn get_detection_mode() -> String {
-    "native".to_string()
-}
-
-#[tauri::command]
-fn stop_engine(state: tauri::State<Arc<NativeEngineState>>) -> Result<String, String> {
+fn stop_engine(state: tauri::State<Arc<EngineState>>) -> Result<String, String> {
     state.running.store(false, Ordering::Relaxed);
     Ok("Engine stopped".to_string())
 }
 
 #[tauri::command]
-fn is_engine_running(state: tauri::State<Arc<NativeEngineState>>) -> bool {
+fn is_engine_running(state: tauri::State<Arc<EngineState>>) -> bool {
     state.running.load(Ordering::Relaxed)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// NATIVE ENGINE — Phase 3: Rust Game Detection Loop
+// GAME DETECTION ENGINE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-use scanner::waterfall::{ForgeWaterfall, LogFn};
+use scanner::waterfall::{GameDetector, LogFn};
 use scanner::{GameDetection, ScannerConfig};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// Shared state for the native detection engine.
-pub struct NativeEngineState {
-    /// Whether the native engine loop is running
+/// Shared state for the detection engine.
+pub struct EngineState {
+    /// Whether the engine loop is running
     pub running: Arc<AtomicBool>,
     /// Last detected game
     pub current_game: Mutex<Option<GameDetection>>,
@@ -446,7 +439,7 @@ pub struct NativeEngineState {
     pub status_tx: tokio::sync::watch::Sender<serde_json::Value>,
 }
 
-impl Default for NativeEngineState {
+impl Default for EngineState {
     fn default() -> Self {
         let (status_tx, _rx) = tokio::sync::watch::channel(serde_json::json!({
             "running": false,
@@ -466,7 +459,7 @@ impl Default for NativeEngineState {
     }
 }
 
-impl NativeEngineState {
+impl EngineState {
     /// Marks a game as detected/playing.
     ///
     /// Each lock is taken and released within its own statement (a temporary
@@ -511,7 +504,7 @@ impl NativeEngineState {
 }
 
 #[cfg(test)]
-mod native_engine_state_tests {
+mod engine_state_tests {
     use super::*;
     use std::sync::mpsc;
 
@@ -526,7 +519,7 @@ mod native_engine_state_tests {
     /// (and fails on timeout) instead of the whole app doing so for real users.
     #[test]
     fn state_update_then_push_status_never_deadlocks() {
-        let state = Arc::new(NativeEngineState::default());
+        let state = Arc::new(EngineState::default());
         let (tx, rx) = mpsc::channel();
 
         let worker_state = state.clone();
@@ -599,7 +592,7 @@ pub(crate) fn emit_health_events(app: &tauri::AppHandle, events: &[pusher::Healt
     }
 }
 
-/// Shared by the native engine loop and the LAN Hub (hub.rs): whichever
+/// Shared by the engine loop and the LAN Hub (hub.rs): whichever
 /// detects a new game — this PC's own scanner or a paired SPARK agent on a
 /// second PC — funnels through here for the exact same treatment. SPARK
 /// itself never touches metadata or platform pushes (detect-and-forward
@@ -615,7 +608,7 @@ pub fn on_game_detected(
     config: &AppConfig,
     game_title: &str,
     process: &str,
-    state_arc: &Arc<NativeEngineState>,
+    state_arc: &Arc<EngineState>,
     app_handle: &tauri::AppHandle,
 ) {
     let forge_db_path = base.join("Forge_Database.json");
@@ -724,7 +717,7 @@ pub fn on_game_detected(
 #[tauri::command]
 fn override_game(
     title: String,
-    state: tauri::State<Arc<NativeEngineState>>,
+    state: tauri::State<Arc<EngineState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     let title = title.trim().to_string();
@@ -775,7 +768,7 @@ fn override_game(
 /// Cancel an active manual override early so normal detection resumes on
 /// the next tick, instead of waiting out the full 5 minutes.
 #[tauri::command]
-fn clear_override_game(state: tauri::State<Arc<NativeEngineState>>) -> Result<String, String> {
+fn clear_override_game(state: tauri::State<Arc<EngineState>>) -> Result<String, String> {
     *state.override_until.lock().unwrap() = None;
     Ok("Override cleared".to_string())
 }
@@ -850,23 +843,13 @@ fn get_detection_feedback_stats() -> Result<serde_json::Value, String> {
     serde_json::to_value(&store).map_err(|e| format!("Failed to serialize stats: {}", e))
 }
 
-/// Start the native engine detection loop in a background thread.
-/// Runs natively on Windows, macOS, and Linux.
-#[tauri::command]
-fn start_native_engine_loop(
-    state: tauri::State<Arc<NativeEngineState>>,
-    app_handle: tauri::AppHandle,
-) -> Result<String, String> {
-    spawn_engine_loop(Arc::clone(&state), app_handle)
-}
-
-/// Shared implementation for `start_engine` / `start_native_engine_loop`.
+/// Shared implementation behind the `start_engine` command.
 fn spawn_engine_loop(
-    state_arc: Arc<NativeEngineState>,
+    state_arc: Arc<EngineState>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     if state_arc.running.load(Ordering::Relaxed) {
-        return Ok("Native engine loop already running".to_string());
+        return Ok("Engine loop already running".to_string());
     }
 
     state_arc.running.store(true, Ordering::Relaxed);
@@ -874,15 +857,15 @@ fn spawn_engine_loop(
 
     std::thread::spawn(move || {
         let log: LogFn = Box::new(|msg: &str, level: &str, _cd: u64| {
-            log::info!("[NATIVE] {} {}", level, msg);
+            log::info!("[ENGINE] {} {}", level, msg);
         });
 
-        let mut scout = ForgeWaterfall::new(log);
+        let mut scout = GameDetector::new(log);
 
         // macOS: window titles need Screen Recording permission. Surface it
         // loudly (the status payload also carries `permission_error`).
         if let Some(err) = scout.permission_error() {
-            log::warn!("[NATIVE] {}", err);
+            log::warn!("[ENGINE] {}", err);
         }
 
         let mut current_game: Option<String> = None;
@@ -918,7 +901,7 @@ fn spawn_engine_loop(
         }
 
         log::info!(
-            "[NATIVE] Engine loop started. Grace: {}s, Interval: {}s",
+            "[ENGINE] Engine loop started. Grace: {}s, Interval: {}s",
             grace_period,
             scan_interval
         );
@@ -957,7 +940,7 @@ fn spawn_engine_loop(
                 .unwrap_or(false);
             if spark_link_active {
                 if current_game.is_some() {
-                    log::info!("[NATIVE] SPARK Dual-PC Link active — pausing local detection.");
+                    log::info!("[ENGINE] SPARK Dual-PC Link active — pausing local detection.");
                     current_game = None;
                     lost_focus_time = None;
                     state_arc.clear_playing();
@@ -984,7 +967,7 @@ fn spawn_engine_loop(
                     continue;
                 } else {
                     *state_arc.override_until.lock().unwrap() = None;
-                    log::info!("[NATIVE] Manual override expired: {}", override_title);
+                    log::info!("[ENGINE] Manual override expired: {}", override_title);
                     let _ = app_handle.emit("override-cleared", &override_title);
                 }
             }
@@ -1030,7 +1013,7 @@ fn spawn_engine_loop(
             // "Dark Souls III" everywhere downstream.
             let detected = detected.map(|mut game| {
                 if let Some(canonical) = config::resolve_title_alias(&forge_db, &game.title) {
-                    log::info!("[NATIVE] Alias: \"{}\" → \"{}\"", game.title, canonical);
+                    log::info!("[ENGINE] Alias: \"{}\" → \"{}\"", game.title, canonical);
                     game.title = canonical;
                 }
                 game
@@ -1042,7 +1025,7 @@ fn spawn_engine_loop(
                 let game_title = game.title.clone();
                 if current_game.as_ref() != Some(&game_title) {
                     current_game = Some(game_title.clone());
-                    log::info!("[NATIVE] NEW GAME: {} ({})", game_title, game.platform);
+                    log::info!("[ENGINE] NEW GAME: {} ({})", game_title, game.platform);
 
                     state_arc.set_playing(&game);
 
@@ -1081,7 +1064,7 @@ fn spawn_engine_loop(
                         - lost_focus_time.unwrap_or(0.0);
                     if time_away > grace_period as f64 {
                         log::info!(
-                            "[NATIVE] Grace period expired. Dropping: {}",
+                            "[ENGINE] Grace period expired. Dropping: {}",
                             current_game.as_deref().unwrap_or("?")
                         );
                         current_game = None;
@@ -1092,7 +1075,7 @@ fn spawn_engine_loop(
                         let _ = app_handle.emit("game-cleared", &idle_category);
                         state_arc.push_status();
 
-                        // Native category push back to the idle category
+                        // Push the idle category back (no-op unless routing_mode is Native)
                         if let Some(cfg) = config.as_ref() {
                             let health_events =
                                 pusher::push_category(&base, cfg, &forge_db, &idle_category);
@@ -1105,37 +1088,10 @@ fn spawn_engine_loop(
             std::thread::sleep(Duration::from_secs(scan_interval));
         }
 
-        log::info!("[NATIVE] Engine loop stopped.");
+        log::info!("[ENGINE] Engine loop stopped.");
     });
 
-    Ok("Native engine loop started".to_string())
-}
-
-/// Stop the native engine detection loop.
-#[tauri::command]
-fn stop_native_engine_loop(state: tauri::State<Arc<NativeEngineState>>) -> Result<String, String> {
-    state.running.store(false, Ordering::Relaxed);
-    Ok("Native engine loop stopped".to_string())
-}
-
-/// Get current native engine detection status.
-#[tauri::command]
-fn get_native_engine_status(state: tauri::State<Arc<NativeEngineState>>) -> serde_json::Value {
-    let game = state.current_game.lock().unwrap().clone();
-    let process = state.current_process.lock().unwrap().clone();
-    let is_playing = *state.is_playing.lock().unwrap();
-    let start_time = *state.start_time.lock().unwrap();
-    // Some(message) when the OS blocks window inspection (macOS Screen Recording)
-    let permission_error = scanner::platform::permission_error();
-
-    serde_json::json!({
-        "running": state.running.load(Ordering::Relaxed),
-        "current_game": game,
-        "process": process,
-        "is_playing": is_playing,
-        "start_time": start_time,
-        "permission_error": permission_error,
-    })
+    Ok("Engine loop started".to_string())
 }
 
 // --- OS Keychain Token Storage ---
@@ -1788,7 +1744,7 @@ fn export_game_database(app: tauri::AppHandle) -> Result<String, String> {
 /// so the platform picks up the in-progress session immediately.
 #[tauri::command]
 fn refresh_platform_push(
-    state: tauri::State<Arc<NativeEngineState>>,
+    state: tauri::State<Arc<EngineState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<bool, String> {
     let game = state.current_game.lock().unwrap().clone();
@@ -1898,19 +1854,18 @@ fn dev_get_log_tail(lines: usize) -> Result<LogTail, String> {
     })
 }
 
-/// Get dev diagnostics: platform, detection mode, native engine status.
+/// Get dev diagnostics: platform, engine status, hub pairing.
 #[tauri::command]
 fn dev_get_diagnostics(
-    state: tauri::State<Arc<NativeEngineState>>,
+    state: tauri::State<Arc<EngineState>>,
     hub: tauri::State<Arc<hub::HubState>>,
 ) -> serde_json::Value {
     serde_json::json!({
         "platform": get_platform(),
-        "detection_mode": get_detection_mode(),
-        "native_engine_running": state.running.load(Ordering::Relaxed),
-        "native_current_game": state.current_game.lock().unwrap().clone(),
-        "native_process": state.current_process.lock().unwrap().clone(),
-        "native_is_playing": *state.is_playing.lock().unwrap(),
+        "engine_running": state.running.load(Ordering::Relaxed),
+        "current_game": state.current_game.lock().unwrap().clone(),
+        "current_process": state.current_process.lock().unwrap().clone(),
+        "is_playing": *state.is_playing.lock().unwrap(),
         "hub_paired_spark": hub.paired.lock().unwrap().clone(),
         "permission_error": scanner::platform::permission_error(),
     })
@@ -2080,7 +2035,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let oauth_state = Arc::new(auth::OAuthState::new());
-    let engine_state = Arc::new(NativeEngineState::default());
+    let engine_state = Arc::new(EngineState::default());
     let hub_state = Arc::new(hub::HubState::new());
 
     tauri::Builder::default()
@@ -2242,10 +2197,6 @@ pub fn run() {
             hub::hub_get_status,
             hub::hub_set_pin,
             hub::hub_set_pairing_key,
-            get_detection_mode,
-            start_native_engine_loop,
-            stop_native_engine_loop,
-            get_native_engine_status,
             override_game,
             clear_override_game,
             log_detection_feedback,

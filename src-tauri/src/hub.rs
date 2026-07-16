@@ -5,7 +5,7 @@
 //! - **Receive**: listens on UDP 53735 for SPARK heartbeats, validates the
 //!   4-digit PIN + HMAC signature (see `spark_protocol`), and feeds the
 //!   detected `{game, process}` into the same status/broadcast path the local
-//!   native engine uses — overlays update identically for 1-PC and 2-PC users.
+//!   engine uses — overlays update identically for 1-PC and 2-PC users.
 
 use std::net::UdpSocket;
 use std::sync::{Arc, Mutex};
@@ -18,7 +18,7 @@ use crate::scanner::GameDetection;
 use crate::spark_protocol::{
     self, HeartbeatError, HubAnnounce, DISCOVERY_PORT, HEARTBEAT_PORT, PROTOCOL_VERSION,
 };
-use crate::NativeEngineState;
+use crate::EngineState;
 
 /// A SPARK heartbeat is considered stale after this many seconds
 /// (SPARK sends roughly every 10s).
@@ -81,7 +81,7 @@ fn read_pairing() -> (String, String) {
 }
 
 /// Best-effort: load config + Forge DB and push the idle category. Used
-/// when a SPARK-sourced game clears, mirroring the native loop's
+/// when a SPARK-sourced game clears, mirroring the engine loop's
 /// grace-period-expired path. Never errors — logs and gives up quietly,
 /// same as every other pusher call site.
 fn push_idle_category(base: &std::path::Path, app_handle: Option<&tauri::AppHandle>) {
@@ -114,7 +114,7 @@ fn push_idle_category(base: &std::path::Path, app_handle: Option<&tauri::AppHand
 /// this is skipped in the unit tests that pass `None`).
 pub fn apply_heartbeat(
     hub: &HubState,
-    engine: &Arc<NativeEngineState>,
+    engine: &Arc<EngineState>,
     hb: &spark_protocol::Heartbeat,
     app_handle: Option<&tauri::AppHandle>,
 ) {
@@ -202,7 +202,7 @@ pub fn apply_heartbeat(
 /// Pure enough for the in-process dual-PC integration test.
 pub fn handle_packet(
     hub: &HubState,
-    engine: &Arc<NativeEngineState>,
+    engine: &Arc<EngineState>,
     data: &[u8],
     pin: &str,
     pairing_key: &str,
@@ -224,7 +224,7 @@ pub fn handle_packet(
 }
 
 /// Start the Hub: heartbeat listener (UDP 53735) + discovery announcer (UDP 53736).
-pub fn start_hub(hub: Arc<HubState>, engine: Arc<NativeEngineState>, app_handle: tauri::AppHandle) {
+pub fn start_hub(hub: Arc<HubState>, engine: Arc<EngineState>, app_handle: tauri::AppHandle) {
     // ── Heartbeat listener ─────────────────────────────────────────────
     {
         let hub = hub.clone();

@@ -10,7 +10,7 @@
 #[allow(dead_code)]
 mod spark_protocol;
 
-use forge_detection::waterfall::{ForgeWaterfall, LogFn};
+use forge_detection::waterfall::{GameDetector, LogFn};
 use serde::{Deserialize, Serialize};
 use std::net::UdpSocket;
 use std::path::PathBuf;
@@ -180,7 +180,7 @@ fn broadcast_socket() -> Result<UdpSocket, String> {
 
 // ─── Background loops ────────────────────────────────────────────────────────
 
-/// Scanner + heartbeat loop: detect with ForgeWaterfall, broadcast signed
+/// Scanner + heartbeat loop: detect with GameDetector, broadcast signed
 /// heartbeats. SPARK is featherweight — the waterfall only refreshes the
 /// processes it actually inspects.
 fn start_scanner_loop(state: Arc<SparkState>, app_handle: tauri::AppHandle) {
@@ -189,7 +189,7 @@ fn start_scanner_loop(state: Arc<SparkState>, app_handle: tauri::AppHandle) {
         let log: LogFn = Box::new(|msg: &str, level: &str, _cd: u64| {
             log::info!("[SPARK] {} {}", level, msg);
         });
-        let mut scout = ForgeWaterfall::new(log);
+        let mut scout = GameDetector::new(log);
         if let Some(err) = scout.permission_error() {
             log::warn!("[SPARK] {}", err);
         }
