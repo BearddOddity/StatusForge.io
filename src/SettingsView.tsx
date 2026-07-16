@@ -484,7 +484,8 @@ function EngineSubTab({
                               Chromium / Electron Trap
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
-                              Kills Discord, Spotify, VS Code, and other Electron/Chromium shells
+                              Filters out Discord, Spotify, VS Code, and other Electron/Chromium
+                              apps
                             </p>
                           </div>
                           <Toggle
@@ -501,7 +502,7 @@ function EngineSubTab({
                               Command-Line Flag Trap
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
-                              Kills helper processes launched with utility/render flags
+                              Filters out helper processes launched with utility/render flags
                             </p>
                           </div>
                           <Toggle
@@ -518,7 +519,7 @@ function EngineSubTab({
                               UI Framework Trap
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
-                              Kills known desktop tools like Task Manager, File Explorer, etc.
+                              Filters out known desktop tools like Task Manager, File Explorer, etc.
                             </p>
                           </div>
                           <Toggle
@@ -538,7 +539,7 @@ function EngineSubTab({
                               Window Geometry Trap
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
-                              Kills background or invisible processes with no visible presence
+                              Filters out background or invisible processes with no visible presence
                             </p>
                           </div>
                           <Toggle

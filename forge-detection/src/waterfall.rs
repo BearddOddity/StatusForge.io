@@ -336,6 +336,22 @@ impl ForgeWaterfall {
             return None;
         }
 
+        // ── Known emulator passthrough ─────────────────────────────────────
+        // Most emulator UIs are built on Qt or wxWidgets — exactly what the
+        // UI-framework trap below exists to filter out. Recognizing the
+        // process by name here, before that trap runs, means PCSX2/Dolphin/
+        // RPCS3/etc. don't get silently dropped as if they were some generic
+        // desktop utility.
+        if kw.config.emulator_detection && EMULATOR_TAGS.iter().any(|emu| exe_name.contains(emu)) {
+            return Some(format_game_output(
+                exe_name,
+                exe_path,
+                window_title,
+                "Emulator",
+                kw.config.emulator_detection,
+            ));
+        }
+
         // ── Stage 3: (behavioral traps) ───────────────────
         if !self.survives_great_filter(window, proc, &kw.config) {
             return None;
@@ -780,6 +796,62 @@ mod tests {
             .unwrap();
         assert_eq!(d.title, "ELDEN RING");
         assert_eq!(d.platform, "The Forge");
+    }
+
+    // ── Known emulator passthrough ──────────────────────────────────────
+
+    #[test]
+    fn emulator_bypasses_ui_framework_trap() {
+        // PCSX2's real Qt build ships qt6core.dll right next to the exe —
+        // exactly what trap_ui_framework looks for. Without the passthrough
+        // this gets silently dropped before it's ever recognized as PCSX2.
+        let tmp = std::env::temp_dir().join(format!("forge_emu_test_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("qt6core.dll"), b"").unwrap();
+        let exe = tmp.join("pcsx2-qt.exe");
+        std::fs::write(&exe, b"").unwrap();
+        let exe_path = exe.to_string_lossy().to_lowercase();
+
+        let s = scout_with(&[], &[], false);
+        let d = s
+            .evaluate(
+                &win("Some Game - PCSX2", false),
+                &proc("pcsx2-qt.exe", &exe_path, 10),
+            )
+            .expect("emulator should still be detected despite the Qt trap");
+        assert_eq!(d.platform, "Emulator");
+        assert_eq!(d.title, "Some Game");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn emulator_passthrough_still_respects_delisted_apps() {
+        let s = scout_with(&[], &["pcsx2-qt.exe"], false);
+        assert!(s
+            .evaluate(
+                &win("Some Game - PCSX2", false),
+                &proc("pcsx2-qt.exe", "d:\\emu\\pcsx2-qt.exe", 10)
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn emulator_passthrough_disabled_falls_back_to_normal_pipeline() {
+        // With emulator_detection off, a low-memory, title-less PCSX2 window
+        // gets trapped by the RAM floor like anything else would.
+        let mut s = scout_with(&[], &[], false);
+        let config = ScannerConfig {
+            emulator_detection: false,
+            ..Default::default()
+        };
+        s.update_forge_knowledge(HashMap::new(), vec![], false, config);
+        assert!(s
+            .evaluate(
+                &win("", false),
+                &proc("pcsx2-qt.exe", "d:\\emu\\pcsx2-qt.exe", 10)
+            )
+            .is_none());
     }
 
     #[test]
