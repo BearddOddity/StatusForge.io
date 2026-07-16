@@ -592,6 +592,49 @@ pub(crate) fn emit_health_events(app: &tauri::AppHandle, events: &[pusher::Healt
     }
 }
 
+/// Runs one weekly library sync pass and emits a "library-item-synced" event
+/// per changed category id, so the frontend can toast it. Shared by the
+/// periodic background loop and the manual `sync_library_now` command.
+async fn run_weekly_library_sync(app: &tauri::AppHandle) {
+    let Ok(base_dir) = app_base_dir() else { return };
+    let Ok(config) = auth::load_config_at(&base_dir) else {
+        return;
+    };
+    let Ok(mut db) = server::load_db() else {
+        return;
+    };
+
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let changes = metadata::weekly_library_sync(&mut db, &config.broadcaster, now_secs).await;
+
+    if let Err(e) = server::save_db(&db) {
+        log::warn!("[SYNC] Failed to save library after weekly sync: {}", e);
+        return;
+    }
+
+    for change in &changes {
+        log::info!(
+            "[SYNC] {} category id changed on {}: {} -> {}",
+            change.title,
+            change.platform,
+            change.old_id,
+            change.new_id
+        );
+        let _ = app.emit(
+            "library-item-synced",
+            serde_json::json!({
+                "title": change.title,
+                "platform": change.platform,
+                "old_id": change.old_id,
+                "new_id": change.new_id,
+            }),
+        );
+    }
+}
+
 /// Shared by the engine loop and the LAN Hub (hub.rs): whichever
 /// detects a new game — this PC's own scanner or a paired SPARK agent on a
 /// second PC — funnels through here for the exact same treatment. SPARK
@@ -1647,6 +1690,14 @@ async fn sync_kick_db() -> Result<String, String> {
     Ok("Kick database synced".to_string())
 }
 
+/// Manually trigger the weekly library sync (Twitch/Kick category id
+/// re-check + sync_history pruning) instead of waiting for the periodic loop.
+#[tauri::command]
+async fn sync_library_now(app_handle: tauri::AppHandle) -> Result<String, String> {
+    run_weekly_library_sync(&app_handle).await;
+    Ok("Library synced".to_string())
+}
+
 /// Rotate widget token (Security Audit #5). Returns the new token.
 #[tauri::command]
 fn rotate_widget_token() -> Result<String, String> {
@@ -2172,6 +2223,22 @@ pub fn run() {
                 }
             });
 
+            // Weekly library sync: re-checks each library entry's Twitch/Kick
+            // category id against the live lookup (a rename/re-issue on
+            // their end would otherwise leave a broadcast silently targeting
+            // a stale id) and prunes each entry's sync_history down to the
+            // last 7 days. See metadata::weekly_library_sync.
+            let sync_app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                const SYNC_INTERVAL: std::time::Duration =
+                    std::time::Duration::from_secs(7 * 24 * 60 * 60);
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                loop {
+                    run_weekly_library_sync(&sync_app_handle).await;
+                    tokio::time::sleep(SYNC_INTERVAL).await;
+                }
+            });
+
             // Prime the CPU-usage baseline now, not on the frontend's first
             // poll — see SystemMonitor's doc comment for why.
             app.state::<SystemMonitor>().prime();
@@ -2209,6 +2276,7 @@ pub fn run() {
             twitch_validate_token,
             check_platform_live_status,
             sync_kick_db,
+            sync_library_now,
             rotate_widget_token,
             exile_app,
             dev_get_log_tail,

@@ -242,6 +242,13 @@ function App() {
       listen<string>("platform-recovered", (e) => {
         toast(`✅ ${e.payload} API recovered — broadcasting resumed`, "success");
       }),
+      // Weekly library sync found a renamed/re-issued category id.
+      listen<{ title: string; platform: string; old_id: string; new_id: string }>(
+        "library-item-synced",
+        (e) => {
+          toast(`${e.payload.title} category updated on ${e.payload.platform}`, "success");
+        }
+      ),
     ];
     return () => {
       subs.forEach((s) => s.then((u) => u()).catch(() => {}));

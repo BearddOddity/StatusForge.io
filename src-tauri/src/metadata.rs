@@ -24,7 +24,9 @@
 
 use std::time::Duration;
 
-use crate::config::{ApiKeys, BroadcasterConfig, ForgeLibraryEntry};
+use crate::config::{
+    ApiKeys, BroadcasterConfig, ForgeDatabase, ForgeLibraryEntry, SyncHistoryEntry,
+};
 
 /// Fill empty fields of `existing` from `fetched` — except fields the user
 /// has locked (see ForgeLibraryEntry::locked_fields), which are never
@@ -545,6 +547,121 @@ async fn fetch_kick_id(
     }
 }
 
+/// One detected Twitch/Kick category-id drift, surfaced to the frontend so
+/// it can toast something like "Dark Souls III category updated on Twitch".
+pub struct SyncChange {
+    pub title: String,
+    pub platform: String,
+    pub old_id: String,
+    pub new_id: String,
+}
+
+const SYNC_HISTORY_MAX_AGE_SECS: u64 = 7 * 24 * 60 * 60;
+
+/// Re-checks every library entry's Twitch/Kick category id against the live
+/// platform lookup. Category ids aren't permanently fixed — a rename or
+/// re-issue on Twitch/Kick's end would otherwise make broadcasts silently
+/// target a stale id until someone happens to re-scan the game by hand.
+///
+/// Only entries with at least one platform id already set get checked (and
+/// get a sync_history record) — nothing to verify for a game that's never
+/// been linked to a category. Each entry's sync_history is also pruned down
+/// to the last 7 days here, regardless of whether anything changed, since
+/// older check-ins aren't useful for troubleshooting and just take up space.
+pub async fn weekly_library_sync(
+    db: &mut ForgeDatabase,
+    broadcaster: &BroadcasterConfig,
+    now_secs: u64,
+) -> Vec<SyncChange> {
+    let mut changes = Vec::new();
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("[SYNC] HTTP client build failed: {}", e);
+            return changes;
+        }
+    };
+
+    let twitch_ready =
+        !broadcaster.twitch_client.is_empty() && !broadcaster.twitch_token.is_empty();
+    let kick_ready = !broadcaster.kick_token.is_empty();
+
+    for (title, entry) in db.library.iter_mut() {
+        if entry.twitch_id.is_empty() && entry.kick_id.is_empty() {
+            continue;
+        }
+
+        let mut entry_changes = Vec::new();
+
+        if twitch_ready && !entry.twitch_id.is_empty() {
+            match fetch_twitch_id(
+                &client,
+                title,
+                &broadcaster.twitch_client,
+                &broadcaster.twitch_token,
+            )
+            .await
+            {
+                Ok(live_id) if !live_id.is_empty() && live_id != entry.twitch_id => {
+                    entry_changes.push(format!("twitch: {} -> {}", entry.twitch_id, live_id));
+                    changes.push(SyncChange {
+                        title: title.clone(),
+                        platform: "Twitch".to_string(),
+                        old_id: entry.twitch_id.clone(),
+                        new_id: live_id.clone(),
+                    });
+                    entry.twitch_id = live_id;
+                }
+                Ok(_) => {}
+                Err(e) => log::warn!("[SYNC] Twitch category check failed for {}: {}", title, e),
+            }
+        }
+
+        if kick_ready && !entry.kick_id.is_empty() {
+            match fetch_kick_id(&client, title, &broadcaster.kick_token).await {
+                Ok(live_id) if !live_id.is_empty() && live_id != entry.kick_id => {
+                    entry_changes.push(format!("kick: {} -> {}", entry.kick_id, live_id));
+                    changes.push(SyncChange {
+                        title: title.clone(),
+                        platform: "Kick".to_string(),
+                        old_id: entry.kick_id.clone(),
+                        new_id: live_id.clone(),
+                    });
+                    entry.kick_id = live_id;
+                }
+                Ok(_) => {}
+                Err(e) => log::warn!("[SYNC] Kick category check failed for {}: {}", title, e),
+            }
+        }
+
+        entry.sync_history.push(SyncHistoryEntry {
+            timestamp: format!("{:010}", now_secs),
+            action: "weekly_sync".to_string(),
+            changes: if entry_changes.is_empty() {
+                "none".to_string()
+            } else {
+                entry_changes.join(", ")
+            },
+        });
+        prune_sync_history(&mut entry.sync_history, now_secs);
+    }
+
+    changes
+}
+
+/// Drops sync_history entries older than 7 days.
+fn prune_sync_history(history: &mut Vec<SyncHistoryEntry>, now_secs: u64) {
+    history.retain(|h| {
+        h.timestamp
+            .parse::<u64>()
+            .map(|ts| now_secs.saturating_sub(ts) <= SYNC_HISTORY_MAX_AGE_SECS)
+            .unwrap_or(false)
+    });
+}
+
 /// Returns (sgdb_id, cover_url, logo_url) — cover/logo may be empty if
 /// SteamGridDB has no 600x900 grid / no logo for this game.
 async fn fetch_sgdb(
@@ -637,6 +754,37 @@ pub async fn resolve_cover_field(value: &str, steamgrid_key: &str) -> Result<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prune_sync_history_drops_entries_older_than_7_days() {
+        let now = 1_000_000_u64;
+        let mut history = vec![
+            SyncHistoryEntry {
+                timestamp: format!("{:010}", now - 6 * 24 * 60 * 60), // 6 days old
+                action: "weekly_sync".to_string(),
+                changes: "none".to_string(),
+            },
+            SyncHistoryEntry {
+                timestamp: format!("{:010}", now - 8 * 24 * 60 * 60), // 8 days old
+                action: "weekly_sync".to_string(),
+                changes: "none".to_string(),
+            },
+        ];
+        prune_sync_history(&mut history, now);
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].changes, "none");
+    }
+
+    #[test]
+    fn prune_sync_history_drops_unparseable_timestamps() {
+        let mut history = vec![SyncHistoryEntry {
+            timestamp: "not-a-number".to_string(),
+            action: "weekly_sync".to_string(),
+            changes: "none".to_string(),
+        }];
+        prune_sync_history(&mut history, 1_000_000);
+        assert!(history.is_empty());
+    }
 
     #[test]
     fn parses_steamgriddb_grid_page_url() {

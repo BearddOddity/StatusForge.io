@@ -207,6 +207,20 @@ pub struct GameAlias {
     pub preferred: bool,
 }
 
+/// One weekly-sync check-in against Twitch/Kick's live category list for a
+/// single library entry — logged so a user can see what changed (or that
+/// nothing did), not just that a background sync ran at some point.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[serde(default)]
+pub struct SyncHistoryEntry {
+    /// Zero-padded unix seconds (matches GameAlias::added_at).
+    pub timestamp: String,
+    /// "weekly_sync" today; room for other check-in types later.
+    pub action: String,
+    /// e.g. "twitch: 12345 -> 67890", or "none" when nothing changed.
+    pub changes: String,
+}
+
 fn default_alias_priority() -> u8 {
     1
 }
@@ -276,6 +290,10 @@ pub struct ForgeLibraryEntry {
     /// existed still round-trips byte-for-byte.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<GameAlias>,
+    /// Weekly Twitch/Kick category-id check-ins, newest last, pruned to the
+    /// last 7 days — see `metadata::weekly_library_sync`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sync_history: Vec<SyncHistoryEntry>,
 }
 
 /// Forge database
