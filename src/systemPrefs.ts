@@ -27,6 +27,9 @@ export interface SystemPrefs {
   // Reveals the OAuth-managed token previews in Settings > API & Routing
   // (Access/Refresh Token). Off by default — those values stay masked.
   showAccessTokens: boolean;
+  // First-launch setup wizard. Set once it's finished/skipped; a "Replay
+  // Setup Guide" button in Settings > System flips it back to false.
+  onboardingComplete: boolean;
 }
 
 export const defaultSystemPrefs: SystemPrefs = {
@@ -47,6 +50,7 @@ export const defaultSystemPrefs: SystemPrefs = {
   autoUpdateCheckEnabled: true,
   showDevTools: false,
   showAccessTokens: false,
+  onboardingComplete: false,
 };
 
 export const SYSTEM_PREFS_KEY = "statusforge_system_prefs";

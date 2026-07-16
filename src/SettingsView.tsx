@@ -2653,6 +2653,15 @@ function SystemSubTab({
         <button onClick={exportMetadataReadme} className="btn-ghost">
           Export Library README (.md)
         </button>
+        <button
+          onClick={() => {
+            saveSystemPrefs({ ...loadSystemPrefs(), onboardingComplete: false });
+            toast("Setup guide reopened", "info");
+          }}
+          className="btn-ghost"
+        >
+          Replay Setup Guide
+        </button>
       </div>
     </div>
   );

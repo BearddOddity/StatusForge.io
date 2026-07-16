@@ -9,7 +9,12 @@ import {
 import appIcon from "../icons/icon.png";
 import type { EngineStatus, ViewId } from "@/types";
 import { fetchEngineStatus, fetchWidgetToken, tauriApi } from "@/hooks/useTauriApi";
-import { loadSystemPrefs, applySystemPrefs, SYSTEM_PREFS_EVENT } from "@/systemPrefs";
+import {
+  loadSystemPrefs,
+  saveSystemPrefs,
+  applySystemPrefs,
+  SYSTEM_PREFS_EVENT,
+} from "@/systemPrefs";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useUpdater } from "@/hooks/useUpdater";
 import { useToasts, ToastContainer } from "@/components/Toast";
@@ -19,6 +24,7 @@ import LibraryView from "@/LibraryView";
 import { THEME_PREFS_EVENT, loadThemePrefs, saveThemePrefs, applyThemePrefs } from "@/theme";
 import SettingsView from "@/SettingsView";
 import DevView from "@/dev/DevView";
+import OnboardingWizard from "@/components/OnboardingWizard";
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewId>("dashboard");
@@ -39,6 +45,21 @@ function App() {
   useEffect(() => {
     if (currentView === "dev" && !showDevTools) setCurrentView("dashboard");
   }, [currentView, showDevTools]);
+
+  // First-launch setup wizard — also re-shown on demand via the "Replay
+  // Setup Guide" button in Settings > System.
+  const [showOnboarding, setShowOnboarding] = useState(() => !loadSystemPrefs().onboardingComplete);
+
+  useEffect(() => {
+    const handler = () => setShowOnboarding(!loadSystemPrefs().onboardingComplete);
+    window.addEventListener(SYSTEM_PREFS_EVENT, handler);
+    return () => window.removeEventListener(SYSTEM_PREFS_EVENT, handler);
+  }, []);
+
+  const finishOnboarding = useCallback(() => {
+    saveSystemPrefs({ ...loadSystemPrefs(), onboardingComplete: true });
+    setShowOnboarding(false);
+  }, []);
 
   const [engineStatus, setEngineStatus] = useState<EngineStatus>({
     running: false,
@@ -301,6 +322,9 @@ function App() {
         )}
         {views[currentView]}
       </main>
+      {showOnboarding && (
+        <OnboardingWizard onFinish={finishOnboarding} onNavigate={setCurrentView} />
+      )}
     </div>
   );
 }
