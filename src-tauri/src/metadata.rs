@@ -11,6 +11,10 @@
 //! - SteamGridDB: preferred 600x900 cover, sgdb_id (needs key; overrides the
 //!   cover_url from every other source once fetched, since it's a
 //!   purpose-built cover-art database)
+//! - TheGamesDB: queried last among the metadata sources above — a
+//!   community-run database with much stronger coverage of older/retro
+//!   console games than RAWG or IGDB, so it only fills in what they missed
+//!   (needs key), thegamesdb_id
 //! - Twitch/Kick: category IDs looked up live by title (needs an active
 //!   connection to that platform — Client ID + token), not fetched from a
 //!   metadata database at all
@@ -54,6 +58,7 @@ pub fn merge_entry(
         sgdb_id,
         steam_id,
         gog_id,
+        thegamesdb_id,
         twitch_id,
         kick_id
     );
@@ -106,6 +111,13 @@ pub async fn scan(
     match fetch_gog(&client, title).await {
         Ok(e) => fetched = merge_entry(fetched, &e),
         Err(e) => log::warn!("[META] GOG failed: {}", e),
+    }
+
+    if !keys.thegamesdb.is_empty() {
+        match fetch_thegamesdb(&client, title, &keys.thegamesdb).await {
+            Ok(e) => fetched = merge_entry(fetched, &e),
+            Err(e) => log::warn!("[META] TheGamesDB failed: {}", e),
+        }
     }
 
     if !keys.steamgrid.is_empty() {
@@ -360,6 +372,131 @@ async fn fetch_gog(client: &reqwest::Client, title: &str) -> Result<ForgeLibrary
     })
 }
 
+/// TheGamesDB's `/Genres`, `/Developers`, and `/Publishers` endpoints each
+/// return a flat id -> name table (the game-search results only carry ids,
+/// not names) — this fetches whichever table `endpoint` names and maps it.
+async fn thegamesdb_name_table(
+    client: &reqwest::Client,
+    endpoint: &str,
+    data_key: &str,
+    key: &str,
+) -> Result<std::collections::HashMap<u64, String>, String> {
+    let url = format!(
+        "https://api.thegamesdb.net/v1/{}?apikey={}",
+        endpoint,
+        urlencoding::encode(key)
+    );
+    let json = get_json(client.get(&url)).await?;
+    let table = json["data"][data_key]
+        .as_object()
+        .ok_or_else(|| format!("no {} table in TheGamesDB response", data_key))?;
+    Ok(table
+        .values()
+        .filter_map(|entry| {
+            let id = entry["id"].as_u64()?;
+            let name = entry["name"].as_str()?.to_string();
+            Some((id, name))
+        })
+        .collect())
+}
+
+/// TheGamesDB (api.thegamesdb.net) — a community-run, retro-console-friendly
+/// game database. Unlike RAWG/IGDB, its search results carry only numeric
+/// genre/developer/publisher ids, so resolving names takes three follow-up
+/// lookups against its id -> name tables.
+///
+/// Written against the publicly documented v1 API shape rather than a live
+/// response — smoke-test with a real key (`thegamesdb_returns_real_data`
+/// below) before trusting this in production if TheGamesDB ever changes
+/// its response envelope.
+async fn fetch_thegamesdb(
+    client: &reqwest::Client,
+    title: &str,
+    key: &str,
+) -> Result<ForgeLibraryEntry, String> {
+    let search_url = format!(
+        "https://api.thegamesdb.net/v1/Games/ByGameName?apikey={}&name={}&include=boxart",
+        urlencoding::encode(key),
+        urlencoding::encode(title)
+    );
+    let json = get_json(client.get(&search_url)).await?;
+    let g = json["data"]["games"]
+        .as_array()
+        .and_then(|games| games.first())
+        .ok_or("no TheGamesDB results")?;
+
+    let game_id = g["id"].as_u64().ok_or("TheGamesDB result missing id")?;
+
+    let genre_id = g["genres"]
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|v| v.as_u64());
+    let dev_id = g["developers"]
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|v| v.as_u64());
+    let pub_id = g["publishers"]
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|v| v.as_u64());
+
+    let genre = match genre_id {
+        Some(id) => thegamesdb_name_table(client, "Genres", "genres", key)
+            .await
+            .ok()
+            .and_then(|table| table.get(&id).cloned())
+            .unwrap_or_default(),
+        None => String::new(),
+    };
+    let developer = match dev_id {
+        Some(id) => thegamesdb_name_table(client, "Developers", "developers", key)
+            .await
+            .ok()
+            .and_then(|table| table.get(&id).cloned())
+            .unwrap_or_default(),
+        None => String::new(),
+    };
+    let publisher = match pub_id {
+        Some(id) => thegamesdb_name_table(client, "Publishers", "publishers", key)
+            .await
+            .ok()
+            .and_then(|table| table.get(&id).cloned())
+            .unwrap_or_default(),
+        None => String::new(),
+    };
+
+    // "2004-11-16" -> "2004"
+    let release_year = g["release_date"]
+        .as_str()
+        .filter(|d| d.len() >= 4)
+        .map(|d| d[..4].to_string())
+        .unwrap_or_default();
+
+    // Boxart lives in the `include` block, keyed by game id, and needs the
+    // matching base_url size prefixed onto its filename — the search result
+    // itself never carries a direct image URL.
+    let cover_url = json["include"]["boxart"]["data"][game_id.to_string()]
+        .as_array()
+        .and_then(|arts| arts.iter().find(|a| a["side"].as_str() == Some("front")))
+        .and_then(|art| art["filename"].as_str())
+        .and_then(|filename| {
+            json["include"]["boxart"]["base_url"]["large"]
+                .as_str()
+                .map(|base| format!("{}{}", base, filename))
+        })
+        .unwrap_or_default();
+
+    Ok(ForgeLibraryEntry {
+        genre,
+        release_year,
+        developer,
+        publisher,
+        cover_url,
+        thegamesdb_id: game_id.to_string(),
+        ..Default::default()
+    })
+}
+
 /// Twitch category id for `title`, via Helix's Get Games (same lookup
 /// pusher.rs falls back to at push-time when the library has no id yet).
 async fn fetch_twitch_id(
@@ -610,5 +747,27 @@ mod tests {
         assert_eq!(gog.release_year, "2015");
         assert!(!gog.gog_id.is_empty());
         assert!(!gog.cover_url.is_empty());
+    }
+
+    /// Hits the real TheGamesDB API — needs a key, so it's opt-in and not run
+    /// in CI. Set THEGAMESDB_API_KEY and run with `cargo test -- --ignored`
+    /// to confirm the response shape assumed in `fetch_thegamesdb` still
+    /// holds before relying on it in production.
+    #[tokio::test]
+    #[ignore]
+    async fn thegamesdb_returns_real_data() {
+        let key =
+            std::env::var("THEGAMESDB_API_KEY").expect("set THEGAMESDB_API_KEY to run this test");
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap();
+
+        let result = fetch_thegamesdb(&client, "Half-Life 2", &key)
+            .await
+            .unwrap();
+        assert!(!result.thegamesdb_id.is_empty());
+        assert!(!result.release_year.is_empty());
+        assert!(!result.cover_url.is_empty());
     }
 }

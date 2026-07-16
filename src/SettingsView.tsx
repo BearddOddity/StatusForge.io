@@ -1000,6 +1000,7 @@ const defaultConfig: AppConfig = {
     igdb_client: "",
     igdb_secret: "",
     igdb_token: "",
+    thegamesdb: "",
   },
   broadcaster: {
     routing_mode: "native" as const,
@@ -1075,6 +1076,12 @@ const KEY_CATALOG: {
       { key: "igdb_secret", label: "Client Secret" },
       { key: "igdb_token", label: "Access Token" },
     ],
+  },
+  {
+    key: "thegamesdb",
+    label: "TheGamesDB",
+    desc: "Community-run game database — strong coverage for older/retro console games",
+    icon: "🕹️",
   },
 ];
 

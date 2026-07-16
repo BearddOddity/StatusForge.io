@@ -40,6 +40,7 @@ export interface ApiKeys {
   igdb_client: string;
   igdb_secret: string;
   igdb_token: string;
+  thegamesdb: string;
 }
 
 export interface EngineSettings {

@@ -39,6 +39,8 @@ pub struct ApiKeys {
     pub igdb_secret: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub igdb_token: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub thegamesdb: String,
 }
 
 /// Engine/runtime settings
@@ -251,6 +253,8 @@ pub struct ForgeLibraryEntry {
     pub itch_id: String,
     #[serde(default)]
     pub sgdb_id: String,
+    #[serde(default)]
+    pub thegamesdb_id: String,
     #[serde(default)]
     pub xbox_title_id: String,
     #[serde(default)]
