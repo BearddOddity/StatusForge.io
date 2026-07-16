@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { getVersion } from "@tauri-apps/api/app";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { EngineStatus, AppConfig, SettingsSubTab, ToastType, ApiKeys } from "@/types";
 import type { KeychainStatus } from "@/types";
 import { fetchWidgetToken, getKeychainStatus, saveConfig, tauriApi } from "@/hooks/useTauriApi";
@@ -436,6 +437,18 @@ function EngineSubTab({
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
                               Detect games inside popular emulators (Yuzu, RPCS3, Citra, etc.)
+                            </p>
+                            <p className="text-[10px] text-white/25 mt-1">
+                              New to emulation?{" "}
+                              <button
+                                type="button"
+                                onClick={() => openUrl("https://www.emudeck.com/")}
+                                className="text-white/40 hover:text-white/60 underline cursor-pointer"
+                              >
+                                EmuDeck
+                              </button>{" "}
+                              is an easy, beginner-friendly way to set up RetroArch, Dolphin, PCSX2,
+                              RPCS3, and more at once, and it installs straight into Steam.
                             </p>
                           </div>
                           <Toggle
