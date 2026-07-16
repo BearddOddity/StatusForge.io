@@ -557,8 +557,8 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
         <AddGameOverlayPanel
           open={showAddGame}
           onClose={() => setShowAddGame(false)}
-          onAdd={(entry) => saveBaseMetadata(entry.title, entry.release_year, entry.developer)}
-          onSearch={async () => handleAddGameScan("", "", "")}
+          onAdd={(entry) => saveEntry(entry)}
+          onSearch={handleAddGameScan}
           gameCategories={[]}
           libraryGenres={[]}
         />

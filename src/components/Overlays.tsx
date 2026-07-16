@@ -21,6 +21,9 @@ interface OverlayMetadataPanelProps {
         steam_id: string;
         igdb_id: string;
         rawg_id: string;
+        sgdb_id: string;
+        gog_id: string;
+        thegamesdb_id: string;
         twitch_id: string;
         kick_id: string;
         aliases?: { name: string }[];
@@ -81,6 +84,9 @@ const FIELD_SECTIONS = [
       { key: "steam_id", label: "Steam" },
       { key: "igdb_id", label: "IGDB" },
       { key: "rawg_id", label: "RAWG" },
+      { key: "sgdb_id", label: "SteamGridDB" },
+      { key: "gog_id", label: "GOG" },
+      { key: "thegamesdb_id", label: "TheGamesDB" },
       { key: "twitch_id", label: "Twitch" },
       { key: "kick_id", label: "Kick" },
     ],
@@ -115,6 +121,9 @@ export function OverlayMetadataPanel({
         steam_id: entry.steam_id || "",
         igdb_id: entry.igdb_id || "",
         rawg_id: entry.rawg_id || "",
+        sgdb_id: entry.sgdb_id || "",
+        gog_id: entry.gog_id || "",
+        thegamesdb_id: entry.thegamesdb_id || "",
         twitch_id: entry.twitch_id || "",
         kick_id: entry.kick_id || "",
       });
@@ -400,10 +409,17 @@ interface AddGameOverlayPanelProps {
     steam_id: string;
     igdb_id: string;
     rawg_id: string;
+    sgdb_id: string;
+    gog_id: string;
+    thegamesdb_id: string;
     twitch_id: string;
     kick_id: string;
   }) => void;
-  onSearch: () => Promise<{
+  onSearch: (
+    title: string,
+    year: string,
+    dev: string
+  ) => Promise<{
     title?: string;
     genre?: string;
     release_year?: string;
@@ -413,6 +429,9 @@ interface AddGameOverlayPanelProps {
     steam_id?: string;
     igdb_id?: string;
     rawg_id?: string;
+    sgdb_id?: string;
+    gog_id?: string;
+    thegamesdb_id?: string;
     twitch_id?: string;
     kick_id?: string;
   } | null>;
@@ -456,7 +475,8 @@ export function AddGameOverlayPanel({
   if (!open) return null;
 
   const handleSearch = async () => {
-    const res = await onSearch();
+    if (!title.trim()) return;
+    const res = await onSearch(title, year, dev);
     if (res) setResult(res);
   };
 
@@ -479,6 +499,9 @@ export function AddGameOverlayPanel({
       steam_id: src.steam_id || "",
       igdb_id: src.igdb_id || "",
       rawg_id: src.rawg_id || "",
+      sgdb_id: src.sgdb_id || "",
+      gog_id: src.gog_id || "",
+      thegamesdb_id: src.thegamesdb_id || "",
       twitch_id: src.twitch_id || "",
       kick_id: src.kick_id || "",
     });
@@ -583,7 +606,7 @@ export function AddGameOverlayPanel({
           )}
         </div>
         <div className="p-5 pb-5 border-t border-white/[0.06] flex gap-2 shrink-0">
-          <Btn onClick={handleSearch} className="flex-1 justify-center">
+          <Btn onClick={handleSearch} disabled={!title.trim()} className="flex-1 justify-center">
             🔍 Search APIs
           </Btn>
           <Btn variant="success" onClick={handleSubmit} className="flex-1 justify-center">

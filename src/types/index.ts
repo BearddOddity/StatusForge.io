@@ -129,9 +129,12 @@ export interface ForgeLibraryEntry {
   sgdb_id: string;
   xbox_title_id: string;
   epic_id: string;
+  thegamesdb_id: string;
   executables: string;
   // Absent on entries with no aliases (backend skips serializing empty).
   aliases?: GameAlias[];
+  // Absent on entries with no sync history (backend skips serializing empty).
+  sync_history?: { timestamp: string; action: string; changes: string }[];
 }
 
 export interface ForgeDatabase {
