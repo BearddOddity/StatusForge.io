@@ -372,12 +372,17 @@ impl GameDetector {
         if kw.config.emulator_detection && EMULATOR_TAGS.iter().any(|emu| exe_name.contains(emu)) {
             // Window title usually has the loaded game once one's running;
             // if it's empty (menu screen, or a build/config that never sets
-            // one), fall back to reading it off the emulator's own launch
-            // arguments instead — still just process metadata from the OS,
-            // nothing reaching into the emulator or the game.
+            // one), fall back to the emulator's own log file (e.g. PCSX2's
+            // emulog.txt logs the disc name on load), then to its launch
+            // arguments — still just files/metadata the OS and the emulator
+            // itself already produce, nothing reaching into the emulator or
+            // the game.
             let rom_title = window_title
                 .is_empty()
-                .then(|| extract_rom_name_from_cmdline(&proc.cmdline))
+                .then(|| {
+                    crate::emulator_logs::title_from_emulator_log(exe_name, exe_path)
+                        .or_else(|| extract_rom_name_from_cmdline(&proc.cmdline))
+                })
                 .flatten();
             let effective_title = rom_title.as_deref().unwrap_or(window_title);
             (self.log)(

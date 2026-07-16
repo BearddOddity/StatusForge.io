@@ -20,6 +20,7 @@
 //! see `platform::permission_error`.
 
 pub mod alias;
+pub mod emulator_logs;
 pub mod platform;
 pub mod waterfall;
 
