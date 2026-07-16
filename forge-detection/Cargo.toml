@@ -1,7 +1,7 @@
 [package]
 name = "forge-detection"
 version = "1.0.0"
-description = "ForgeWaterfall — native game detection engine (Windows / macOS / Linux). Shared by StatusForge, SPARK, and StreamerSuite."
+description = "GameDetector — game detection engine (Windows / macOS / Linux). Shared by StatusForge, SPARK, and StreamerSuite."
 authors = ["BearddOddity"]
 license = "MIT"
 repository = "https://github.com/BearddOddity/StatusForge.io"
