@@ -30,9 +30,9 @@ That builds the Rust backend and launches the app in dev mode. `npm run tauri bu
 
 StatusForge runs entirely on your machine. It talks to Twitch, Kick, Steam, IGDB, RAWG, GOG, and SteamGridDB only when you've connected them, and only to look up the game you're currently playing or push your category. Nothing else leaves your computer.
 
-## Contributing
+## Maintainer
 
-Issues and pull requests are welcome. CI runs `cargo fmt`, `cargo clippy`, the Rust and frontend test suites, and a startup smoke test on every push — running `npm run tauri dev` and `cargo test` locally before opening a PR will catch most things early.
+StatusForge is built and maintained solo. Bug reports are welcome via GitHub Issues — if something's broken, let me know and I'll take a look.
 
 ## License
 
