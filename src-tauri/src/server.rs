@@ -457,6 +457,30 @@ async fn scan_metadata_handler(
     ))
 }
 
+#[derive(Deserialize)]
+struct ResolveCoverBody {
+    url: String,
+}
+
+/// Resolve a pasted cover/logo field value that isn't a direct image link —
+/// currently, a SteamGridDB asset *page* URL (e.g.
+/// steamgriddb.com/grid/805055, which is HTML, not an image) — into the
+/// actual direct image URL. Anything else (already a direct URL, a local
+/// file path) is returned unchanged; local paths are handled entirely on
+/// the frontend via Tauri's asset protocol.
+async fn resolve_cover_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+    Json(body): Json<ResolveCoverBody>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    check_token(&headers, q.token.as_deref()).map_err(|s| (s, String::new()))?;
+    let config = load_config().unwrap_or_default();
+    let resolved = crate::metadata::resolve_cover_field(&body.url, &config.api_keys.steamgrid)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(serde_json::json!({ "url": resolved })))
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Browser-initiated OAuth logins (mirror the kick_login/twitch_login commands)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -689,6 +713,7 @@ fn build_router(state: ServerState) -> Router {
         .route("/export-meta", get(export_meta_handler))
         .route("/import-meta", post(import_meta_handler))
         .route("/api/scan-metadata", post(scan_metadata_handler))
+        .route("/api/resolve-cover", post(resolve_cover_handler))
         .route("/kick/login", get(kick_login_handler))
         .route("/twitch/login", get(twitch_login_handler))
         .route(

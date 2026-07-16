@@ -10,6 +10,7 @@ import {
 } from "@/hooks/useTauriApi";
 import { Card, Btn, FieldSection } from "@/components/ui";
 import { Toggle } from "@/components/SettingsComponents";
+import { resolveImageSrc } from "@/utils/imageSrc";
 
 const idleCover = "/just%20chatting.png";
 const offlineCover = "/offline.svg";
@@ -379,7 +380,7 @@ export default function DashboardView({
   // "Just Chatting") when one has a custom cover set — falls back to the
   // built-in placeholder otherwise. Offline always wins regardless.
   const placeholderCover = engineStatus.running
-    ? engineStatus.cover_url || idleCover
+    ? resolveImageSrc(engineStatus.cover_url) || idleCover
     : offlineCover;
   const title = isPlaying
     ? engineStatus.game_title
@@ -408,7 +409,11 @@ export default function DashboardView({
               }}
             >
               <img
-                src={isPlaying ? engineStatus.cover_url || placeholderCover : placeholderCover}
+                src={
+                  isPlaying
+                    ? resolveImageSrc(engineStatus.cover_url) || placeholderCover
+                    : placeholderCover
+                }
                 alt={title}
                 className="w-full h-full object-cover"
                 onError={(e) => {

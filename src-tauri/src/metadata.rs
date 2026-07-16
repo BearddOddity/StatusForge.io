@@ -442,9 +442,115 @@ async fn fetch_sgdb(
     Ok((id.to_string(), cover, logo))
 }
 
+/// Maps a SteamGridDB *asset page* URL's type segment to its API collection
+/// name and extracts the numeric asset id — e.g.
+/// `https://www.steamgriddb.com/grid/805055` -> `("grids", 805055)`. A page
+/// URL like this shows the asset in a browser but is HTML, not an image, so
+/// pasting it straight into a cover/logo field renders as a broken `<img>`.
+fn parse_steamgriddb_asset_url(url: &str) -> Option<(&'static str, u64)> {
+    let path = url
+        .trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_start_matches("www.")
+        .strip_prefix("steamgriddb.com/")?;
+    let mut segments = path.trim_end_matches('/').splitn(2, '/');
+    let asset_type = match segments.next()? {
+        "grid" => "grids",
+        "hero" => "heroes",
+        "logo" => "logos",
+        "icon" => "icons",
+        _ => return None,
+    };
+    let id_segment = segments.next()?;
+    // Drop anything after the id (trailing slug/query/fragment).
+    let id_str = id_segment.split(['/', '?', '#']).next()?;
+    let id = id_str.parse::<u64>().ok()?;
+    Some((asset_type, id))
+}
+
+/// Resolve a pasted image field value into something an `<img>` tag can
+/// actually load. Two cases handled; everything else passes through
+/// unchanged (already a direct image URL, already a local file path handled
+/// by the frontend's asset-protocol conversion):
+///
+/// - A SteamGridDB asset *page* URL (`/grid/{id}`, `/hero/{id}`,
+///   `/logo/{id}`, `/icon/{id}`) is resolved via the SteamGridDB API to the
+///   actual CDN image URL. Requires the user's SteamGridDB API key.
+/// - Anything else is returned as-is.
+pub async fn resolve_cover_field(value: &str, steamgrid_key: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    let Some((asset_type, id)) = parse_steamgriddb_asset_url(trimmed) else {
+        return Ok(value.to_string());
+    };
+    if steamgrid_key.is_empty() {
+        return Err(
+            "That's a SteamGridDB page link, not an image — add a SteamGridDB API key in \
+             Settings to resolve it automatically, or right-click the image on that page and \
+             copy its direct address instead."
+                .to_string(),
+        );
+    }
+    let client = reqwest::Client::new();
+    let api_url = format!("https://www.steamgriddb.com/api/v2/{}/{}", asset_type, id);
+    let json = get_json(client.get(&api_url).bearer_auth(steamgrid_key)).await?;
+    json["data"]["url"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "SteamGridDB didn't return an image for that link".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_steamgriddb_grid_page_url() {
+        assert_eq!(
+            parse_steamgriddb_asset_url("https://www.steamgriddb.com/grid/805055"),
+            Some(("grids", 805055))
+        );
+        // No scheme/www, trailing slash, and a trailing slug all tolerated.
+        assert_eq!(
+            parse_steamgriddb_asset_url("steamgriddb.com/grid/805055/"),
+            Some(("grids", 805055))
+        );
+        assert_eq!(
+            parse_steamgriddb_asset_url("https://www.steamgriddb.com/hero/12345"),
+            Some(("heroes", 12345))
+        );
+        assert_eq!(
+            parse_steamgriddb_asset_url("https://www.steamgriddb.com/logo/999"),
+            Some(("logos", 999))
+        );
+        assert_eq!(
+            parse_steamgriddb_asset_url("https://www.steamgriddb.com/icon/1"),
+            Some(("icons", 1))
+        );
+    }
+
+    #[test]
+    fn rejects_non_asset_page_urls() {
+        // A direct CDN image URL — not a page — should NOT match.
+        assert_eq!(
+            parse_steamgriddb_asset_url("https://cdn2.steamgriddb.com/grid/abc123.png"),
+            None
+        );
+        assert_eq!(
+            parse_steamgriddb_asset_url("https://example.com/grid/1"),
+            None
+        );
+        assert_eq!(parse_steamgriddb_asset_url("not a url at all"), None);
+        assert_eq!(
+            parse_steamgriddb_asset_url("https://www.steamgriddb.com/game/12345"),
+            None
+        );
+        // Non-numeric id.
+        assert_eq!(
+            parse_steamgriddb_asset_url("https://www.steamgriddb.com/grid/abc"),
+            None
+        );
+    }
 
     #[test]
     fn merge_fills_only_empty_fields() {

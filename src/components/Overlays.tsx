@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { type ExiledApp } from "@/types";
 import { Btn, MetadataField, CoverImage, FieldSection } from "./ui";
+import { resolveImageSrc } from "@/utils/imageSrc";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // OverlayMetadataPanel — right-slide metadata editor
@@ -61,8 +62,16 @@ const FIELD_SECTIONS = [
     title: "Cover",
     icon: "🖼️",
     fields: [
-      { key: "cover_url", label: "Cover URL" },
-      { key: "logo_url", label: "Logo URL" },
+      {
+        key: "cover_url",
+        label: "Cover URL",
+        hint: "A direct image link, a local file path, or a SteamGridDB page link (e.g. steamgriddb.com/grid/12345) — resolved to the image automatically.",
+      },
+      {
+        key: "logo_url",
+        label: "Logo URL",
+        hint: "A direct image link, a local file path, or a SteamGridDB page link (e.g. steamgriddb.com/logo/12345) — resolved to the image automatically.",
+      },
     ],
   },
   {
@@ -181,7 +190,7 @@ export function OverlayMetadataPanel({
               <div className="w-full aspect-[2/3] rounded-2xl overflow-hidden bg-black/30 border border-white/10 shadow-lg shadow-black/30 hover:border-white/15 transition-all flex items-center justify-center p-4">
                 {editData.logo_url ? (
                   <img
-                    src={editData.logo_url}
+                    src={resolveImageSrc(editData.logo_url)}
                     alt={`${editData.title || ""} logo`}
                     className="max-w-full max-h-full object-contain"
                     onError={(e) => {

@@ -173,13 +173,45 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
 
   // ── API helpers ──
 
+  // Cover/logo fields accept a SteamGridDB asset *page* link (e.g.
+  // steamgriddb.com/grid/805055 — an HTML page, not an image) alongside a
+  // direct image URL or local file path. Resolve any page link to its real
+  // direct URL before saving, so the stored value is always something an
+  // <img> can actually load. Direct URLs and local paths pass through
+  // unchanged (checked server-side; nothing to await there).
+  const resolveCoverFields = async (
+    updated: Partial<ForgeLibraryEntry>
+  ): Promise<Partial<ForgeLibraryEntry> | null> => {
+    const resolved = { ...updated };
+    for (const key of ["cover_url", "logo_url"] as const) {
+      const value = resolved[key];
+      if (!value) continue;
+      const token = await fetchWidgetToken();
+      const res = await fetch("http://127.0.0.1:53735/api/resolve-cover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Forge-Token": token },
+        body: JSON.stringify({ url: value }),
+      });
+      if (!res.ok) {
+        const message = await res.text().catch(() => "");
+        toast(message || `Couldn't resolve ${key === "cover_url" ? "Cover" : "Logo"} URL`, "error");
+        return null;
+      }
+      const body = (await res.json()) as { url: string };
+      resolved[key] = body.url;
+    }
+    return resolved;
+  };
+
   const saveEntry = async (updated: Partial<ForgeLibraryEntry>) => {
+    const resolved = await resolveCoverFields(updated);
+    if (!resolved) return;
     const token = await fetchWidgetToken();
     try {
       await fetch("http://127.0.0.1:53735/list", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Forge-Token": token },
-        body: JSON.stringify(updated),
+        body: JSON.stringify(resolved),
       });
       toast("Saved", "success");
       load();
