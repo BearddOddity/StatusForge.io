@@ -405,17 +405,20 @@ async fn thegamesdb_name_table(
 /// genre/developer/publisher ids, so resolving names takes three follow-up
 /// lookups against its id -> name tables.
 ///
-/// Written against the publicly documented v1 API shape rather than a live
-/// response — smoke-test with a real key (`thegamesdb_returns_real_data`
-/// below) before trusting this in production if TheGamesDB ever changes
-/// its response envelope.
+/// Written against TheGamesDB's official v1 OpenAPI spec rather than a live
+/// response (this session couldn't reach api.thegamesdb.net directly) — the
+/// spec's `fields` param is required for `genres`/`developers`/`publishers`
+/// to appear at all, which is easy to miss and would otherwise silently
+/// leave those fields empty on every real call. Smoke-test with a real key
+/// (`thegamesdb_returns_real_data` below) if TheGamesDB ever changes its
+/// response envelope.
 async fn fetch_thegamesdb(
     client: &reqwest::Client,
     title: &str,
     key: &str,
 ) -> Result<ForgeLibraryEntry, String> {
     let search_url = format!(
-        "https://api.thegamesdb.net/v1/Games/ByGameName?apikey={}&name={}&include=boxart",
+        "https://api.thegamesdb.net/v1/Games/ByGameName?apikey={}&name={}&fields=genres,publishers,developers&include=boxart",
         urlencoding::encode(key),
         urlencoding::encode(title)
     );
