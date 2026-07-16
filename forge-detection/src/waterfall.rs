@@ -343,10 +343,20 @@ impl ForgeWaterfall {
         // RPCS3/etc. don't get silently dropped as if they were some generic
         // desktop utility.
         if kw.config.emulator_detection && EMULATOR_TAGS.iter().any(|emu| exe_name.contains(emu)) {
+            // Window title usually has the loaded game once one's running;
+            // if it's empty (menu screen, or a build/config that never sets
+            // one), fall back to reading it off the emulator's own launch
+            // arguments instead — still just process metadata from the OS,
+            // nothing reaching into the emulator or the game.
+            let rom_title = window_title
+                .is_empty()
+                .then(|| extract_rom_name_from_cmdline(&proc.cmdline))
+                .flatten();
+            let effective_title = rom_title.as_deref().unwrap_or(window_title);
             return Some(format_game_output(
                 exe_name,
                 exe_path,
-                window_title,
+                effective_title,
                 "Emulator",
                 kw.config.emulator_detection,
             ));
@@ -606,6 +616,37 @@ fn title_case(s: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Disc-image and ROM extensions across emulated platforms, used to spot a
+/// launched game file in an emulator's own command-line arguments.
+const ROM_EXTENSIONS: &[&str] = &[
+    "iso", "bin", "cue", "chd", "cso", "gdi", "cdi", "pbp", "nsp", "xci", "3ds", "cia", "wbfs",
+    "rvz", "wux", "z64", "n64", "gba", "gb", "gbc", "nes", "sfc", "smc", "md", "gen",
+];
+
+/// Best-effort read of a ROM/game file name out of an emulator's own
+/// command-line arguments — e.g. `pcsx2-qt.exe --fullscreen "D:\ROMs\Some
+/// Game.iso"` -> `Some("Some Game")`. This is the process's own argument
+/// list as reported by the OS, same as `exe_name`/`exe_path` — nothing here
+/// reads or writes the emulator's memory or the emulated game's state.
+///
+/// A ROM path containing spaces isn't handled cleanly — cmdline here is
+/// already a flattened, space-joined string with argument boundaries lost,
+/// so a path like "Metroid Prime.rvz" only yields "Prime". Real games with
+/// spaceless file names (the common case) still come out right.
+fn extract_rom_name_from_cmdline(cmdline: &str) -> Option<String> {
+    let token = cmdline.split_whitespace().rfind(|tok| {
+        let trimmed = tok.trim_matches('"');
+        ROM_EXTENSIONS
+            .iter()
+            .any(|ext| trimmed.ends_with(&format!(".{}", ext)))
+    })?;
+    let trimmed = token.trim_matches('"').replace('\\', "/");
+    let file_name = trimmed.rsplit('/').next().unwrap_or(&trimmed);
+    let stem = file_name.rsplit_once('.').map_or(file_name, |(s, _)| s);
+    let title = title_case(&stem.replace(['_', '.'], " "));
+    (!title.is_empty()).then_some(title)
 }
 
 /// Build the final `GameDetection`, applying the emulator splitter, the macOS
@@ -1250,6 +1291,49 @@ mod tests {
         assert!(!has_engine_dna(&exe.to_string_lossy().to_lowercase()));
         assert!(!has_engine_dna("z:/does/not/exist/game.exe"));
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ── ROM name from emulator cmdline ───────────────────────────────────
+
+    #[test]
+    fn extracts_rom_name_from_various_extensions() {
+        assert_eq!(
+            extract_rom_name_from_cmdline(
+                r#"pcsx2-qt.exe --fullscreen "d:\roms\ps2\Some_Game.iso""#
+            ),
+            Some("Some Game".to_string())
+        );
+        // A path containing a space isn't handled cleanly — the flattened
+        // cmdline has already lost the argument boundary, so this only
+        // catches the last whitespace-delimited chunk ("Prime.rvz"), not
+        // the full "Metroid Prime". Documented limitation, not a crash.
+        assert_eq!(
+            extract_rom_name_from_cmdline("dolphin.exe -b -e /home/user/roms/Metroid Prime.rvz"),
+            Some("Prime".to_string())
+        );
+        assert_eq!(
+            extract_rom_name_from_cmdline("retroarch.exe -L core.dll d:/roms/Chrono.Trigger.sfc"),
+            Some("Chrono Trigger".to_string())
+        );
+    }
+
+    #[test]
+    fn no_rom_extension_in_cmdline_returns_none() {
+        assert_eq!(
+            extract_rom_name_from_cmdline("pcsx2-qt.exe --fullscreen"),
+            None
+        );
+        assert_eq!(extract_rom_name_from_cmdline(""), None);
+    }
+
+    #[test]
+    fn emulator_with_no_window_title_falls_back_to_cmdline_rom_name() {
+        let s = scout_with(&[], &[], false);
+        let mut proc = proc("pcsx2-qt.exe", "d:\\emu\\pcsx2-qt.exe", 200);
+        proc.cmdline = r#"pcsx2-qt.exe --fullscreen "d:\roms\Some_Game.iso""#.to_string();
+        let d = s.evaluate(&win("", false), &proc).unwrap();
+        assert_eq!(d.platform, "Emulator");
+        assert_eq!(d.title, "Some Game");
     }
 
     // ── Built-in exe/title aliases ──────────────────────────────────────
