@@ -1,18 +1,14 @@
 //! Post-broadcast detection feedback: "Is this detection correct? Yes / No".
 //!
-//! Confirmations and corrections are logged per detection method (the
-//! waterfall stage / source in `GameDetection.platform`, e.g. "Steam",
-//! "SPARK (host)") into `detection_feedback.json`, so per-method accuracy
-//! can be inspected in Dev Tools. Corrections additionally teach the alias
-//! system: the misdetected raw title becomes an alias of the game the user
-//! says they were actually playing, so the same misdetection resolves
-//! correctly on every future pass — the feedback loop improves detection
-//! rather than only scoring it.
+//! Confirmations and corrections get logged per detection method (the
+//! source in `GameDetection.platform`, e.g. "Steam", "SPARK (host)") into
+//! `detection_feedback.json`, so per-method accuracy shows up in Dev Tools.
+//! A correction also teaches the alias system — the misdetected title
+//! becomes an alias of the actual game, so it resolves correctly next time.
 //!
-//! Deliberately NOT auto-tuning the score_* weights in engine settings from
-//! this data yet: those are user-visible settings, and silently rewriting
-//! them from a handful of clicks is worse than showing the accuracy numbers
-//! and letting the user (or a future, better-fed model) decide.
+//! Not auto-tuning the engine's score_* weights from this data yet — those
+//! are user-visible settings, and silently rewriting them from a few clicks
+//! seems worse than just showing the accuracy numbers.
 
 use std::collections::HashMap;
 use std::path::Path;

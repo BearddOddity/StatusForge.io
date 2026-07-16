@@ -54,7 +54,7 @@ const FIELD_SECTIONS = [
         key: "aliases",
         label: "Detection Aliases",
         placeholder: "e.g. DS3, Dark Souls 3",
-        hint: "Alternative names (abbreviations, other languages, odd window titles) that should resolve to this game — comma-separate more than one. Matching is case-insensitive.",
+        hint: "Other names that should resolve to this game — abbreviations, other languages, odd window titles. Comma-separate multiple; matching ignores case.",
       },
     ],
   },
@@ -65,12 +65,12 @@ const FIELD_SECTIONS = [
       {
         key: "cover_url",
         label: "Cover URL",
-        hint: "A direct image link, a local file path, or a SteamGridDB page link (e.g. steamgriddb.com/grid/12345) — resolved to the image automatically.",
+        hint: "A direct image link, a local file path, or a SteamGridDB page link (e.g. steamgriddb.com/grid/12345).",
       },
       {
         key: "logo_url",
         label: "Logo URL",
-        hint: "A direct image link, a local file path, or a SteamGridDB page link (e.g. steamgriddb.com/logo/12345) — resolved to the image automatically.",
+        hint: "A direct image link, a local file path, or a SteamGridDB page link (e.g. steamgriddb.com/logo/12345).",
       },
     ],
   },

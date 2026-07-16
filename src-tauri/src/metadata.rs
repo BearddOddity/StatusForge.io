@@ -442,11 +442,10 @@ async fn fetch_sgdb(
     Ok((id.to_string(), cover, logo))
 }
 
-/// Maps a SteamGridDB *asset page* URL's type segment to its API collection
-/// name and extracts the numeric asset id — e.g.
-/// `https://www.steamgriddb.com/grid/805055` -> `("grids", 805055)`. A page
-/// URL like this shows the asset in a browser but is HTML, not an image, so
-/// pasting it straight into a cover/logo field renders as a broken `<img>`.
+/// Extracts the asset type + numeric id from a SteamGridDB *page* URL, e.g.
+/// `https://www.steamgriddb.com/grid/805055` -> `("grids", 805055)`. That
+/// page shows the asset in a browser but is HTML, not an image — pasted
+/// straight into a cover/logo field, it'd just render as a broken `<img>`.
 fn parse_steamgriddb_asset_url(url: &str) -> Option<(&'static str, u64)> {
     let path = url
         .trim()
@@ -469,15 +468,10 @@ fn parse_steamgriddb_asset_url(url: &str) -> Option<(&'static str, u64)> {
     Some((asset_type, id))
 }
 
-/// Resolve a pasted image field value into something an `<img>` tag can
-/// actually load. Two cases handled; everything else passes through
-/// unchanged (already a direct image URL, already a local file path handled
-/// by the frontend's asset-protocol conversion):
-///
-/// - A SteamGridDB asset *page* URL (`/grid/{id}`, `/hero/{id}`,
-///   `/logo/{id}`, `/icon/{id}`) is resolved via the SteamGridDB API to the
-///   actual CDN image URL. Requires the user's SteamGridDB API key.
-/// - Anything else is returned as-is.
+/// Resolves a pasted cover/logo value into something an `<img>` can load.
+/// A SteamGridDB page URL gets resolved via their API to the real CDN
+/// image (needs the user's SteamGridDB key). Everything else — a direct
+/// URL, a local file path — passes through unchanged.
 pub async fn resolve_cover_field(value: &str, steamgrid_key: &str) -> Result<String, String> {
     let trimmed = value.trim();
     let Some((asset_type, id)) = parse_steamgriddb_asset_url(trimmed) else {

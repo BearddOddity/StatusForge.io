@@ -73,10 +73,8 @@ pub struct HealthEvent {
 #[derive(Default)]
 struct PlatformState {
     down_since: Option<u64>,
-    /// The most recent title that should be broadcast once the API recovers
-    /// — updated by every detection that lands while the platform is down,
-    /// so recovery pushes what the user is playing NOW, not the stale title
-    /// that happened to fail first.
+    /// The title to broadcast once the API recovers — kept up to date so
+    /// recovery pushes whatever the user's playing now, not a stale title.
     pending: Option<String>,
 }
 
@@ -498,10 +496,9 @@ fn push_and_track(
 /// No-op unless routing_mode is Native. Never errors — failures are logged so
 /// the engine loop keeps running.
 ///
-/// A platform currently marked down is NOT pushed to — the detection is
-/// remembered as that platform's pending title and the health monitor loop
-/// (30s cadence, `retry_pending`) does the probing. This keeps the engine
-/// thread from stalling on a 10s connect timeout every tick during an
+/// A platform marked down isn't pushed to — the title is just remembered as
+/// pending, and `retry_pending` probes it every 30s instead. Otherwise the
+/// engine thread would stall on a connect timeout every tick during an
 /// outage. Returned events are up/down transitions for the caller to toast.
 pub fn push_category(
     base_dir: &Path,

@@ -1,11 +1,11 @@
 # Live Test Plan — branch `claude/status-forge-setup-5d7pcs`
 
-Manual verification for the six commits on this branch. CI already covers
-compile, unit tests (3 OSes), and a 5-second startup smoke test — this plan
-covers what CI can't: the interactive flows against your real machine,
-keychain, and Twitch/Kick accounts.
+CI already covers the compile, the unit tests on all three OSes, and a
+startup smoke test. What it can't cover is anything that needs an actual
+human, an actual Twitch/Kick account, and an actual keychain — that's what
+this plan is for.
 
-**Time**: ~25 minutes. **Best on**: Windows 10/11 (primary target).
+**Time**: ~30 minutes. **Best on**: Windows 10/11 (the primary target).
 
 ---
 
@@ -24,21 +24,23 @@ Before starting, note your current state so you can verify nothing regressed:
 - [ ] Engine starts and detects a running game like before
 - [ ] Twitch/Kick show connected in Settings → API & Routing (if previously connected)
 
-**Safety note**: tests 3–6 push real category changes to your channels. Use
-an offline/test window, or expect your category to flap a few times.
+Heads up: several of these push real category changes to Twitch/Kick. Do
+this offline or somewhere your viewers won't mind the category flapping a
+few times.
 
 ---
 
-## 1. Keychain round-trip fix (commit 27666ba)
+## 1. Keychain round-trip fix
 
-The bug: Settings used to read/write Config.json directly, bypassing the
-keychain — migrated tokens looked disconnected and could leak back to disk.
+Settings used to read and write Config.json directly, skipping the
+keychain entirely — migrated tokens looked disconnected in the UI and
+could end up back on disk in plaintext.
 
 - [ ] With tokens migrated to the keychain (Settings → run "Migrate Tokens" if you haven't), open Settings → API & Routing: Twitch/Kick must show **"Connected via OAuth"**, not empty fields
 - [ ] Change any unrelated setting (e.g. widget fade timer), save, then open `Config.json` in a text editor: `twitch_token` / `kick_token` must **not** appear as plaintext values
 - [ ] Restart the app: still connected, engine still pushes categories
 
-## 2. Disconnect button (27666ba)
+## 2. Disconnect button
 
 - [ ] Settings → API & Routing → a connected platform now shows **"Disconnect"** (not "Remove") on OAuth-backed entries
 - [ ] Click it: success toast, entry disappears immediately (no "save to confirm" step)
@@ -46,12 +48,12 @@ keychain — migrated tokens looked disconnected and could leak back to disk.
 - [ ] Windows Credential Manager (`Win+R` → `control keymgr.dll` → Windows Credentials): the `statusforge.io` entries for that platform are gone
 - [ ] Reconnect via OAuth: works as before
 
-## 3. Auto-update toggle (27666ba)
+## 3. Auto-update toggle
 
 - [ ] Settings → System → Logs & Updates: new **"Automatically Check for Updates"** toggle, on by default
 - [ ] Turn it off, restart: no update banner appears (with a newer release published, on = banner shows once per launch)
 
-## 4. Manual Override (f8ad881)
+## 4. Manual Override
 
 - [ ] Dashboard → Now Playing card: **"🎮 Override Game"** button always visible
 - [ ] Click, type a real game (e.g. `Hades`), press Enter or "Broadcast":
@@ -62,7 +64,7 @@ keychain — migrated tokens looked disconnected and could leak back to disk.
 - [ ] After 5 minutes: "Override cleared" toast, normal detection resumes
 - [ ] Escape/Cancel closes the input without broadcasting
 
-## 5. Detection Aliases (e8e7bba)
+## 5. Detection Aliases
 
 - [ ] Library → any game → edit: new **"Detection Aliases"** field in Basic Info
 - [ ] Add e.g. `TestAlias123`, save; re-open the editor: alias still there
@@ -70,7 +72,7 @@ keychain — migrated tokens looked disconnected and could leak back to disk.
 - [ ] Try saving an alias that equals another library game's title: save is rejected with a clear error
 - [ ] (Deeper) Rename a game's `executables` mapping to a wrong-title scenario you know, alias the wrong title to the right game, relaunch the game: detection lands on the right title
 
-## 6. API downtime handling (e515bf7)
+## 6. API downtime handling
 
 Simulate an outage without touching your router: add to
 `C:\Windows\System32\drivers\etc\hosts` (as admin):
@@ -85,7 +87,7 @@ Simulate an outage without touching your router: add to
 - [ ] Remove the hosts line (and `ipconfig /flushdns`): within ~30s — **"✅ Twitch API recovered — broadcasting resumed"** — and your Twitch category updates to the game you're playing **now** (the latest one, not the first one that failed)
 - [ ] Kick kept pushing normally the whole time (independent tracking)
 
-## 7. Feedback loop (f2ba2ab)
+## 7. Feedback loop
 
 - [ ] Launch a game so detection fires: dashboard shows **"Detected “X” — is that right? [Yes] [No]"**
 - [ ] Click **Yes**: prompt closes quietly
@@ -96,7 +98,18 @@ Simulate an outage without touching your router: add to
 - [ ] Manual overrides do **not** show the prompt
 - [ ] `detection_feedback.json` (next to Config.json) contains your confirmed/corrected tallies per method
 
-## 8. Regression sweep (10 min)
+## 8. Cover/logo URL fix
+
+- [ ] Library → any game → Cover URL → paste a SteamGridDB page link (e.g.
+      `https://www.steamgriddb.com/grid/805055`) → save: the actual cover
+      shows up, not a broken image. Needs a SteamGridDB key set in Settings —
+      without one, save fails with a clear message telling you to add one
+- [ ] Try the same for Logo URL with a `/logo/{id}` page link
+- [ ] Paste a plain direct image URL (e.g. straight from an image host):
+      still works as before
+- [ ] Paste a local file path (an image on your own disk): it renders
+
+## 9. Regression sweep (10 min)
 
 - [ ] Overlays/widgets still render and update on game change
 - [ ] SPARK dual-PC link (if you use it) still forwards detections

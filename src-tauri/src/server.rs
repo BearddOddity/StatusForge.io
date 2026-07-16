@@ -280,17 +280,14 @@ fn split_executables(s: &str) -> Vec<String> {
         .collect()
 }
 
-/// Parse the editor's comma-separated alias field into structured
-/// `GameAlias` values for the entry being saved (`entry_title`).
+/// Parses the editor's comma-separated alias text into `GameAlias` values
+/// for the entry being saved (`entry_title`).
 ///
-/// - A name already on the entry keeps its metadata (priority/language/
-///   added_at/preferred survive a round-trip through the text field).
-/// - A new name gets defaults + a fresh timestamp.
-/// - The entry's own title and within-entry duplicates are dropped silently
-///   (both are no-ops, not user errors worth failing a whole save over).
-/// - A name that matches a DIFFERENT entry's canonical title is rejected:
-///   resolve_title_alias gives canonical titles precedence over aliases, so
-///   such an alias could never fire — saving it would only mislead.
+/// - An existing name keeps its old priority/language/added_at/preferred.
+/// - A new name gets defaults and a fresh timestamp.
+/// - The entry's own title, and duplicates, are dropped quietly.
+/// - A name that matches a DIFFERENT entry's title is rejected — canonical
+///   titles always beat aliases, so it could never actually resolve.
 fn parse_alias_names(
     db: &ForgeDatabase,
     entry_title: &str,
@@ -462,12 +459,12 @@ struct ResolveCoverBody {
     url: String,
 }
 
-/// Resolve a pasted cover/logo field value that isn't a direct image link —
-/// currently, a SteamGridDB asset *page* URL (e.g.
-/// steamgriddb.com/grid/805055, which is HTML, not an image) — into the
-/// actual direct image URL. Anything else (already a direct URL, a local
-/// file path) is returned unchanged; local paths are handled entirely on
-/// the frontend via Tauri's asset protocol.
+/// Resolves a pasted cover/logo value that isn't actually an image link.
+/// Right now that means a SteamGridDB asset *page* URL, like
+/// steamgriddb.com/grid/805055 — that's an HTML page, not the image itself.
+/// Anything else (a real direct URL, a local file path) comes back
+/// unchanged; local paths get handled on the frontend via Tauri's asset
+/// protocol instead.
 async fn resolve_cover_handler(
     Query(q): Query<TokenQuery>,
     headers: HeaderMap,

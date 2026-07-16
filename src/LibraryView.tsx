@@ -173,12 +173,9 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
 
   // ── API helpers ──
 
-  // Cover/logo fields accept a SteamGridDB asset *page* link (e.g.
-  // steamgriddb.com/grid/805055 — an HTML page, not an image) alongside a
-  // direct image URL or local file path. Resolve any page link to its real
-  // direct URL before saving, so the stored value is always something an
-  // <img> can actually load. Direct URLs and local paths pass through
-  // unchanged (checked server-side; nothing to await there).
+  // A pasted cover/logo can be a direct image URL, a local file path, or a
+  // SteamGridDB page link (e.g. steamgriddb.com/grid/805055) — resolve the
+  // page link to its real image URL before saving so it always renders.
   const resolveCoverFields = async (
     updated: Partial<ForgeLibraryEntry>
   ): Promise<Partial<ForgeLibraryEntry> | null> => {

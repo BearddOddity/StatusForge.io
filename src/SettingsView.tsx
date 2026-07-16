@@ -1349,10 +1349,9 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
   };
 
   // OAuth-backed entries (Twitch/Kick) route through disconnect_platform,
-  // which deletes the token from the OS keychain, not just Config.json —
-  // clearing fields alone leaves the keychain entry in place, so the next
-  // config load backfills the "removed" token right back in. Runs and
-  // persists immediately, unlike removeRouteEntry's "save to confirm".
+  // which deletes the keychain entry too — clearing fields alone leaves it
+  // in place and the next config load just backfills it. Persists right
+  // away, unlike removeRouteEntry's "save to confirm".
   const disconnectRoute = async (entry: (typeof ROUTING_CATALOG)[number]) => {
     try {
       await tauriApi("disconnect_platform", { platform: entry.key });

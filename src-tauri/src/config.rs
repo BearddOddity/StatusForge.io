@@ -266,10 +266,10 @@ pub struct ForgeLibraryEntry {
     /// until they edit that field again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locked_fields: Vec<String>,
-    /// User-created alternative names that resolve to this entry's title
-    /// during detection (Stage 0, before broadcasting/library upsert).
-    /// Absent from serialized output when empty, so pre-alias
-    /// Forge_Database.json files round-trip byte-identically.
+    /// Alternative names the user set up for this game, resolved during
+    /// detection (Stage 0) before anything gets broadcast or upserted.
+    /// Skipped when empty so a Forge_Database.json from before this feature
+    /// existed still round-trips byte-for-byte.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<GameAlias>,
 }
@@ -309,15 +309,11 @@ pub fn find_library_key(db: &ForgeDatabase, title: &str) -> Option<String> {
         .cloned()
 }
 
-/// Stage 0 of detection: resolve a raw detected title through the library's
-/// user-created aliases to its canonical title. Returns `None` when no alias
-/// matches — the caller keeps the raw title as-is. A raw title that already
-/// IS a canonical library title never goes through aliases (its own entry
-/// wins outright), so an alias can never shadow a real library title.
+/// Stage 0 of detection: resolves a raw title through the library's aliases.
+/// Returns `None` if nothing matches, or if `raw_title` is already a real
+/// library entry (a canonical title always wins over an alias).
 ///
-/// Only "en" is selectable as UI language today, so the system-language
-/// tie-breaker is pinned to "en" here; thread the real locale through when
-/// more languages ship.
+/// Language tie-breaking is hardcoded to "en" until more UI languages ship.
 pub fn resolve_title_alias(db: &ForgeDatabase, raw_title: &str) -> Option<String> {
     if find_library_key(db, raw_title).is_some() {
         return None;

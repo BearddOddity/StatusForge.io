@@ -1,24 +1,27 @@
-//! Stage-0 alias resolution: maps a raw detected title (window title, exe
-//! guess, SPARK heartbeat, manual entry) to the canonical library title the
-//! user created an alias for, BEFORE the title reaches broadcasting or the
-//! library upsert.
+//! Stage-0 alias resolution: takes whatever title got detected — a raw
+//! window title, an exe-name guess, something SPARK forwarded, a manual
+//! entry — and maps it to the canonical library title the user actually set
+//! an alias up for. This runs before broadcasting or the library upsert
+//! ever see the title.
 //!
-//! Aliases are stored on the canonical library entry itself (the host app
-//! flattens them into [`AliasRecord`]s), so an alias can only ever point at
-//! a canonical title — alias→alias chaining is unrepresentable, which is
-//! exactly the v1.0 "no chaining" rule.
+//! Aliases live on the canonical library entry itself (flattened into
+//! [`AliasRecord`]s here), so an alias can only ever point at a real
+//! canonical title. Aliasing to another alias isn't representable — which
+//! happens to be exactly the "no chaining" rule v1.0 wants.
 //!
-//! Tie-breaker order when several records match the same raw title:
+//! When more than one record matches the same raw title, ties break in this
+//! order:
 //! 1. **priority** — lower number wins (1 = highest)
-//! 2. **language** — the user's system language, then "en", then the rest
-//! 3. **preferred** — the alias the user flagged as preferred
-//! 4. **added_at** — oldest first (RFC3339 strings compare correctly)
+//! 2. **language** — the user's system language, then "en", then whatever's left
+//! 3. **preferred** — the alias the user explicitly flagged
+//! 4. **added_at** — oldest wins
 //!
-//! Note: the alias spec's numbered list puts chronological before preferred,
-//! but its own worked example resolves via the preferred flag among aliases
-//! that would already differ chronologically — and with chronological first,
-//! a unique timestamp would decide every tie and `preferred` could never
-//! matter. The worked example's order is the one implemented here.
+//! One wrinkle: the spec's numbered list puts chronological order ahead of
+//! preferred, but its own worked example resolves through the preferred flag
+//! between two aliases that would already differ chronologically. If
+//! chronological order really came first, a unique timestamp would settle
+//! every tie and `preferred` would never get a chance to matter — so this
+//! file follows the worked example instead of the numbered list.
 
 /// One alias, flattened together with the canonical title it points to.
 #[derive(Debug, Clone, PartialEq)]

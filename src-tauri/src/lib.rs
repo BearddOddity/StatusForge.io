@@ -438,9 +438,9 @@ pub struct NativeEngineState {
     pub start_time: Mutex<f64>,
     /// Grace period tracker
     pub lost_focus_time: Mutex<Option<f64>>,
-    /// Manual override: (title, expires-at unix-epoch-seconds). While set
-    /// and unexpired, spawn_engine_loop skips normal detection entirely so
-    /// the waterfall can't immediately overwrite what the user forced.
+    /// Manual override: (title, expires-at unix-epoch-seconds). While this
+    /// is set and hasn't expired, spawn_engine_loop skips normal detection
+    /// so the waterfall doesn't immediately overwrite what the user forced.
     pub override_until: Mutex<Option<(String, f64)>>,
     /// Live status feed for WebSocket widget subscribers
     pub status_tx: tokio::sync::watch::Sender<serde_json::Value>,
@@ -968,12 +968,9 @@ fn spawn_engine_loop(
                 continue;
             }
 
-            // Manual override active: hold the forced title and skip normal
-            // detection entirely this tick, so the waterfall can't immediately
-            // overwrite what the user just forced via override_game(). Keeps
-            // the loop's local current_game in sync so a later expiry falls
-            // through to normal detection cleanly instead of tripping the
-            // grace-period "game closed" path against a stale value.
+            // Active manual override: hold its title and skip detection this
+            // tick so the waterfall doesn't overwrite it. Keep current_game
+            // in sync so once it expires, detection resumes cleanly.
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -1178,12 +1175,10 @@ fn delete_secret_token(service_name: String) -> Result<String, String> {
     Ok(format!("Token '{}' deleted from OS keychain", service_name))
 }
 
-/// Disconnect a broadcaster platform: purge its OAuth secrets from the OS
-/// keychain and clear them from Config.json. A prior "Remove" in Settings
-/// only cleared the in-memory/on-disk fields — since redact_migrated_secrets
-/// only *syncs* a non-empty field into the keychain, clearing to "" never
-/// deleted the keychain entry, so the next `load_config_at` backfilled the
-/// token right back in. This deletes the keychain entry outright.
+/// Disconnect a platform: delete its OAuth secrets from the OS keychain and
+/// clear them from Config.json. The old "Remove" button only cleared the
+/// config fields, so the keychain still had the token and load_config_at
+/// just backfilled it right back in on next launch. This actually deletes it.
 #[tauri::command]
 fn disconnect_platform(platform: String) -> Result<String, String> {
     let keychain_names: &[&str] = match platform.as_str() {
@@ -2169,13 +2164,9 @@ pub fn run() {
                 }
             });
 
-            // Platform API health monitor: while a platform is marked down
-            // (pusher's HealthTracker), probe it every 30s by re-pushing the
-            // latest queued detection. Detection itself keeps running during
-            // an outage — push_category just queues instead of pushing — so
-            // this loop is what notices recovery and broadcasts what the
-            // user is playing now. A dedicated std::thread (not the async
-            // runtime): pusher uses blocking reqwest by design.
+            // Every 30s, retry any platform marked down (pusher's
+            // HealthTracker) by re-pushing its queued detection. Plain
+            // std::thread since pusher uses blocking reqwest.
             let health_app_handle = app.handle().clone();
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(30));
