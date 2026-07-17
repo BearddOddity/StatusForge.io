@@ -45,7 +45,9 @@ impl Default for JoystickBotConfig {
     fn default() -> Self {
         Self {
             client_id: String::new(),
-            category_push_enabled: true,
+            // Off by default — Joystick.tv doesn't support stream categories
+            // yet, so this would just fail every time until they add it.
+            category_push_enabled: false,
             chat_announce_enabled: true,
             chat_bot_enabled: false,
             poll_interval_secs: 10,
@@ -427,15 +429,17 @@ async fn test_push(
         .filter(|t| !t.trim().is_empty())
         .unwrap_or_else(|| "Test Category".to_string());
 
-    let category_result = match push_category(&state, &title).await {
-        Ok(()) => "Category push: OK".to_string(),
-        Err(e) => format!("Category push: FAILED — {}", e),
-    };
+    // Category push is skipped here on purpose — Joystick.tv doesn't support
+    // stream categories yet, so testing it would just always report FAILED
+    // and look like a bug in this app rather than a platform limitation.
     let chat_result = match send_chat_message(&state, &format!("[Test] {}", title)).await {
         Ok(()) => "Chat message: OK".to_string(),
         Err(e) => format!("Chat message: FAILED — {}", e),
     };
-    Ok(format!("{}\n{}", category_result, chat_result))
+    Ok(format!(
+        "Category push: skipped (not supported by Joystick.tv yet)\n{}",
+        chat_result
+    ))
 }
 
 #[tauri::command]

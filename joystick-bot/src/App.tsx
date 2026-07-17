@@ -150,13 +150,11 @@ export default function App() {
 
           <div className="jb-toggle-row">
             <button
-              onClick={async () => {
-                const enabled = await invoke<boolean>("toggle_category_push");
-                setStatus((s) => (s ? { ...s, category_push_enabled: enabled } : s));
-              }}
-              className={`jb-btn ${status?.category_push_enabled ? "jb-btn-success" : "jb-btn-ghost"}`}
+              disabled
+              title="Joystick.tv doesn't support stream categories yet — this will do nothing until they add it"
+              className="jb-btn jb-btn-ghost"
             >
-              Category {status?.category_push_enabled ? "●" : "○"}
+              Category (not yet on Joystick)
             </button>
             <button
               onClick={async () => {
