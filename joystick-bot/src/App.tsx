@@ -213,7 +213,10 @@ export default function App() {
 
           {showFlavor && (
             <div className="jb-flavor-editor">
-              <span className="jb-client-label">Announce lines (one per line, {"{title}"})</span>
+              <span className="jb-client-label">
+                Announce lines — one per line. Placeholders:{" "}
+                {"{title} {genre} {developer} {release_year}"}
+              </span>
               <textarea
                 className="jb-flavor-textarea"
                 value={announceText}

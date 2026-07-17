@@ -388,14 +388,17 @@ pub async fn run_chat_gateway(state: &Arc<JoystickBotState>, token: &str) -> Res
             continue;
         };
         if chat_text.trim().eq_ignore_ascii_case("!game") {
-            let title = state
-                .current_title
+            let game = state
+                .current_game
                 .lock()
                 .unwrap()
                 .clone()
-                .unwrap_or_else(|| "nothing right now".to_string());
+                .unwrap_or(crate::GameMeta {
+                    title: "nothing right now".to_string(),
+                    ..Default::default()
+                });
             let templates = state.config.lock().unwrap().game_reply_templates.clone();
-            let reply = crate::render_template(&templates, &title);
+            let reply = crate::render_template(&templates, &game);
             if let Err(e) = crate::send_chat_message(state, &reply).await {
                 log::warn!("[JOYSTICK-BOT] Failed to reply in chat: {}", e);
             }

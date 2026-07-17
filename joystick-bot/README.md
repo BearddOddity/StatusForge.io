@@ -46,6 +46,20 @@ it yourself.
 4. Paste your Client ID into the small window, click **Connect**, and finish
    the login in the browser tab that opens.
 
+## Customizing the chat messages
+
+Click **✎ Edit Messages** (visible once connected) to edit the announce and
+`!game`-reply lines — one variant per line, one is picked at random each
+time so it's not the exact same text every game change. Placeholders:
+
+- `{title}` — the detected game's title
+- `{genre}`, `{developer}`, `{release_year}` — pulled from StatusForge's own
+  library lookup for that title; blank if StatusForge doesn't have a match,
+  which can leave an odd gap in a template that uses them (e.g. a missing
+  genre in "a {genre} game") — the defaults lean on `{title}` alone for that
+  reason, but feel free to lean harder on the others once your library data
+  is filled in.
+
 ## Testing without waiting for a real game change
 
 Once connected, a **Test Push Now** button appears. It sends a test chat
