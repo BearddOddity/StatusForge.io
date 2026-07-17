@@ -92,6 +92,10 @@ export interface BroadcasterConfig {
   kick_channel_id: string;
   kick_token: string;
   kick_refresh: string;
+  joystick_client: string;
+  joystick_token: string;
+  joystick_refresh: string;
+  joystick_username: string;
 }
 
 export interface AppConfig {

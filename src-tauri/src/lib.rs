@@ -1198,6 +1198,7 @@ fn disconnect_platform(platform: String) -> Result<String, String> {
             "kick_refresh_token",
             "kick_client_secret",
         ],
+        "joystick" => &["joystick_access_token", "joystick_refresh_token"],
         _ => return Err(format!("Unknown platform: {}", platform)),
     };
     for name in keychain_names {
@@ -1221,6 +1222,11 @@ fn disconnect_platform(platform: String) -> Result<String, String> {
             config.broadcaster.kick_token.clear();
             config.broadcaster.kick_refresh.clear();
             config.broadcaster.kick_secret.clear();
+        }
+        "joystick" => {
+            config.broadcaster.joystick_token.clear();
+            config.broadcaster.joystick_refresh.clear();
+            config.broadcaster.joystick_username.clear();
         }
         _ => unreachable!("validated above"),
     }
@@ -1253,6 +1259,8 @@ fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
         ("kick_refresh", "kick_refresh_token"),
         ("twitch_secret", "twitch_client_secret"),
         ("kick_secret", "kick_client_secret"),
+        ("joystick_token", "joystick_access_token"),
+        ("joystick_refresh", "joystick_refresh_token"),
     ];
 
     let mut migrated = Vec::new();
@@ -1335,6 +1343,8 @@ fn get_all_keychain_tokens() -> Result<serde_json::Value, String> {
         ("kick_refresh", "kick_refresh_token"),
         ("twitch_secret", "twitch_client_secret"),
         ("kick_secret", "kick_client_secret"),
+        ("joystick_token", "joystick_access_token"),
+        ("joystick_refresh", "joystick_refresh_token"),
     ];
     let api_keys = [
         ("igdb_token", "igdb_api_token"),
@@ -1459,6 +1469,52 @@ async fn twitch_login(
     Ok("Twitch OAuth flow initiated — check your browser".to_string())
 }
 
+/// Initiate Joystick.tv OAuth login (public/PKCE client — no client secret).
+#[tauri::command]
+async fn joystick_login(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, auth::SharedOAuthState>,
+) -> Result<String, String> {
+    let base_dir = app_base_dir()?;
+    let config_path = base_dir.join("Config.json");
+    let content = tokio::fs::read_to_string(&config_path)
+        .await
+        .map_err(|e| format!("Failed to read config: {}", e))?;
+    let config: AppConfig =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
+
+    let client_id = &config.broadcaster.joystick_client;
+    if client_id.is_empty() {
+        return Err("Joystick client ID not configured".to_string());
+    }
+
+    let verifier = auth::generate_code_verifier();
+    let challenge = auth::generate_code_challenge(&verifier);
+    let state_token = auth::generate_code_verifier();
+    {
+        let mut pkce = state.pkce.lock().unwrap();
+        pkce.insert(
+            "joystick".to_string(),
+            auth::PkceState {
+                verifier,
+                state: state_token.clone(),
+            },
+        );
+    }
+
+    let url = auth::build_joystick_auth_url(client_id, &state_token, &challenge);
+
+    #[allow(deprecated)]
+    {
+        use tauri_plugin_shell::ShellExt;
+        app.shell()
+            .open(&url, None)
+            .map_err(|e| format!("Failed to open browser: {}", e))?;
+    }
+
+    Ok("Joystick OAuth flow initiated — check your browser".to_string())
+}
+
 /// Refresh Kick access token. Returns the new access token.
 #[tauri::command]
 fn kick_refresh_token() -> Result<String, String> {
@@ -1487,6 +1543,40 @@ fn twitch_refresh_token() -> Result<String, String> {
     auth::save_config_at(&base_dir, &config)?;
 
     Ok(new_token)
+}
+
+/// Refresh Joystick access token. Returns the new access token.
+#[tauri::command]
+fn joystick_refresh_token() -> Result<String, String> {
+    let base_dir = app_base_dir()?;
+    let config = auth::load_config_at(&base_dir)?;
+    let new_token = auth::refresh_joystick_token(&config)?;
+
+    let mut config = config;
+    config.broadcaster.joystick_token = new_token.clone();
+    auth::save_config_at(&base_dir, &config)?;
+
+    Ok(new_token)
+}
+
+/// Validates a manually-pasted Joystick access token and backfills
+/// joystick_username. Returns the connected user's display name for a
+/// success toast.
+#[tauri::command]
+async fn joystick_validate_token() -> Result<String, String> {
+    let base_dir = app_base_dir()?;
+    let config = auth::load_config_at(&base_dir)?;
+    let token = config.broadcaster.joystick_token.clone();
+    if token.is_empty() {
+        return Err("No Joystick access token to validate".to_string());
+    }
+    let name = auth::validate_joystick_token(&token).await?;
+    if !name.is_empty() {
+        let mut updated = config;
+        updated.broadcaster.joystick_username = name.clone();
+        auth::save_config_at(&base_dir, &updated)?;
+    }
+    Ok(name)
 }
 
 /// Validates a manually-pasted Kick access token (the "alternate to Connect
@@ -2277,10 +2367,13 @@ pub fn run() {
             get_detection_feedback_stats,
             kick_login,
             twitch_login,
+            joystick_login,
             kick_refresh_token,
             twitch_refresh_token,
+            joystick_refresh_token,
             kick_validate_token,
             twitch_validate_token,
+            joystick_validate_token,
             check_platform_live_status,
             sync_kick_db,
             sync_library_now,
