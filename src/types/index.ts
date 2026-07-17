@@ -7,6 +7,7 @@ export interface GameInfo {
 }
 
 export interface EngineStatusData {
+  running: boolean;
   is_playing: boolean;
   game_title: string;
   process_name: string;

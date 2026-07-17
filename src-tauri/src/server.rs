@@ -10,6 +10,7 @@
 //! query parameter; when present it must match `engine_settings.widget_token`
 //! (401 otherwise). The server only ever binds loopback.
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use axum::{
@@ -531,6 +532,7 @@ async fn twitch_login_handler(State(state): State<ServerState>) -> Result<Redire
 /// Build the status payload the overlays consume — game info from the
 /// engine (or LAN Hub), enriched with Forge_Database library metadata.
 pub fn build_status(engine: &EngineState) -> serde_json::Value {
+    let running = engine.running.load(Ordering::Relaxed);
     let game = engine.current_game.lock().unwrap().clone();
     let process = engine.current_process.lock().unwrap().clone();
     let is_playing = *engine.is_playing.lock().unwrap();
@@ -545,10 +547,13 @@ pub fn build_status(engine: &EngineState) -> serde_json::Value {
     let game_title = game.as_ref().map(|g| g.title.clone()).unwrap_or_default();
 
     // Enrich with Forge_Database.json library metadata when we have a match.
-    // While idle, fall back to the idle category's own library entry (e.g.
-    // "Just Chatting") so a custom cover set for it via the Library editor
-    // shows up here too, instead of always falling through to the app's
-    // built-in placeholder image.
+    // While idle (but running), fall back to the idle category's own
+    // library entry (e.g. "Just Chatting") so a custom cover set for it via
+    // the Library editor shows up here too, instead of always falling
+    // through to the app's built-in placeholder image. Skipped entirely
+    // while the engine isn't running — there's no live idle session to
+    // reflect, so the widget/Dashboard should show truly offline, not the
+    // idle category's cover.
     let mut genre = String::new();
     let mut developer = String::new();
     let mut publisher = String::new();
@@ -557,10 +562,12 @@ pub fn build_status(engine: &EngineState) -> serde_json::Value {
     let mut logo_url = String::new();
     let lookup_title = if !game_title.is_empty() {
         Some(game_title.clone())
-    } else {
+    } else if running {
         config
             .as_ref()
             .map(|c| c.engine_settings.idle_category.clone())
+    } else {
+        None
     };
     if let Some(lookup_title) = lookup_title {
         if let Ok(db) = load_db() {
@@ -578,7 +585,7 @@ pub fn build_status(engine: &EngineState) -> serde_json::Value {
     }
 
     serde_json::json!({
-        "running": true,
+        "running": running,
         "game_title": game_title,
         "process_name": process,
         "is_playing": is_playing,

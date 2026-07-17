@@ -80,7 +80,7 @@ function App() {
     if (wsData) {
       setEngineStatus((prev) => ({
         ...prev,
-        running: true,
+        running: wsData.running,
         is_playing: wsData.is_playing || false,
         game_title: wsData.game_title || "",
         process_name: wsData.process_name || "",
