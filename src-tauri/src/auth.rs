@@ -768,15 +768,16 @@ pub fn load_config_at(base_dir: &std::path::Path) -> Result<AppConfig, String> {
     Ok(config)
 }
 
-/// `migrate_tokens_to_keychain` (lib.rs) moves OAuth/API-key fields out of
+/// `redact_migrated_secrets` (below) moves OAuth/API-key fields out of
 /// Config.json into the OS keychain and blanks them on disk. Every other
 /// consumer in this app (pusher, hub, metadata scans, token validation)
 /// reads these fields straight off the loaded `AppConfig` — without this
-/// backfill, migrating leaves those fields permanently empty in memory and
-/// silently breaks category pushes and metadata API scans even though the
-/// token is safely stored. A field already non-empty on disk (not migrated,
-/// or keychain unavailable on this OS) is left untouched — the keychain
-/// only fills gaps, never overrides what Config.json already has.
+/// backfill, moving a field to the keychain would leave it permanently empty
+/// in memory and silently break category pushes and metadata API scans even
+/// though the token is safely stored. A field already non-empty on disk
+/// (keychain unavailable on this OS, or the write failed) is left untouched
+/// — the keychain only fills gaps, never overrides what Config.json already
+/// has.
 fn backfill_from_keychain(config: &mut AppConfig) {
     let read = |keychain_name: &str| -> Option<String> {
         let entry = keyring::Entry::new(crate::KEYRING_SERVICE, keychain_name).ok()?;
@@ -853,14 +854,11 @@ fn backfill_from_keychain(config: &mut AppConfig) {
 
 pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<(), String> {
     let config_path = base_dir.join("Config.json");
-    // `config` may carry secrets that `load_config_at` backfilled in-memory
-    // from the OS keychain (e.g. a caller loaded, tweaked one unrelated
-    // field like the Blipy pin, and is saving the whole struct back). Never
-    // let an already-migrated field regain a plaintext copy on disk here —
-    // re-sync the (possibly refreshed, e.g. after a token-refresh-and-save)
-    // value into the keychain instead and blank it in what actually gets
-    // written. A field with no existing keychain entry (never migrated) is
-    // untouched, so first-time OAuth connects still save normally.
+    // Every non-empty secret field gets pushed to the OS keychain and blanked
+    // here before hitting disk — including a brand-new OAuth token or API key
+    // that's never been saved before. Config.json should never hold a secret
+    // in plaintext when the keychain is available; it's only a fallback for
+    // when the keychain write itself fails (locked, no Secret Service, ...).
     let mut to_write = config.clone();
     redact_migrated_secrets(&mut to_write);
     let raw = serde_json::to_string_pretty(&to_write)
@@ -871,12 +869,10 @@ pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<
     Ok(())
 }
 
-/// For every field `migrate_tokens_to_keychain` can move to the OS keychain:
-/// if it's non-empty here AND a keychain entry already exists for it (i.e.
-/// this install has migrated), push the current value into the keychain
-/// (picks up a refreshed token) and blank it before it's serialized — so
-/// Config.json never regains a plaintext secret once migrated, regardless
-/// of which code path loaded (and keychain-backfilled) this config first.
+/// Every field `migrate_tokens_to_keychain` can move to the OS keychain gets
+/// pushed there on every save — a brand-new OAuth token included, not just
+/// ones an earlier manual migration already touched — and blanked out of
+/// what actually gets written to Config.json.
 pub(crate) fn redact_migrated_secrets(config: &mut AppConfig) {
     let sync = |field: &mut String, keychain_name: &str| {
         if field.is_empty() {
@@ -885,22 +881,17 @@ pub(crate) fn redact_migrated_secrets(config: &mut AppConfig) {
         let Ok(entry) = keyring::Entry::new(crate::KEYRING_SERVICE, keychain_name) else {
             return;
         };
-        // Only redact if this field was already migrated — an entry existing
-        // is exactly that signal. A never-migrated field saves as plaintext,
-        // same as before this fix existed.
-        if entry.get_password().is_ok() {
-            // Only blank the Config.json copy if the keychain write actually
-            // succeeded. If the OS keychain is locked, unavailable, or the
-            // write is otherwise rejected, keep the plaintext value where it
-            // is rather than losing the credential from both places.
-            match entry.set_password(field) {
-                Ok(()) => field.clear(),
-                Err(e) => log::warn!(
-                    "[KEYCHAIN] Failed to sync {} to OS keychain ({}) — keeping it in Config.json",
-                    keychain_name,
-                    e
-                ),
-            }
+        // Only blank the Config.json copy if the keychain write actually
+        // succeeded. If the OS keychain is locked, unavailable, or the
+        // write is otherwise rejected, keep the plaintext value where it
+        // is rather than losing the credential from both places.
+        match entry.set_password(field) {
+            Ok(()) => field.clear(),
+            Err(e) => log::warn!(
+                "[KEYCHAIN] Failed to sync {} to OS keychain ({}) — keeping it in Config.json",
+                keychain_name,
+                e
+            ),
         }
     };
     sync(&mut config.broadcaster.twitch_token, "twitch_access_token");

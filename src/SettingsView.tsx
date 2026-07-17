@@ -928,7 +928,7 @@ function EngineSubTab({
       {/* Token Security */}
       <CollapsibleSection
         title="Token Security"
-        description="Move your saved tokens out of plain text and into your OS keychain."
+        description="Your saved tokens live in your OS keychain, not in plain text."
         icon="🔐"
         badge={
           keychainInfo && (
@@ -939,34 +939,16 @@ function EngineSubTab({
                   : "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
               }`}
             >
-              {keychainInfo.count > 0 ? "Protected" : "Plaintext config"}
+              {keychainInfo.count > 0 ? "Protected" : "Nothing stored yet"}
             </span>
           )
         }
       >
         <p className="text-xs text-white/50 mb-4 leading-relaxed">
-          OAuth tokens are normally stored as plain text in Config.json. Migrating moves them into
-          Windows Credential Manager / macOS Keychain and removes them from disk.
+          Every OAuth token and API key is moved into Windows Credential Manager / macOS Keychain as
+          soon as it's saved — Config.json never keeps a plaintext copy.
         </p>
         <div className="flex flex-col gap-4">
-          <div>
-            <button
-              onClick={async () => {
-                const res = await tauriApi("migrate_tokens_to_keychain");
-                if (Array.isArray(res) && res.length) {
-                  toast(`Migrated ${res.length} tokens to OS keychain`, "success");
-                } else if (Array.isArray(res)) {
-                  toast("No tokens to migrate", "info");
-                } else {
-                  toast("Migration failed", "error");
-                }
-              }}
-              className="btn-cta"
-            >
-              🔒 Migrate Tokens to Keychain
-            </button>
-          </div>
-
           {keychainInfo && keychainInfo.stored.length > 0 && (
             <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
               <span className="text-[10px] uppercase tracking-wider text-white/40 block mb-2 font-bold">
