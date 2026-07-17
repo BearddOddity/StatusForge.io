@@ -173,6 +173,7 @@ body,
   font-size: 11px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
 }
 
 .jb-controls {
