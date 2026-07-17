@@ -502,8 +502,27 @@ fn start_chat_bot_loop(state: Arc<JoystickBotState>) {
             match (enabled, token) {
                 (true, Some(token)) => {
                     last_idle_reason = None;
-                    if let Err(e) = oauth::run_chat_gateway(&state, &token).await {
-                        log::warn!("[JOYSTICK-BOT] Chat gateway dropped: {} — reconnecting", e);
+                    // Run the gateway as its own task so a panic inside it
+                    // (a bad TLS handshake, a malformed message, anything)
+                    // can't silently kill this whole loop forever — it gets
+                    // logged and retried instead, same as a normal drop.
+                    let gateway_state = state.clone();
+                    let gateway_token = token.clone();
+                    let result = tokio::spawn(async move {
+                        oauth::run_chat_gateway(&gateway_state, &gateway_token).await
+                    })
+                    .await;
+                    match result {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => {
+                            log::warn!("[JOYSTICK-BOT] Chat gateway dropped: {} — reconnecting", e);
+                        }
+                        Err(e) => {
+                            log::error!(
+                                "[JOYSTICK-BOT] Chat gateway task panicked: {} — reconnecting anyway",
+                                e
+                            );
+                        }
                     }
                     tokio::time::sleep(Duration::from_secs(5)).await;
                 }
@@ -751,6 +770,14 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // rustls (pulled in by tokio-tungstenite for the wss:// chat gateway)
+    // doesn't auto-pick a crypto backend since 0.22 — without this, the
+    // first TLS handshake panics the gateway's task permanently, silently
+    // killing the chat bot for the rest of the run.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let state = Arc::new(init_state());
 
     tauri::Builder::default()
