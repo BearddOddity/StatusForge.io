@@ -220,13 +220,6 @@ export default function App() {
 
           <div className="jb-toggle-row">
             <button
-              disabled
-              title="Joystick.tv doesn't support stream categories yet — this will do nothing until they add it"
-              className="jb-btn jb-btn-ghost"
-            >
-              Category (not yet on Joystick)
-            </button>
-            <button
               onClick={async () => {
                 const enabled = await invoke<boolean>("toggle_chat_announce");
                 setStatus((s) => (s ? { ...s, chat_announce_enabled: enabled } : s));
