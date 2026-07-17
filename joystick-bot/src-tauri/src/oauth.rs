@@ -394,7 +394,8 @@ pub async fn run_chat_gateway(state: &Arc<JoystickBotState>, token: &str) -> Res
                 .unwrap()
                 .clone()
                 .unwrap_or_else(|| "nothing right now".to_string());
-            let reply = format!("Currently playing: {}", title);
+            let templates = state.config.lock().unwrap().game_reply_templates.clone();
+            let reply = crate::render_template(&templates, &title);
             if let Err(e) = crate::send_chat_message(state, &reply).await {
                 log::warn!("[JOYSTICK-BOT] Failed to reply in chat: {}", e);
             }

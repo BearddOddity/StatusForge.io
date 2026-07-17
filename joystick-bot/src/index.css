@@ -112,7 +112,29 @@ body,
   gap: 10px;
   padding: 10px 16px;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+}
+
+.jb-flavor-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jb-flavor-textarea {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-family: var(--font-family-mono);
+  resize: vertical;
+  outline: none;
+}
+.jb-flavor-textarea:focus {
+  border-color: rgba(255, 77, 103, 0.4);
+  box-shadow: 0 0 0 3px rgba(255, 77, 103, 0.08);
 }
 
 .jb-now-info {

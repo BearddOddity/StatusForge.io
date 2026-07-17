@@ -39,6 +39,31 @@ pub struct JoystickBotConfig {
     pub chat_announce_enabled: bool,
     pub chat_bot_enabled: bool,
     pub poll_interval_secs: u64,
+    /// One is picked at random each time a game-change announcement fires,
+    /// so it's not the exact same line every time. `{title}` is replaced
+    /// with the detected game.
+    pub announce_templates: Vec<String>,
+    /// Same idea, for the `!game` chat command's reply.
+    pub game_reply_templates: Vec<String>,
+}
+
+fn default_announce_templates() -> Vec<String> {
+    vec![
+        "🎮 Now playing: {title}".to_string(),
+        "Switched it up — {title} time!".to_string(),
+        "Currently vibing to {title}".to_string(),
+        "New game alert: {title}".to_string(),
+        "On the menu now: {title}".to_string(),
+    ]
+}
+
+fn default_game_reply_templates() -> Vec<String> {
+    vec![
+        "Currently playing: {title}".to_string(),
+        "Right now? {title}.".to_string(),
+        "{title}, obviously.".to_string(),
+        "We're deep in {title} right now".to_string(),
+    ]
 }
 
 impl Default for JoystickBotConfig {
@@ -51,8 +76,22 @@ impl Default for JoystickBotConfig {
             chat_announce_enabled: true,
             chat_bot_enabled: false,
             poll_interval_secs: 10,
+            announce_templates: default_announce_templates(),
+            game_reply_templates: default_game_reply_templates(),
         }
     }
+}
+
+/// Picks one template at random and substitutes `{title}`. Falls back to a
+/// plain "Now playing: {title}" if the list is empty (e.g. a user cleared
+/// the textarea entirely) rather than sending a blank message.
+fn render_template(templates: &[String], title: &str) -> String {
+    use rand::seq::SliceRandom;
+    let chosen = templates
+        .choose(&mut rand::thread_rng())
+        .cloned()
+        .unwrap_or_else(|| "Now playing: {title}".to_string());
+    chosen.replace("{title}", title)
 }
 
 fn config_path() -> Option<PathBuf> {
@@ -158,6 +197,8 @@ impl JoystickBotState {
             "chat_announce_enabled": config.chat_announce_enabled,
             "chat_bot_enabled": config.chat_bot_enabled,
             "poll_interval_secs": config.poll_interval_secs,
+            "announce_templates": config.announce_templates,
+            "game_reply_templates": config.game_reply_templates,
         })
     }
 }
@@ -362,7 +403,8 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
                             }
                         }
                         if announce_on {
-                            let msg = format!("Now playing: {}", title);
+                            let templates = state.config.lock().unwrap().announce_templates.clone();
+                            let msg = render_template(&templates, title);
                             if let Err(e) = send_chat_message(&state, &msg).await {
                                 log::warn!("[JOYSTICK-BOT] Chat announce failed: {}", e);
                             }
@@ -475,6 +517,37 @@ fn toggle_chat_bot(state: tauri::State<Arc<JoystickBotState>>) -> Result<bool, S
     config.chat_bot_enabled = !config.chat_bot_enabled;
     save_config(&config);
     Ok(config.chat_bot_enabled)
+}
+
+/// Replaces the announce-message variants. Empty lines are dropped; an
+/// empty result just means `render_template` falls back to a plain default
+/// rather than sending a blank chat message.
+#[tauri::command]
+fn set_announce_templates(
+    state: tauri::State<Arc<JoystickBotState>>,
+    templates: Vec<String>,
+) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    config.announce_templates = templates
+        .into_iter()
+        .filter(|t| !t.trim().is_empty())
+        .collect();
+    save_config(&config);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_game_reply_templates(
+    state: tauri::State<Arc<JoystickBotState>>,
+    templates: Vec<String>,
+) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    config.game_reply_templates = templates
+        .into_iter()
+        .filter(|t| !t.trim().is_empty())
+        .collect();
+    save_config(&config);
+    Ok(())
 }
 
 #[tauri::command]
@@ -611,6 +684,8 @@ pub fn run() {
             toggle_category_push,
             toggle_chat_announce,
             toggle_chat_bot,
+            set_announce_templates,
+            set_game_reply_templates,
             connect,
             disconnect,
             get_autostart,
