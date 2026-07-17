@@ -215,15 +215,23 @@ async fn push_category(state: &JoystickBotState, title: &str) -> Result<(), Stri
                 .send()
                 .await
                 .map_err(|e| format!("stream lookup failed: {}", e))?;
-            if get_resp.status().as_u16() == 401 {
-                return Ok(get_resp.status());
+            let get_status = get_resp.status();
+            if get_status.as_u16() == 401 {
+                return Ok(get_status);
             }
-            if !get_resp.status().is_success() {
-                return Err(format!("stream lookup returned {}", get_resp.status()));
-            }
-            let mut body: serde_json::Value = get_resp
-                .json()
+            let raw = get_resp
+                .text()
                 .await
+                .map_err(|e| format!("stream lookup body read error: {}", e))?;
+            // Logged unconditionally (not just on failure) so a `GET /me/stream`
+            // shape mismatch — the whole reason this lookup exists instead of
+            // guessing a PUT body — is visible in the log file for whoever
+            // reports it back, without needing to reproduce a failure first.
+            log::debug!("[JOYSTICK-BOT] GET /me/stream ({}): {}", get_status, raw);
+            if !get_status.is_success() {
+                return Err(format!("stream lookup returned {}: {}", get_status, raw));
+            }
+            let mut body: serde_json::Value = serde_json::from_str(&raw)
                 .map_err(|e| format!("stream lookup parse error: {}", e))?;
             let obj = body
                 .as_object_mut()
@@ -242,14 +250,18 @@ async fn push_category(state: &JoystickBotState, title: &str) -> Result<(), Stri
                 .send()
                 .await
                 .map_err(|e| format!("stream update failed: {}", e))?;
-            if put_resp.status().is_success() {
+            let put_status = put_resp.status();
+            if put_status.is_success() {
                 log::info!(
                     "[JOYSTICK-BOT] Category set to \"{}\" (key: {})",
                     title,
                     key
                 );
+            } else if put_status.as_u16() != 401 {
+                let raw = put_resp.text().await.unwrap_or_default();
+                log::warn!("[JOYSTICK-BOT] PUT /me/stream ({}): {}", put_status, raw);
             }
-            Ok(put_resp.status())
+            Ok(put_status)
         }
     })
     .await
@@ -268,7 +280,12 @@ async fn send_chat_message(state: &JoystickBotState, text: &str) -> Result<(), S
                 .send()
                 .await
                 .map_err(|e| format!("chat message failed: {}", e))?;
-            Ok(resp.status())
+            let status = resp.status();
+            if !status.is_success() && status.as_u16() != 401 {
+                let raw = resp.text().await.unwrap_or_default();
+                log::warn!("[JOYSTICK-BOT] POST /chat/messages ({}): {}", status, raw);
+            }
+            Ok(status)
         }
     })
     .await
@@ -390,6 +407,35 @@ fn start_chat_bot_loop(state: Arc<JoystickBotState>) {
 #[tauri::command]
 fn get_status(state: tauri::State<Arc<JoystickBotState>>) -> serde_json::Value {
     state.status_json()
+}
+
+/// Manual trigger for testing: pushes the given title (or "Test Category" if
+/// none supplied) right now, without waiting for a real game-change from the
+/// poll loop. Runs both category push and chat announce regardless of their
+/// individual toggles, so a single click tells you which of the two (if
+/// either) actually works against a real account. Full request/response
+/// bodies land in the log file either way — see README.md for where to find it.
+#[tauri::command]
+async fn test_push(
+    state: tauri::State<'_, Arc<JoystickBotState>>,
+    title: Option<String>,
+) -> Result<String, String> {
+    if state.access_token.lock().unwrap().is_none() {
+        return Err("Not connected".to_string());
+    }
+    let title = title
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| "Test Category".to_string());
+
+    let category_result = match push_category(&state, &title).await {
+        Ok(()) => "Category push: OK".to_string(),
+        Err(e) => format!("Category push: FAILED — {}", e),
+    };
+    let chat_result = match send_chat_message(&state, &format!("[Test] {}", title)).await {
+        Ok(()) => "Chat message: OK".to_string(),
+        Err(e) => format!("Chat message: FAILED — {}", e),
+    };
+    Ok(format!("{}\n{}", category_result, chat_result))
 }
 
 #[tauri::command]
@@ -527,6 +573,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
+                // Debug level on purpose while this addon is still being
+                // tested against a real account — the raw API bodies logged
+                // at debug (GET /me/stream, gateway messages) are the whole
+                // point of testing this early.
+                .level(log::LevelFilter::Debug)
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
@@ -551,6 +602,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_status,
+            test_push,
             set_client_id,
             toggle_category_push,
             toggle_chat_announce,

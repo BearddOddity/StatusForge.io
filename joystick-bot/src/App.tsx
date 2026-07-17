@@ -34,6 +34,8 @@ export default function App() {
   const [clientId, setClientId] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [autostart, setAutostart] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     invoke<boolean>("get_autostart")
@@ -175,6 +177,33 @@ export default function App() {
               Chat Bot {status?.chat_bot_enabled ? "●" : "○"}
             </button>
           </div>
+
+          {connected && (
+            <div className="jb-toggle-row">
+              <button
+                disabled={testing}
+                onClick={async () => {
+                  setTesting(true);
+                  setTestResult(null);
+                  try {
+                    const result = await invoke<string>("test_push", {
+                      title: status?.current_title ?? undefined,
+                    });
+                    setTestResult(result);
+                  } catch (e) {
+                    setTestResult(`Test push failed to run: ${e}`);
+                  }
+                  setTesting(false);
+                }}
+                className="jb-btn jb-btn-connect"
+                style={{ flex: 1 }}
+              >
+                {testing ? "Testing…" : "Test Push Now"}
+              </button>
+            </div>
+          )}
+
+          {testResult && <pre className="jb-test-result">{testResult}</pre>}
         </div>
       </div>
 

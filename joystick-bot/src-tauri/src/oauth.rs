@@ -377,6 +377,10 @@ pub async fn run_chat_gateway(state: &Arc<JoystickBotState>, token: &str) -> Res
     while let Some(msg) = read.next().await {
         let msg = msg.map_err(|e| format!("Gateway read error: {}", e))?;
         let Message::Text(text) = msg else { continue };
+        // Logged unconditionally — if `extract_chat_text` is parsing the
+        // wrong fields for the real gateway payload shape, this is what
+        // shows what it actually looks like.
+        log::debug!("[JOYSTICK-BOT] Gateway message: {}", text);
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
             continue;
         };
