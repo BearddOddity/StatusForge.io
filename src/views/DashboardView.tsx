@@ -138,15 +138,23 @@ export default function DashboardView({
   wsConnected,
   toast,
   onNavigate,
+  onRefresh,
 }: {
   engineStatus: EngineStatus;
   wsConnected: boolean;
   toast: (msg: string, type?: ToastType) => void;
   onNavigate: (view: ViewId) => void;
+  onRefresh: () => Promise<void>;
 }) {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideText, setOverrideText] = useState("");
   const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+  // The engine's running flag flips instantly on the backend, but the
+  // Dashboard otherwise only learns about it from the next scheduled status
+  // poll (up to 10s away) -- calling onRefresh() right after the toggle
+  // closes that gap, and this local flag disables the button in the
+  // meantime so a slow click can't fire the command twice.
+  const [engineToggling, setEngineToggling] = useState(false);
 
   const submitOverride = async () => {
     const name = overrideText.trim();
@@ -444,27 +452,35 @@ export default function DashboardView({
               {engineStatus.running ? (
                 <Btn
                   variant="danger"
+                  disabled={engineToggling}
                   onClick={async () => {
+                    setEngineToggling(true);
                     const r = await tauriApi("stop_engine");
                     toast(
                       typeof r === "string" ? r : "Failed",
                       typeof r === "string" ? "success" : "error"
                     );
+                    await onRefresh();
+                    setEngineToggling(false);
                   }}
                 >
-                  ⏹ Stop Engine
+                  {engineToggling ? "Stopping…" : "⏹ Stop Engine"}
                 </Btn>
               ) : (
                 <Btn
+                  disabled={engineToggling}
                   onClick={async () => {
+                    setEngineToggling(true);
                     const r = await tauriApi("start_engine");
                     toast(
                       typeof r === "string" ? r : "Failed",
                       typeof r === "string" ? "success" : "error"
                     );
+                    await onRefresh();
+                    setEngineToggling(false);
                   }}
                 >
-                  Start Engine
+                  {engineToggling ? "Starting…" : "Start Engine"}
                 </Btn>
               )}
               {isPlaying && engineStatus.game_title && (

@@ -400,6 +400,9 @@ fn start_engine(
 #[tauri::command]
 fn stop_engine(state: tauri::State<Arc<EngineState>>) -> Result<String, String> {
     state.running.store(false, Ordering::Relaxed);
+    // Push immediately so overlays/Dashboard see "offline" right away instead
+    // of waiting for the loop thread to notice and exit on its next tick.
+    state.push_status();
     Ok("Engine stopped".to_string())
 }
 
@@ -942,6 +945,10 @@ fn spawn_engine_loop(
             let mut playing = state_arc.is_playing.lock().unwrap();
             *playing = false;
         }
+        // Push immediately so overlays/Dashboard see "running" the moment the
+        // loop actually starts, instead of waiting for the first scan cycle
+        // (or longer, if nothing changes state) to trigger a push.
+        state_arc.push_status();
 
         log::info!(
             "[ENGINE] Engine loop started. Grace: {}s, Interval: {}s",

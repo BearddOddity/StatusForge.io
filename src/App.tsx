@@ -132,6 +132,7 @@ function App() {
           wsConnected={wsConnected}
           toast={toast}
           onNavigate={setCurrentView}
+          onRefresh={fetchStatus}
         />
       ),
       settings: <SettingsView engineStatus={engineStatus} onRefresh={fetchStatus} toast={toast} />,
