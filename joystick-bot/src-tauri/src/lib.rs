@@ -47,13 +47,18 @@ pub struct JoystickBotConfig {
     pub game_reply_templates: Vec<String>,
 }
 
+// Genre/developer/release_year come from StatusForge's own library lookup —
+// blank if it doesn't have a match for the title, which can leave an awkward
+// gap in a template that uses them (e.g. "a  game" with genre missing).
+// Kept to one or two default templates rather than all of them for that
+// reason; edit freely once you know your library data is filled in.
 fn default_announce_templates() -> Vec<String> {
     vec![
         "🎮 Now playing: {title}".to_string(),
         "Switched it up — {title} time!".to_string(),
         "Currently vibing to {title}".to_string(),
-        "New game alert: {title}".to_string(),
-        "On the menu now: {title}".to_string(),
+        "New game alert: {title} ({release_year})".to_string(),
+        "On the menu now: {title}, a {genre} game by {developer}".to_string(),
     ]
 }
 
@@ -62,7 +67,7 @@ fn default_game_reply_templates() -> Vec<String> {
         "Currently playing: {title}".to_string(),
         "Right now? {title}.".to_string(),
         "{title}, obviously.".to_string(),
-        "We're deep in {title} right now".to_string(),
+        "We're deep in {title} ({genre}) right now".to_string(),
     ]
 }
 
@@ -82,16 +87,32 @@ impl Default for JoystickBotConfig {
     }
 }
 
-/// Picks one template at random and substitutes `{title}`. Falls back to a
-/// plain "Now playing: {title}" if the list is empty (e.g. a user cleared
-/// the textarea entirely) rather than sending a blank message.
-fn render_template(templates: &[String], title: &str) -> String {
+/// Metadata for whatever StatusForge currently reports as the detected game.
+/// Genre/developer/release_year come from StatusForge's own library lookup
+/// (via `/status`) — empty string if it doesn't have a match for the title.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct GameMeta {
+    pub title: String,
+    pub genre: String,
+    pub developer: String,
+    pub release_year: String,
+}
+
+/// Picks one template at random and substitutes `{title}`, `{genre}`,
+/// `{developer}`, `{release_year}`. Falls back to a plain "Now playing:
+/// {title}" if the list is empty (e.g. a user cleared the textarea
+/// entirely) rather than sending a blank message.
+fn render_template(templates: &[String], game: &GameMeta) -> String {
     use rand::seq::SliceRandom;
     let chosen = templates
         .choose(&mut rand::thread_rng())
         .cloned()
         .unwrap_or_else(|| "Now playing: {title}".to_string());
-    chosen.replace("{title}", title)
+    chosen
+        .replace("{title}", &game.title)
+        .replace("{genre}", &game.genre)
+        .replace("{developer}", &game.developer)
+        .replace("{release_year}", &game.release_year)
 }
 
 fn config_path() -> Option<PathBuf> {
@@ -165,7 +186,7 @@ pub struct JoystickBotState {
     pub access_token: Mutex<Option<String>>,
     pub refresh_token: Mutex<Option<String>>,
     pub username: Mutex<String>,
-    pub current_title: Mutex<Option<String>>,
+    pub current_game: Mutex<Option<GameMeta>>,
     pub main_app_reachable: AtomicBool,
     pub running: Arc<AtomicBool>,
     pub pending_pkce: Mutex<Option<oauth::PkceState>>,
@@ -177,7 +198,7 @@ pub fn init_state() -> JoystickBotState {
         access_token: Mutex::new(keychain_read("access_token")),
         refresh_token: Mutex::new(keychain_read("refresh_token")),
         username: Mutex::new(keychain_read("username").unwrap_or_default()),
-        current_title: Mutex::new(None),
+        current_game: Mutex::new(None),
         main_app_reachable: AtomicBool::new(false),
         running: Arc::new(AtomicBool::new(true)),
         pending_pkce: Mutex::new(None),
@@ -187,11 +208,15 @@ pub fn init_state() -> JoystickBotState {
 impl JoystickBotState {
     fn status_json(&self) -> serde_json::Value {
         let config = self.config.lock().unwrap();
+        let game = self.current_game.lock().unwrap();
         serde_json::json!({
             "connected": self.access_token.lock().unwrap().is_some(),
             "username": *self.username.lock().unwrap(),
             "client_id": config.client_id,
-            "current_title": *self.current_title.lock().unwrap(),
+            "current_title": game.as_ref().map(|g| g.title.clone()),
+            "current_genre": game.as_ref().map(|g| g.genre.clone()).unwrap_or_default(),
+            "current_developer": game.as_ref().map(|g| g.developer.clone()).unwrap_or_default(),
+            "current_release_year": game.as_ref().map(|g| g.release_year.clone()).unwrap_or_default(),
             "main_app_reachable": self.main_app_reachable.load(Ordering::Relaxed),
             "category_push_enabled": config.category_push_enabled,
             "chat_announce_enabled": config.chat_announce_enabled,
@@ -340,16 +365,27 @@ async fn send_chat_message(state: &JoystickBotState, text: &str) -> Result<(), S
 // for this addon to work) and reacts to changes.
 // ═══════════════════════════════════════════════════════════════════════════
 
-fn display_title(status: &serde_json::Value) -> Option<String> {
+/// StatusForge's `/status` JSON already carries genre/developer/release_year
+/// (from its own library lookup) alongside the title — nothing extra to add
+/// on the StatusForge side for this addon to use them.
+fn parse_game_meta(status: &serde_json::Value) -> Option<GameMeta> {
     if !status["running"].as_bool().unwrap_or(false) {
         return None;
     }
     let title = status["game_title"].as_str().unwrap_or("").trim();
-    if title.is_empty() {
-        Some("Just Chatting".to_string())
+    let title = if title.is_empty() {
+        "Just Chatting".to_string()
     } else {
-        Some(title.to_string())
-    }
+        title.to_string()
+    };
+    Some(GameMeta {
+        title,
+        genre: status["genre"].as_str().unwrap_or("").to_string(),
+        developer: status["developer"].as_str().unwrap_or("").to_string(),
+        // StatusForge's own JSON key is "release_date" even though it holds
+        // just the year (see server.rs's build_status).
+        release_year: status["release_date"].as_str().unwrap_or("").to_string(),
+    })
 }
 
 fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
@@ -365,11 +401,11 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
                 .clamp(3, 120);
 
             let status = client.get(STATUSFORGE_STATUS_URL).send().await;
-            let new_title = match status {
+            let new_game = match status {
                 Ok(resp) if resp.status().is_success() => {
                     state.main_app_reachable.store(true, Ordering::Relaxed);
                     match resp.json::<serde_json::Value>().await {
-                        Ok(json) => display_title(&json),
+                        Ok(json) => parse_game_meta(&json),
                         Err(_) => None,
                     }
                 }
@@ -380,9 +416,9 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
             };
 
             let changed = {
-                let mut current = state.current_title.lock().unwrap();
-                if *current != new_title {
-                    *current = new_title.clone();
+                let mut current = state.current_game.lock().unwrap();
+                if *current != new_game {
+                    *current = new_game.clone();
                     true
                 } else {
                     false
@@ -390,7 +426,7 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
             };
 
             if changed {
-                if let Some(title) = &new_title {
+                if let Some(game) = &new_game {
                     let connected = state.access_token.lock().unwrap().is_some();
                     if connected {
                         let (push_on, announce_on) = {
@@ -398,13 +434,13 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
                             (cfg.category_push_enabled, cfg.chat_announce_enabled)
                         };
                         if push_on {
-                            if let Err(e) = push_category(&state, title).await {
+                            if let Err(e) = push_category(&state, &game.title).await {
                                 log::warn!("[JOYSTICK-BOT] Category push failed: {}", e);
                             }
                         }
                         if announce_on {
                             let templates = state.config.lock().unwrap().announce_templates.clone();
-                            let msg = render_template(&templates, title);
+                            let msg = render_template(&templates, game);
                             if let Err(e) = send_chat_message(&state, &msg).await {
                                 log::warn!("[JOYSTICK-BOT] Chat announce failed: {}", e);
                             }
@@ -470,11 +506,22 @@ async fn test_push(
     let title = title
         .filter(|t| !t.trim().is_empty())
         .unwrap_or_else(|| "Test Category".to_string());
+    // Real genre/developer/release_year come from StatusForge's own library
+    // lookup — fake values here so a template using those placeholders can
+    // still be test-fired without a live detected game.
+    let test_game = GameMeta {
+        title,
+        genre: "Test Genre".to_string(),
+        developer: "Test Developer".to_string(),
+        release_year: "2024".to_string(),
+    };
+    let templates = state.config.lock().unwrap().announce_templates.clone();
+    let test_message = format!("[Test] {}", render_template(&templates, &test_game));
 
     // Category push is skipped here on purpose — Joystick.tv doesn't support
     // stream categories yet, so testing it would just always report FAILED
     // and look like a bug in this app rather than a platform limitation.
-    let chat_result = match send_chat_message(&state, &format!("[Test] {}", title)).await {
+    let chat_result = match send_chat_message(&state, &test_message).await {
         Ok(()) => "Chat message: OK".to_string(),
         Err(e) => format!("Chat message: FAILED — {}", e),
     };
