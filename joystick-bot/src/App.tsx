@@ -15,6 +15,8 @@ interface Status {
   chat_announce_enabled: boolean;
   chat_bot_enabled: boolean;
   poll_interval_secs: number;
+  announce_templates: string[];
+  game_reply_templates: string[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -36,6 +38,10 @@ export default function App() {
   const [autostart, setAutostart] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [showFlavor, setShowFlavor] = useState(false);
+  const [announceText, setAnnounceText] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const [savingFlavor, setSavingFlavor] = useState(false);
 
   useEffect(() => {
     invoke<boolean>("get_autostart")
@@ -72,6 +78,23 @@ export default function App() {
 
   const connected = status?.connected === true;
   const reachable = status?.main_app_reachable === true;
+
+  const openFlavorEditor = () => {
+    setAnnounceText((status?.announce_templates ?? []).join("\n"));
+    setReplyText((status?.game_reply_templates ?? []).join("\n"));
+    setShowFlavor(true);
+  };
+
+  const saveFlavor = async () => {
+    setSavingFlavor(true);
+    const announceLines = announceText.split("\n");
+    const replyLines = replyText.split("\n");
+    await invoke("set_announce_templates", { templates: announceLines });
+    await invoke("set_game_reply_templates", { templates: replyLines });
+    await refresh();
+    setSavingFlavor(false);
+    setShowFlavor(false);
+  };
 
   return (
     <div className="jb-root">
@@ -175,6 +198,45 @@ export default function App() {
               Chat Bot {status?.chat_bot_enabled ? "●" : "○"}
             </button>
           </div>
+
+          {connected && (
+            <div className="jb-toggle-row">
+              <button
+                onClick={() => (showFlavor ? setShowFlavor(false) : openFlavorEditor())}
+                className="jb-btn jb-btn-ghost"
+                style={{ flex: 1 }}
+              >
+                {showFlavor ? "Close Message Editor" : "✎ Edit Messages"}
+              </button>
+            </div>
+          )}
+
+          {showFlavor && (
+            <div className="jb-flavor-editor">
+              <span className="jb-client-label">Announce lines (one per line, {"{title}"})</span>
+              <textarea
+                className="jb-flavor-textarea"
+                value={announceText}
+                onChange={(e) => setAnnounceText(e.target.value)}
+                rows={4}
+              />
+              <span className="jb-client-label">!game reply lines</span>
+              <textarea
+                className="jb-flavor-textarea"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                rows={4}
+              />
+              <button
+                disabled={savingFlavor}
+                onClick={saveFlavor}
+                className="jb-btn jb-btn-connect"
+                style={{ width: "100%" }}
+              >
+                {savingFlavor ? "Saving…" : "Save"}
+              </button>
+            </div>
+          )}
 
           {connected && (
             <div className="jb-toggle-row">
