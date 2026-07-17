@@ -1,4 +1,4 @@
-//! StatusForge Joystick Bot — a standalone addon, not part of the main app.
+//! BearO's Joystick Companion — a standalone addon, not part of the main app.
 //!
 //! Runs alongside StatusForge, polls its existing `/status` HTTP endpoint to
 //! learn the currently detected game, and pushes that to Joystick.tv (stream
@@ -54,7 +54,7 @@ impl Default for JoystickBotConfig {
 }
 
 fn config_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join("StatusForge Joystick Bot").join("config.json"))
+    dirs::config_dir().map(|d| d.join("BearO's Joystick Companion").join("config.json"))
 }
 
 fn load_config() -> JoystickBotConfig {
@@ -488,7 +488,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let mut builder = TrayIconBuilder::with_id("joystick-bot-tray")
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .tooltip("StatusForge Joystick Bot")
+        .tooltip("BearO's Joystick Companion")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 if let Some(w) = app.get_webview_window("main") {
@@ -562,5 +562,5 @@ pub fn run() {
             shutdown_bot,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Joystick Bot")
+        .expect("error while running BearO's Joystick Companion")
 }

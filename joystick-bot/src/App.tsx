@@ -80,7 +80,7 @@ export default function App() {
             className="jb-dot animate-pulse-dot"
             style={{ background: connected ? "rgb(255, 77, 103)" : "rgba(255, 255, 255, 0.2)" }}
           />
-          <span className="jb-brand">Joystick Bot</span>
+          <span className="jb-brand">BearO's Joystick</span>
         </div>
         <span className="jb-status-label">{reachable ? "StatusForge OK" : "StatusForge?"}</span>
       </div>

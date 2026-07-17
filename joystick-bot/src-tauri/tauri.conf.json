@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "StatusForge Joystick Bot",
+  "productName": "BearO's Joystick Companion",
   "version": "0.1.0",
   "identifier": "com.bearddoddity.joystickbot",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Joystick Bot",
+        "title": "BearO's Joystick Companion",
         "width": 400,
         "height": 340,
         "resizable": false,
