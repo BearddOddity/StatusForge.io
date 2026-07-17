@@ -15,7 +15,6 @@ const TWITCH_GAMES_URL: &str = "https://api.twitch.tv/helix/games";
 const TWITCH_CHANNELS_URL: &str = "https://api.twitch.tv/helix/channels";
 const KICK_CHANNELS_URL: &str = "https://api.kick.com/public/v1/channels";
 const KICK_CATEGORIES_URL: &str = "https://api.kick.com/public/v2/categories";
-const JOYSTICK_STREAM_URL: &str = "https://api.joystick.tv/api/v1/me/stream";
 
 /// Neither Twitch nor Kick publish a specific numeric limit for category
 /// changes (Twitch: general points-bucket per app/user per minute; Kick:
@@ -28,7 +27,6 @@ const PUSH_COOLDOWN_SECS: u64 = 15;
 
 static LAST_TWITCH_PUSH_SECS: AtomicU64 = AtomicU64::new(0);
 static LAST_KICK_PUSH_SECS: AtomicU64 = AtomicU64::new(0);
-static LAST_JOYSTICK_PUSH_SECS: AtomicU64 = AtomicU64::new(0);
 
 fn now_secs() -> u64 {
     SystemTime::now()
@@ -86,14 +84,12 @@ struct PlatformState {
 struct HealthTracker {
     twitch: PlatformState,
     kick: PlatformState,
-    joystick: PlatformState,
 }
 
 impl HealthTracker {
     fn state(&mut self, platform: &str) -> &mut PlatformState {
         match platform {
             "Twitch" => &mut self.twitch,
-            "Joystick" => &mut self.joystick,
             _ => &mut self.kick,
         }
     }
@@ -101,7 +97,6 @@ impl HealthTracker {
     fn state_ref(&self, platform: &str) -> &PlatformState {
         match platform {
             "Twitch" => &self.twitch,
-            "Joystick" => &self.joystick,
             _ => &self.kick,
         }
     }
@@ -146,16 +141,12 @@ static HEALTH: std::sync::Mutex<HealthTracker> = std::sync::Mutex::new(HealthTra
         down_since: None,
         pending: None,
     },
-    joystick: PlatformState {
-        down_since: None,
-        pending: None,
-    },
 });
 
 /// Cheap check for the health monitor loop: anything currently marked down?
 pub fn any_platform_down() -> bool {
     let h = HEALTH.lock().unwrap();
-    h.is_down("Twitch") || h.is_down("Kick") || h.is_down("Joystick")
+    h.is_down("Twitch") || h.is_down("Kick")
 }
 
 fn http() -> Result<reqwest::blocking::Client, String> {
@@ -474,142 +465,6 @@ fn push_kick(base_dir: &Path, config: &AppConfig, db: &ForgeDatabase, title: &st
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Joystick.tv
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Joystick's `PUT /me/stream` body schema isn't in their public docs (this
-/// sandbox's network egress can't reach api.joystick.tv to inspect a live
-/// response either), so instead of guessing a field name and possibly
-/// clobbering the streamer's title/other settings, this does a GET-then-PUT:
-/// fetch the current stream object, look for whichever key already holds a
-/// category/game-like value, overwrite just that key, and PUT the whole
-/// object back untouched otherwise. Falls back to inserting a "category" key
-/// if the GET comes back empty-ish or the key can't be identified.
-///
-/// If this turns out to target the wrong field on a real account, the fix is
-/// a one-line change to `CATEGORY_KEY_CANDIDATES` below once someone can log
-/// what `GET /me/stream` actually returns.
-const CATEGORY_KEY_CANDIDATES: &[&str] = &["category", "game", "game_name", "genre"];
-
-fn joystick_push_once(title: &str, token: &str) -> Result<Outcome, String> {
-    let client = http()?;
-
-    let get_resp = match client.get(JOYSTICK_STREAM_URL).bearer_auth(token).send() {
-        Ok(r) => r,
-        Err(e) => return Ok(Outcome::Transient(format!("Joystick stream lookup: {}", e))),
-    };
-    if get_resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Ok(Outcome::Unauthorized);
-    }
-    if get_resp.status().is_server_error() {
-        return Ok(Outcome::Transient(format!(
-            "Joystick stream lookup returned {}",
-            get_resp.status()
-        )));
-    }
-    if !get_resp.status().is_success() {
-        return Err(format!(
-            "Joystick stream lookup returned {}",
-            get_resp.status()
-        ));
-    }
-
-    let mut body: serde_json::Value = get_resp
-        .json()
-        .map_err(|e| format!("Joystick stream lookup parse error: {}", e))?;
-    let obj = body
-        .as_object_mut()
-        .ok_or("Joystick stream response wasn't a JSON object")?;
-    let key = CATEGORY_KEY_CANDIDATES
-        .iter()
-        .find(|k| obj.contains_key(**k))
-        .copied()
-        .unwrap_or("category");
-    obj.insert(key.to_string(), serde_json::json!(title));
-
-    let put_resp = match client
-        .put(JOYSTICK_STREAM_URL)
-        .bearer_auth(token)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-    {
-        Ok(r) => r,
-        Err(e) => return Ok(Outcome::Transient(format!("Joystick stream update: {}", e))),
-    };
-
-    match put_resp.status() {
-        reqwest::StatusCode::UNAUTHORIZED => Ok(Outcome::Unauthorized),
-        reqwest::StatusCode::TOO_MANY_REQUESTS => {
-            log::warn!("[PUSH] Joystick rate-limited (429) — skipping this push");
-            Ok(Outcome::Done)
-        }
-        s if s.is_server_error() => Ok(Outcome::Transient(format!(
-            "Joystick stream update returned {}",
-            s
-        ))),
-        s if s.is_success() => {
-            log::info!(
-                "[PUSH] Joystick category set to \"{}\" (key: {})",
-                title,
-                key
-            );
-            Ok(Outcome::Done)
-        }
-        s => Err(format!(
-            "Joystick stream update returned {}: {}",
-            s,
-            put_resp.text().unwrap_or_default()
-        )),
-    }
-}
-
-fn push_joystick(base_dir: &Path, config: &AppConfig, title: &str) -> PushResult {
-    match joystick_push_once(title, &config.broadcaster.joystick_token) {
-        Ok(Outcome::Done) => PushResult::Reachable,
-        Ok(Outcome::Transient(e)) => {
-            log::warn!("[PUSH] Joystick unreachable: {}", e);
-            PushResult::Transient
-        }
-        Ok(Outcome::Unauthorized) => {
-            log::info!("[PUSH] Joystick token expired — refreshing");
-            match auth::refresh_joystick_token(config) {
-                Ok(new_token) => {
-                    let mut updated = config.clone();
-                    updated.broadcaster.joystick_token = new_token;
-                    if let Err(e) = auth::save_config_at(base_dir, &updated) {
-                        log::warn!("[PUSH] Failed to save refreshed Joystick token: {}", e);
-                    }
-                    match joystick_push_once(title, &updated.broadcaster.joystick_token) {
-                        Ok(Outcome::Done) => PushResult::Reachable,
-                        Ok(Outcome::Transient(e)) => {
-                            log::warn!("[PUSH] Joystick unreachable on retry: {}", e);
-                            PushResult::Transient
-                        }
-                        Ok(Outcome::Unauthorized) => {
-                            log::warn!("[PUSH] Joystick retry still unauthorized");
-                            PushResult::Reachable
-                        }
-                        Err(e) => {
-                            log::warn!("[PUSH] Joystick retry failed: {}", e);
-                            PushResult::Reachable
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::warn!("[PUSH] Joystick token refresh failed: {}", e);
-                    PushResult::Reachable
-                }
-            }
-        }
-        Err(e) => {
-            log::warn!("[PUSH] {}", e);
-            PushResult::Reachable
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // Public entry point
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -683,18 +538,6 @@ pub fn push_category(
             log::info!("[PUSH] Kick category push skipped — cooldown active");
         }
     }
-    if !b.joystick_token.is_empty() {
-        if HEALTH.lock().unwrap().is_down("Joystick") {
-            HEALTH.lock().unwrap().state("Joystick").pending = Some(title.to_string());
-            log::info!("[PUSH] Joystick down — queued \"{}\" for recovery", title);
-        } else if cooldown_elapsed(&LAST_JOYSTICK_PUSH_SECS) {
-            events.extend(push_and_track("Joystick", title, || {
-                push_joystick(base_dir, config, title)
-            }));
-        } else {
-            log::info!("[PUSH] Joystick category push skipped — cooldown active");
-        }
-    }
     events
 }
 
@@ -727,15 +570,6 @@ pub fn retry_pending(base_dir: &Path, config: &AppConfig, db: &ForgeDatabase) ->
             log::info!("[PUSH] Probing Kick with pending \"{}\"", title);
             events.extend(push_and_track("Kick", &title, || {
                 push_kick(base_dir, config, db, &title)
-            }));
-        }
-    }
-    let joystick_pending = HEALTH.lock().unwrap().pending("Joystick");
-    if let Some(title) = joystick_pending {
-        if !b.joystick_token.is_empty() {
-            log::info!("[PUSH] Probing Joystick with pending \"{}\"", title);
-            events.extend(push_and_track("Joystick", &title, || {
-                push_joystick(base_dir, config, &title)
             }));
         }
     }

@@ -9,7 +9,7 @@ type Status = "connecting" | "success" | "error";
 interface Props {
   open: boolean;
   onClose: () => void;
-  platform: "twitch" | "kick" | "joystick";
+  platform: "twitch" | "kick";
   connectUrl: string;
   onSuccess?: () => void;
 }
@@ -34,24 +34,6 @@ const PLATFORM_META = {
     icon: (
       <svg width="24" height="24" viewBox="0 0 453.9 510.6" fill="currentColor">
         <path d="M0,0h170.2v113.5h56.7v-56.7h56.7V0h170.2v170.2h-56.7v56.7h-56.7v56.7h56.7v56.7h56.7v170.2h-170.2v-56.7h-56.7v-56.7h-56.7v113.5H0V0Z" />
-      </svg>
-    ),
-  },
-  joystick: {
-    label: "Joystick.tv",
-    color: "#ff4d67",
-    gradient: "linear-gradient(135deg, #ff4d67 0%, #b8283d 100%)",
-    icon: (
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-      >
-        <circle cx="12" cy="9" r="5" />
-        <path d="M12 14v7M9 21h6" strokeLinecap="round" />
       </svg>
     ),
   },

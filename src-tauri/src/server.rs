@@ -529,29 +529,6 @@ async fn twitch_login_handler(State(state): State<ServerState>) -> Result<Redire
     )))
 }
 
-async fn joystick_login_handler(State(state): State<ServerState>) -> Result<Redirect, StatusCode> {
-    let config = load_config().ok_or_else(|| internal("Config.json unavailable".into()))?;
-    let client_id = config.broadcaster.joystick_client;
-    if client_id.is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-    let verifier = crate::auth::generate_code_verifier();
-    let challenge = crate::auth::generate_code_challenge(&verifier);
-    let state_token = crate::auth::generate_code_verifier();
-    state.oauth.pkce.lock().unwrap().insert(
-        "joystick".to_string(),
-        crate::auth::PkceState {
-            verifier,
-            state: state_token.clone(),
-        },
-    );
-    Ok(Redirect::temporary(&crate::auth::build_joystick_auth_url(
-        &client_id,
-        &state_token,
-        &challenge,
-    )))
-}
-
 /// Build the status payload the overlays consume — game info from the
 /// engine (or LAN Hub), enriched with Forge_Database library metadata.
 pub fn build_status(engine: &EngineState) -> serde_json::Value {
@@ -743,7 +720,6 @@ fn build_router(state: ServerState) -> Router {
         .route("/api/resolve-cover", post(resolve_cover_handler))
         .route("/kick/login", get(kick_login_handler))
         .route("/twitch/login", get(twitch_login_handler))
-        .route("/joystick/login", get(joystick_login_handler))
         .route(
             "/oauth/callback/{platform}",
             get(crate::auth::oauth_callback),

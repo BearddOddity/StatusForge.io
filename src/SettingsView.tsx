@@ -42,10 +42,9 @@ function EngineSubTab({
   const [platform, setPlatform] = useState<string>("windows");
   const skipSave = useRef(false);
 
-  const [oauthModal, setOauthModal] = useState<{
-    platform: "twitch" | "kick" | "joystick";
-    url: string;
-  } | null>(null);
+  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(
+    null
+  );
 
   const loadConfig = useCallback(async () => {
     skipSave.current = true;
@@ -1015,10 +1014,6 @@ const defaultConfig: AppConfig = {
     kick_channel_id: "",
     kick_token: "",
     kick_refresh: "",
-    joystick_client: "",
-    joystick_token: "",
-    joystick_refresh: "",
-    joystick_username: "",
   },
   engine_settings: {
     idle_category: "Just Chatting",
@@ -1156,39 +1151,6 @@ const ROUTING_CATALOG: {
     ],
     managedFields: [{ key: "kick_refresh", label: "Refresh Token" }],
   },
-  {
-    key: "joystick",
-    label: "Joystick.tv",
-    desc: "OAuth2 via Joystick.tv — stream category updates",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-      >
-        <circle cx="12" cy="9" r="5" />
-        <path d="M12 14v7M9 21h6" strokeLinecap="round" />
-      </svg>
-    ),
-    color: "#ff4d67",
-    connectUrl: "http://127.0.0.1:53735/joystick/login",
-    userFields: [
-      { key: "joystick_client", label: "Client ID" },
-      {
-        key: "joystick_token",
-        label: "Access Token (Optional)",
-        hint: "Alternate to Client ID — paste a token here if you generate one yourself (your own OAuth tool/callback). Joystick is a public/PKCE client, so no client secret is needed either way.",
-        optional: true,
-      },
-    ],
-    managedFields: [
-      { key: "joystick_refresh", label: "Refresh Token" },
-      { key: "joystick_username", label: "Connected As" },
-    ],
-  },
 ];
 
 // ─── API & Routing Sub-tab ──────────────────────────────
@@ -1200,10 +1162,9 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
   const [floatingType, setFloatingType] = useState<"keys" | "routing">("keys");
   const [search, setSearch] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [oauthModal, setOauthModal] = useState<{
-    platform: "twitch" | "kick" | "joystick";
-    url: string;
-  } | null>(null);
+  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(
+    null
+  );
   const [validatingPlatform, setValidatingPlatform] = useState<string | null>(null);
   const floatingRef = useRef<HTMLDivElement>(null);
   const skipSave = useRef(false);
@@ -1432,20 +1393,12 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
     const tokenKey = `${entry.key}_token`;
     const hasManualToken = !!bc[tokenKey as keyof typeof bc];
     if (!hasManualToken) {
-      setOauthModal({
-        platform: entry.key as "twitch" | "kick" | "joystick",
-        url: entry.connectUrl,
-      });
+      setOauthModal({ platform: entry.key as "twitch" | "kick", url: entry.connectUrl });
       return;
     }
 
     setValidatingPlatform(entry.key);
-    const cmd =
-      entry.key === "kick"
-        ? "kick_validate_token"
-        : entry.key === "joystick"
-          ? "joystick_validate_token"
-          : "twitch_validate_token";
+    const cmd = entry.key === "kick" ? "kick_validate_token" : "twitch_validate_token";
     const res = await tauriApi(cmd);
     setValidatingPlatform(null);
 

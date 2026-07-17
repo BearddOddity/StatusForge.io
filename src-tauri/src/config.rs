@@ -178,15 +178,6 @@ pub struct BroadcasterConfig {
     pub kick_token: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub kick_refresh: String,
-    // Joystick.tv is a public PKCE client (per their docs) — no client secret.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub joystick_client: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub joystick_token: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub joystick_refresh: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub joystick_username: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -42,15 +42,6 @@ const TWITCH_TOKEN_URL: &str = "https://id.twitch.tv/oauth2/token";
 const TWITCH_REDIRECT_URI: &str = "https://127.0.0.1:53735/oauth/callback/twitch";
 const TWITCH_USERS_URL: &str = "https://api.twitch.tv/helix/users";
 
-// Confirmed against joysticktv/joysticktv.github.io's developer_support.md —
-// consent screen lives on joystick.tv, everything else (token exchange,
-// REST, the /me/identity lookup below) is api.joystick.tv. Public/PKCE
-// client (no secret), so redirect can be plain http like Kick's.
-const JOYSTICK_AUTH_URL: &str = "https://joystick.tv/api/oauth/authorize";
-const JOYSTICK_TOKEN_URL: &str = "https://api.joystick.tv/api/oauth/token";
-const JOYSTICK_REDIRECT_URI: &str = "http://localhost:53735/oauth/callback/joystick";
-const JOYSTICK_IDENTITY_URL: &str = "https://api.joystick.tv/api/v1/me/identity";
-
 /// postMessage origin — NOT wildcard "*" (Security Audit #2)
 const WEBVIEW_ORIGIN: &str = "http://localhost:5173";
 
@@ -245,9 +236,6 @@ pub async fn oauth_callback(
         "twitch" => {
             handle_twitch_callback(code, params.state, &mut config, &base_dir, &oauth_state).await
         }
-        "joystick" => {
-            handle_joystick_callback(code, params.state, &mut config, &base_dir, &oauth_state).await
-        }
         other => Html(build_popup_response(other, false, "Unknown platform")),
     }
 }
@@ -388,70 +376,6 @@ async fn handle_twitch_callback(
     Html(build_popup_response("twitch", true, ""))
 }
 
-async fn handle_joystick_callback(
-    code: String,
-    state: Option<String>,
-    config: &mut AppConfig,
-    base_dir: &std::path::Path,
-    oauth_state: &OAuthState,
-) -> Html<String> {
-    let pending = {
-        let mut guard = oauth_state.pkce.lock().unwrap();
-        guard.remove("joystick")
-    };
-    let pending = match pending {
-        Some(p) => p,
-        None => {
-            return Html(build_popup_response(
-                "joystick",
-                false,
-                "No pending request — possible CSRF",
-            ))
-        }
-    };
-    if state.as_ref() != Some(&pending.state) {
-        return Html(build_popup_response(
-            "joystick",
-            false,
-            "State mismatch — possible CSRF",
-        ));
-    }
-
-    let client_id = &config.broadcaster.joystick_client;
-    if client_id.is_empty() {
-        return Html(build_popup_response(
-            "joystick",
-            false,
-            "Joystick client_id not configured",
-        ));
-    }
-
-    let token_resp = match exchange_joystick_token(&code, client_id, &pending.verifier).await {
-        Ok(r) => r,
-        Err(e) => return Html(build_popup_response("joystick", false, &e)),
-    };
-
-    let access_token = token_resp.access_token.clone();
-    let username = match fetch_joystick_identity(&access_token).await {
-        Ok(name) => name,
-        Err(e) => {
-            log::warn!("[AUTH] Failed to fetch Joystick identity: {}", e);
-            String::new()
-        }
-    };
-
-    config.broadcaster.joystick_token = access_token;
-    config.broadcaster.joystick_refresh = token_resp.refresh_token.clone().unwrap_or_default();
-    if !username.is_empty() {
-        config.broadcaster.joystick_username = username;
-    }
-    if let Err(e) = save_config_at(base_dir, config) {
-        log::warn!("[AUTH] Failed to save Joystick tokens: {}", e);
-    }
-
-    Html(build_popup_response("joystick", true, ""))
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Token Exchange HTTP Calls
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -552,84 +476,6 @@ async fn exchange_twitch_token(
         refresh_token: json["refresh_token"].as_str().map(|s| s.to_string()),
         expires_in: json["expires_in"].as_u64(),
     })
-}
-
-async fn exchange_joystick_token(
-    code: &str,
-    client_id: &str,
-    code_verifier: &str,
-) -> Result<TokenResponse, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("HTTP client error: {}", e))?;
-
-    // Public/PKCE client — no client_secret param, per Joystick's docs.
-    let params = [
-        ("grant_type", "authorization_code"),
-        ("client_id", client_id),
-        ("redirect_uri", JOYSTICK_REDIRECT_URI),
-        ("code", code),
-        ("code_verifier", code_verifier),
-    ];
-
-    let resp = client
-        .post(JOYSTICK_TOKEN_URL)
-        .form(&params)
-        .send()
-        .await
-        .map_err(|e| format!("Joystick token exchange failed: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Joystick token exchange: {}",
-            resp.text().await.unwrap_or_default()
-        ));
-    }
-
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Joystick token parse error: {}", e))?;
-    Ok(TokenResponse {
-        access_token: json["access_token"].as_str().unwrap_or("").to_string(),
-        refresh_token: json["refresh_token"].as_str().map(|s| s.to_string()),
-        expires_in: json["expires_in"].as_u64(),
-    })
-}
-
-async fn fetch_joystick_identity(access_token: &str) -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("HTTP client error: {}", e))?;
-
-    let resp = client
-        .get(JOYSTICK_IDENTITY_URL)
-        .bearer_auth(access_token)
-        .send()
-        .await
-        .map_err(|e| format!("Joystick identity request failed: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Joystick identity request returned {}",
-            resp.status()
-        ));
-    }
-
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Joystick identity parse error: {}", e))?;
-    // Field name unconfirmed against live docs (network-blocked from this
-    // sandbox) — try the common candidates in order.
-    Ok(json["username"]
-        .as_str()
-        .or_else(|| json["name"].as_str())
-        .or_else(|| json["display_name"].as_str())
-        .unwrap_or("")
-        .to_string())
 }
 
 async fn fetch_twitch_broadcaster_id(
@@ -739,43 +585,6 @@ pub fn refresh_twitch_token(config: &AppConfig) -> Result<String, String> {
     Ok(json["access_token"].as_str().unwrap_or("").to_string())
 }
 
-pub fn refresh_joystick_token(config: &AppConfig) -> Result<String, String> {
-    let (client_id, refresh_token) = (
-        &config.broadcaster.joystick_client,
-        &config.broadcaster.joystick_refresh,
-    );
-    if client_id.is_empty() || refresh_token.is_empty() {
-        return Err("Missing Joystick credentials for token refresh".to_string());
-    }
-
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("HTTP client error: {}", e))?;
-
-    let resp = client
-        .post(JOYSTICK_TOKEN_URL)
-        .form(&[
-            ("grant_type", "refresh_token"),
-            ("client_id", client_id.as_str()),
-            ("refresh_token", refresh_token.as_str()),
-        ])
-        .send()
-        .map_err(|e| format!("Joystick refresh failed: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Joystick refresh: {}",
-            resp.text().unwrap_or_default()
-        ));
-    }
-
-    let json: serde_json::Value = resp
-        .json()
-        .map_err(|e| format!("Joystick refresh parse error: {}", e))?;
-    Ok(json["access_token"].as_str().unwrap_or("").to_string())
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Manual Token Validation — "alternate connection" for users who generate
 // their own access token via an external OAuth tool/callback instead of
@@ -879,20 +688,6 @@ pub async fn validate_twitch_token(
         return Err("No Twitch user found for this token".to_string());
     }
     Ok((display_name, id))
-}
-
-/// Validates a manually-pasted Joystick access token via `GET /me/identity`.
-/// Returns the display name/username, if the API reports one.
-pub async fn validate_joystick_token(token: &str) -> Result<String, String> {
-    let name = fetch_joystick_identity(token).await?;
-    if name.is_empty() {
-        // The identity call succeeded (token is valid) but didn't return a
-        // recognizable name field — still a valid connection, just nothing
-        // to show. Only a non-2xx response from fetch_joystick_identity
-        // should be treated as an invalid token, which it already is.
-        return Ok(String::new());
-    }
-    Ok(name)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1034,16 +829,6 @@ fn backfill_from_keychain(config: &mut AppConfig) {
             config.broadcaster.kick_secret = v;
         }
     }
-    if config.broadcaster.joystick_token.is_empty() {
-        if let Some(v) = read("joystick_access_token") {
-            config.broadcaster.joystick_token = v;
-        }
-    }
-    if config.broadcaster.joystick_refresh.is_empty() {
-        if let Some(v) = read("joystick_refresh_token") {
-            config.broadcaster.joystick_refresh = v;
-        }
-    }
     if config.api_keys.igdb_token.is_empty() {
         if let Some(v) = read("igdb_api_token") {
             config.api_keys.igdb_token = v;
@@ -1130,14 +915,6 @@ pub(crate) fn redact_migrated_secrets(config: &mut AppConfig) {
         "twitch_client_secret",
     );
     sync(&mut config.broadcaster.kick_secret, "kick_client_secret");
-    sync(
-        &mut config.broadcaster.joystick_token,
-        "joystick_access_token",
-    );
-    sync(
-        &mut config.broadcaster.joystick_refresh,
-        "joystick_refresh_token",
-    );
     sync(&mut config.api_keys.igdb_token, "igdb_api_token");
     sync(&mut config.api_keys.igdb_secret, "igdb_api_secret");
     sync(&mut config.api_keys.rawg, "rawg_api_key");
@@ -1182,21 +959,6 @@ pub fn build_twitch_auth_url(client_id: &str, state: &str, code_challenge: &str)
         TWITCH_AUTH_URL,
         urlencoding::encode(client_id),
         urlencoding::encode(TWITCH_REDIRECT_URI),
-        scopes,
-        urlencoding::encode(state),
-        urlencoding::encode(code_challenge)
-    )
-}
-
-pub fn build_joystick_auth_url(client_id: &str, state: &str, code_challenge: &str) -> String {
-    // stream:manage for category push, identity:read for the connected-as
-    // display name shown in Settings.
-    let scopes = urlencoding::encode("stream:read stream:manage identity:read");
-    format!(
-        "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}&code_challenge={}&code_challenge_method=S256",
-        JOYSTICK_AUTH_URL,
-        urlencoding::encode(client_id),
-        urlencoding::encode(JOYSTICK_REDIRECT_URI),
         scopes,
         urlencoding::encode(state),
         urlencoding::encode(code_challenge)
