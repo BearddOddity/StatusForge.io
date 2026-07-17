@@ -113,6 +113,11 @@ fn render_template(templates: &[String], game: &GameMeta) -> String {
         .choose(&mut rand::thread_rng())
         .cloned()
         .unwrap_or_else(|| "Now playing: {title}".to_string());
+    log::debug!(
+        "[JOYSTICK-BOT] Template pool has {} entries — chose: \"{}\"",
+        templates.len(),
+        chosen
+    );
     chosen
         .replace("{title}", &game.title)
         .replace("{genre}", &game.genre)
