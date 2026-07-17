@@ -231,6 +231,11 @@ export default function App() {
                 const enabled = await invoke<boolean>("toggle_chat_announce");
                 setStatus((s) => (s ? { ...s, chat_announce_enabled: enabled } : s));
               }}
+              title={
+                status?.chat_announce_enabled
+                  ? "ON — a chat message gets sent automatically every time StatusForge detects a game change. Click to turn off."
+                  : "OFF — nothing gets sent automatically when the game changes. Click to turn on."
+              }
               className={`jb-btn ${status?.chat_announce_enabled ? "jb-btn-success" : "jb-btn-ghost"}`}
             >
               Announce {status?.chat_announce_enabled ? "●" : "○"}
@@ -240,11 +245,19 @@ export default function App() {
                 const enabled = await invoke<boolean>("toggle_chat_bot");
                 setStatus((s) => (s ? { ...s, chat_bot_enabled: enabled } : s));
               }}
+              title={
+                status?.chat_bot_enabled
+                  ? "ON — replies with the current game whenever someone types !game in your Joystick chat. Click to turn off."
+                  : "OFF — !game in chat gets no reply. Click to turn on."
+              }
               className={`jb-btn ${status?.chat_bot_enabled ? "jb-btn-success" : "jb-btn-ghost"}`}
             >
               Chat Bot {status?.chat_bot_enabled ? "●" : "○"}
             </button>
           </div>
+          <span className="jb-client-label">
+            ● = on, sending/replying automatically · ○ = off, silent
+          </span>
 
           {connected && (
             <div className="jb-toggle-row">
