@@ -59,6 +59,14 @@ const overlays = [
     width: 560,
     height: 200,
   },
+  {
+    id: "cc",
+    label: "Compact Cover",
+    file: "Compact_Cover.html",
+    icon: "🎵",
+    width: 620,
+    height: 200,
+  },
 ];
 
 const platformDefs = [
