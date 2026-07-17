@@ -35,6 +35,10 @@ const JOYSTICK_CHAT_URL: &str = "https://api.joystick.tv/api/v1/chat/messages";
 #[serde(default)]
 pub struct JoystickBotConfig {
     pub client_id: String,
+    /// StatusForge's own "Overlay Token" (Settings > Control Panel) — its
+    /// `/status` endpoint rejects unauthenticated requests, so this addon
+    /// needs the same token an overlay URL would carry.
+    pub statusforge_token: String,
     pub category_push_enabled: bool,
     pub chat_announce_enabled: bool,
     pub chat_bot_enabled: bool,
@@ -75,6 +79,7 @@ impl Default for JoystickBotConfig {
     fn default() -> Self {
         Self {
             client_id: String::new(),
+            statusforge_token: String::new(),
             // Off by default — Joystick.tv doesn't support stream categories
             // yet, so this would just fail every time until they add it.
             category_push_enabled: false,
@@ -213,6 +218,7 @@ impl JoystickBotState {
             "connected": self.access_token.lock().unwrap().is_some(),
             "username": *self.username.lock().unwrap(),
             "client_id": config.client_id,
+            "statusforge_token": config.statusforge_token,
             "current_title": game.as_ref().map(|g| g.title.clone()),
             "current_genre": game.as_ref().map(|g| g.genre.clone()).unwrap_or_default(),
             "current_developer": game.as_ref().map(|g| g.developer.clone()).unwrap_or_default(),
@@ -400,7 +406,12 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
                 .poll_interval_secs
                 .clamp(3, 120);
 
-            let status = client.get(STATUSFORGE_STATUS_URL).send().await;
+            let token = state.config.lock().unwrap().statusforge_token.clone();
+            let status = client
+                .get(STATUSFORGE_STATUS_URL)
+                .query(&[("token", token.as_str())])
+                .send()
+                .await;
             let new_game = match status {
                 Ok(resp) if resp.status().is_success() => {
                     state.main_app_reachable.store(true, Ordering::Relaxed);
@@ -538,6 +549,17 @@ fn set_client_id(
 ) -> Result<(), String> {
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     config.client_id = client_id;
+    save_config(&config);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_statusforge_token(
+    state: tauri::State<Arc<JoystickBotState>>,
+    token: String,
+) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    config.statusforge_token = token;
     save_config(&config);
     Ok(())
 }
@@ -728,6 +750,7 @@ pub fn run() {
             get_status,
             test_push,
             set_client_id,
+            set_statusforge_token,
             toggle_category_push,
             toggle_chat_announce,
             toggle_chat_bot,
