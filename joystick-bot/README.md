@@ -40,8 +40,12 @@ it yourself.
 
 3. StatusForge.io itself needs to be running at the same time — this addon
    polls its local `/status` endpoint (`http://127.0.0.1:53735/status`) to
-   know what game is currently detected. No StatusForge-side setup is
-   required for this; that endpoint already exists.
+   know what game is currently detected. That endpoint requires the same
+   **Overlay Token** an OBS browser-source URL would carry (StatusForge
+   rejects unauthenticated requests to it). Copy it from StatusForge's
+   Settings > Control Panel and paste it into the **SF Token** field in this
+   addon's window — without it, the header will always show "StatusForge
+   Not Found" even while StatusForge is running.
 
 4. Paste your Client ID into the small window, click **Connect**, and finish
    the login in the browser tab that opens.

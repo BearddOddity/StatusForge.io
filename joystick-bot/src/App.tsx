@@ -13,6 +13,7 @@ interface Status {
   connected: boolean;
   username: string;
   client_id: string;
+  statusforge_token: string;
   current_title: string | null;
   main_app_reachable: boolean;
   category_push_enabled: boolean;
@@ -38,6 +39,7 @@ async function getStatus(): Promise<Status | null> {
 export default function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [clientId, setClientId] = useState("");
+  const [sfToken, setSfToken] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [autostart, setAutostart] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -56,7 +58,10 @@ export default function App() {
   const refresh = useCallback(async () => {
     const s = await getStatus();
     setStatus(s);
-    if (s) setClientId(s.client_id);
+    if (s) {
+      setClientId(s.client_id);
+      setSfToken(s.statusforge_token);
+    }
   }, []);
 
   useEffect(() => {
@@ -154,6 +159,22 @@ export default function App() {
 
         {/* ── Controls ─────────────────────────────────────────────────── */}
         <div className={`jb-controls${showFlavor ? " jb-controls-grow" : ""}`}>
+          <div className="jb-client-row">
+            <span
+              className="jb-client-label"
+              title="Settings > Control Panel > Overlay Token in StatusForge.io"
+            >
+              SF Token
+            </span>
+            <input
+              value={sfToken}
+              onChange={(e) => setSfToken(e.target.value)}
+              onBlur={() => invoke("set_statusforge_token", { token: sfToken })}
+              placeholder="Overlay Token from StatusForge settings"
+              className="jb-client-input"
+            />
+          </div>
+
           {!connected && (
             <div className="jb-client-row">
               <span className="jb-client-label">ID</span>
@@ -260,7 +281,7 @@ export default function App() {
                 disabled={savingFlavor}
                 onClick={saveFlavor}
                 className="jb-btn jb-btn-connect"
-                style={{ width: "100%" }}
+                style={{ width: "100%", flex: "none" }}
               >
                 {savingFlavor ? "Saving…" : "Save"}
               </button>
