@@ -330,10 +330,10 @@ fn export_config(payload: Option<ConfigExportPayload>) -> Result<serde_json::Val
     }
 
     // Live Config.json: go through auth::load_config_at so tokens already
-    // moved to the OS keychain are backfilled into the returned config —
+    // migrated to the OS keychain are backfilled into the returned config —
     // otherwise Settings would show Twitch/Kick as disconnected the moment
-    // auth::save_config_at blanks them out of the file, even though the
-    // engine (which does load through this path) is broadcasting fine.
+    // migrate_tokens_to_keychain blanks them out of the file, even though
+    // the engine (which does load through this path) is broadcasting fine.
     if base.join("Config.json").exists() {
         let config = auth::load_config_at(&base)?;
         Ok(serde_json::json!(config))
@@ -951,10 +951,10 @@ fn spawn_engine_loop(
 
         while running.load(Ordering::Relaxed) {
             // Reload config each iteration. Goes through auth::load_config_at
-            // (not a raw file read) so tokens moved to the OS keychain get
-            // backfilled here too — this config is what
-            // pusher::push_category/on_game_detected use for the actual
-            // Twitch/Kick routing pushes.
+            // (not a raw file read) so tokens migrated to the OS keychain
+            // (migrate_tokens_to_keychain) get backfilled here too — this
+            // config is what pusher::push_category/on_game_detected use for
+            // the actual Twitch/Kick routing pushes.
             let config = {
                 let base = app_base_dir().unwrap_or_default();
                 auth::load_config_at(&base).ok()
@@ -1222,11 +1222,100 @@ fn disconnect_platform(platform: String) -> Result<String, String> {
     Ok(format!("{} disconnected", platform))
 }
 
+/// Migrate all OAuth tokens from Config.json to OS keychain.
+/// Reads plaintext tokens from Config.json, stores them in keychain, and blanks them in the file.
+#[tauri::command]
+fn migrate_tokens_to_keychain() -> Result<Vec<String>, String> {
+    let base = app_base_dir()?;
+    let config_path = base.join("Config.json");
+    assert_path_in_base(&config_path, &base)?;
+
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config: {}", e))?;
+    let mut config: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
+
+    let broadcaster = config
+        .get_mut("broadcaster")
+        .ok_or_else(|| "No broadcaster section in config".to_string())?;
+
+    let token_fields = [
+        ("twitch_token", "twitch_access_token"),
+        ("twitch_refresh", "twitch_refresh_token"),
+        ("kick_token", "kick_access_token"),
+        ("kick_refresh", "kick_refresh_token"),
+        ("twitch_secret", "twitch_client_secret"),
+        ("kick_secret", "kick_client_secret"),
+    ];
+
+    let mut migrated = Vec::new();
+    for (json_key, keychain_name) in &token_fields {
+        if let Some(val) = broadcaster.get(*json_key).and_then(|v| v.as_str()) {
+            if !val.is_empty() {
+                let entry = keyring::Entry::new(KEYRING_SERVICE, keychain_name).map_err(|e| {
+                    format!(
+                        "Failed to create keyring entry for {}: {}",
+                        keychain_name, e
+                    )
+                })?;
+                entry
+                    .set_password(val)
+                    .map_err(|e| format!("Failed to store {}: {}", keychain_name, e))?;
+                // Blank the token in config
+                if let Some(obj) = broadcaster.as_object_mut() {
+                    obj.insert(json_key.to_string(), serde_json::json!(""));
+                }
+                migrated.push(json_key.to_string());
+            }
+        }
+    }
+
+    // Also handle API keys
+    if let Some(api_keys) = config.get_mut("api_keys") {
+        let api_fields = [
+            ("igdb_token", "igdb_api_token"),
+            ("igdb_secret", "igdb_api_secret"),
+            ("rawg", "rawg_api_key"),
+            ("steamgrid", "steamgrid_api_key"),
+        ];
+        for (json_key, keychain_name) in &api_fields {
+            if let Some(val) = api_keys.get(*json_key).and_then(|v| v.as_str()) {
+                if !val.is_empty() {
+                    let entry =
+                        keyring::Entry::new(KEYRING_SERVICE, keychain_name).map_err(|e| {
+                            format!(
+                                "Failed to create keyring entry for {}: {}",
+                                keychain_name, e
+                            )
+                        })?;
+                    entry
+                        .set_password(val)
+                        .map_err(|e| format!("Failed to store {}: {}", keychain_name, e))?;
+                    if let Some(obj) = api_keys.as_object_mut() {
+                        obj.insert(json_key.to_string(), serde_json::json!(""));
+                    }
+                    migrated.push(json_key.to_string());
+                }
+            }
+        }
+    }
+
+    // Write updated config
+    std::fs::write(
+        &config_path,
+        serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?,
+    )
+    .map_err(|e| format!("Failed to write config: {}", e))?;
+
+    Ok(migrated)
+}
+
 /// Retrieve all keychain-stored tokens as a JSON object, keyed by the same
 /// app-facing names the frontend/config use (`twitch_token`, `kick_token`,
 /// …). The actual OS keyring entries are stored under different names
 /// (`twitch_access_token`, `kick_access_token`, …) — see
-/// `auth::redact_migrated_secrets` and `auth::backfill_from_keychain`, which
+/// `migrate_tokens_to_keychain` and `auth::backfill_from_keychain`, which
 /// this must stay in sync with. Called by the frontend so API keys never
 /// need to live in Config.json.
 #[tauri::command]
@@ -2055,22 +2144,6 @@ pub fn run() {
                 log::warn!("Failed to set up system tray: {}", e);
             }
 
-            // Sweep any plaintext credential still sitting in Config.json
-            // (an install from before keychain support existed, or one saved
-            // while the keychain was briefly unavailable) into the OS
-            // keychain right away, rather than waiting for the next time a
-            // setting happens to get saved. Loading already backfills
-            // in-memory from the keychain, so saving right back through it
-            // is enough to trigger the redact-to-keychain path in
-            // auth::save_config_at.
-            if let Ok(base) = app_base_dir() {
-                if let Ok(config) = auth::load_config_at(&base) {
-                    if let Err(e) = auth::save_config_at(&base, &config) {
-                        log::warn!("[KEYCHAIN] Startup credential sweep failed: {}", e);
-                    }
-                }
-            }
-
             // Give the idle category (e.g. "Just Chatting") a real Library
             // entry on first run so it shows up in the Library editor and
             // users can set a custom cover for it, same as any detected
@@ -2186,6 +2259,7 @@ pub fn run() {
             get_secret_token,
             delete_secret_token,
             disconnect_platform,
+            migrate_tokens_to_keychain,
             get_all_keychain_tokens,
             hub::hub_get_status,
             hub::hub_set_pin,
