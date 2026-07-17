@@ -153,7 +153,7 @@ export default function App() {
         </div>
 
         {/* ── Controls ─────────────────────────────────────────────────── */}
-        <div className="jb-controls">
+        <div className={`jb-controls${showFlavor ? " jb-controls-grow" : ""}`}>
           {!connected && (
             <div className="jb-client-row">
               <span className="jb-client-label">ID</span>
