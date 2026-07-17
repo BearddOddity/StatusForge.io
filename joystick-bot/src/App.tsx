@@ -196,7 +196,6 @@ export default function App() {
                   refresh();
                 }}
                 className="jb-btn jb-btn-danger"
-                style={{ flex: 1 }}
               >
                 Disconnect
               </button>
@@ -257,7 +256,6 @@ export default function App() {
               <button
                 onClick={() => (showFlavor ? setShowFlavor(false) : openFlavorEditor())}
                 className="jb-btn jb-btn-ghost"
-                style={{ flex: 1 }}
               >
                 {showFlavor ? "Close Message Editor" : "✎ Edit Messages"}
               </button>
@@ -312,7 +310,6 @@ export default function App() {
                   setTesting(false);
                 }}
                 className="jb-btn jb-btn-connect"
-                style={{ flex: 1 }}
               >
                 {testing ? "Testing…" : "Test Push Now"}
               </button>
