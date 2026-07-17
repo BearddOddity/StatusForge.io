@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize } from "@tauri-apps/api/dpi";
 
 const DEFAULT_SIZE = { width: 400, height: 460 };
-const FLAVOR_EDITOR_SIZE = { width: 400, height: 760 };
+const FLAVOR_EDITOR_SIZE = { width: 480, height: 980 };
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -153,7 +153,7 @@ export default function App() {
         </div>
 
         {/* ── Controls ─────────────────────────────────────────────────── */}
-        <div className="jb-controls">
+        <div className={`jb-controls${showFlavor ? " jb-controls-grow" : ""}`}>
           {!connected && (
             <div className="jb-client-row">
               <span className="jb-client-label">ID</span>
@@ -247,14 +247,14 @@ export default function App() {
                 className="jb-flavor-textarea"
                 value={announceText}
                 onChange={(e) => setAnnounceText(e.target.value)}
-                rows={4}
+                rows={9}
               />
               <span className="jb-client-label">!game reply lines</span>
               <textarea
                 className="jb-flavor-textarea"
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
-                rows={4}
+                rows={9}
               />
               <button
                 disabled={savingFlavor}
