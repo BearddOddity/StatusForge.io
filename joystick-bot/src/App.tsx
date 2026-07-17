@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalSize } from "@tauri-apps/api/dpi";
+
+const DEFAULT_SIZE = { width: 400, height: 460 };
+const FLAVOR_EDITOR_SIZE = { width: 400, height: 760 };
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -75,6 +79,18 @@ export default function App() {
       unlisten.then((fn) => fn());
     };
   }, [refresh]);
+
+  // Grow the window when the message editor opens (its two textareas don't
+  // fit the compact default size) and shrink back down when it closes,
+  // instead of leaving that space empty or relying on scrollbars.
+  useEffect(() => {
+    const size = showFlavor ? FLAVOR_EDITOR_SIZE : DEFAULT_SIZE;
+    getCurrentWindow()
+      .setSize(new LogicalSize(size.width, size.height))
+      .catch(() => {
+        /* not running under Tauri (e.g. plain browser preview) — ignore */
+      });
+  }, [showFlavor]);
 
   const connected = status?.connected === true;
   const reachable = status?.main_app_reachable === true;
