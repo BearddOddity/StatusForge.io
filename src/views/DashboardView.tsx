@@ -51,6 +51,14 @@ const overlays = [
     width: 560,
     height: 280,
   },
+  {
+    id: "ib",
+    label: "Info Box",
+    file: "Info_Box.html",
+    icon: "ℹ",
+    width: 560,
+    height: 200,
+  },
 ];
 
 const platformDefs = [
