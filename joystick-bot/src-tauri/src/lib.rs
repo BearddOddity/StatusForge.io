@@ -439,6 +439,11 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
             if changed {
                 if let Some(game) = &new_game {
                     let connected = state.access_token.lock().unwrap().is_some();
+                    log::info!(
+                        "[JOYSTICK-BOT] Game change detected: \"{}\" (connected to Joystick: {})",
+                        game.title,
+                        connected
+                    );
                     if connected {
                         let (push_on, announce_on) = {
                             let cfg = state.config.lock().unwrap();
@@ -452,10 +457,18 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
                         if announce_on {
                             let templates = state.config.lock().unwrap().announce_templates.clone();
                             let msg = render_template(&templates, game);
-                            if let Err(e) = send_chat_message(&state, &msg).await {
-                                log::warn!("[JOYSTICK-BOT] Chat announce failed: {}", e);
+                            log::info!("[JOYSTICK-BOT] Sending chat announce: \"{}\"", msg);
+                            match send_chat_message(&state, &msg).await {
+                                Ok(()) => log::info!("[JOYSTICK-BOT] Chat announce sent"),
+                                Err(e) => log::warn!("[JOYSTICK-BOT] Chat announce failed: {}", e),
                             }
+                        } else {
+                            log::info!("[JOYSTICK-BOT] Chat announce is off — not sending");
                         }
+                    } else {
+                        log::info!(
+                            "[JOYSTICK-BOT] Not connected to Joystick — skipping announce/category push"
+                        );
                     }
                 }
             }
@@ -475,17 +488,36 @@ fn start_poll_loop(state: Arc<JoystickBotState>, app_handle: tauri::AppHandle) {
 fn start_chat_bot_loop(state: Arc<JoystickBotState>) {
     let running = state.running.clone();
     tauri::async_runtime::spawn(async move {
+        // Only logged on change, not every 5s tick — otherwise this would
+        // flood the log exactly like the poll loop already does.
+        let mut last_idle_reason: Option<&'static str> = None;
         while running.load(Ordering::Relaxed) {
             let enabled = state.config.lock().unwrap().chat_bot_enabled;
             let token = state.access_token.lock().unwrap().clone();
             match (enabled, token) {
                 (true, Some(token)) => {
+                    last_idle_reason = None;
                     if let Err(e) = oauth::run_chat_gateway(&state, &token).await {
                         log::warn!("[JOYSTICK-BOT] Chat gateway dropped: {} — reconnecting", e);
                     }
                     tokio::time::sleep(Duration::from_secs(5)).await;
                 }
-                _ => tokio::time::sleep(Duration::from_secs(5)).await,
+                (false, _) => {
+                    if last_idle_reason != Some("disabled") {
+                        log::info!("[JOYSTICK-BOT] Chat bot toggle is off — gateway not started");
+                        last_idle_reason = Some("disabled");
+                    }
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+                (true, None) => {
+                    if last_idle_reason != Some("no_token") {
+                        log::info!(
+                            "[JOYSTICK-BOT] Chat bot is on but not connected to Joystick — gateway not started"
+                        );
+                        last_idle_reason = Some("no_token");
+                    }
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
             }
         }
     });
@@ -724,6 +756,12 @@ pub fn run() {
                 // at debug (GET /me/stream, gateway messages) are the whole
                 // point of testing this early.
                 .level(log::LevelFilter::Debug)
+                // hyper/reqwest's own debug output (connection pool churn on
+                // every 10s poll) drowns out this addon's own log lines
+                // otherwise — keep it at Warn while everything else stays
+                // at Debug.
+                .level_for("hyper_util", log::LevelFilter::Warn)
+                .level_for("reqwest", log::LevelFilter::Warn)
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
