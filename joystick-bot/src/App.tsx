@@ -238,7 +238,7 @@ export default function App() {
               }
               className={`jb-btn ${status?.chat_announce_enabled ? "jb-btn-success" : "jb-btn-ghost"}`}
             >
-              Announce {status?.chat_announce_enabled ? "●" : "○"}
+              Auto-Message {status?.chat_announce_enabled ? "●" : "○"}
             </button>
             <button
               onClick={async () => {
@@ -274,7 +274,7 @@ export default function App() {
           {showFlavor && (
             <div className="jb-flavor-editor">
               <span className="jb-client-label">
-                Announce lines — one per line. Placeholders:{" "}
+                Auto-Message lines — one per line. Placeholders:{" "}
                 {"{title} {genre} {developer} {release_year}"}
               </span>
               <textarea
