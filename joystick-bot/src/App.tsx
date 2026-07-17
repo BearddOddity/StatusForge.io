@@ -123,7 +123,17 @@ export default function App() {
           />
           <span className="jb-brand">Joystick Companion</span>
         </div>
-        <span className="jb-status-label">{reachable ? "StatusForge OK" : "StatusForge?"}</span>
+        <span
+          className="jb-status-label"
+          title={
+            reachable
+              ? "Reached StatusForge's /status endpoint"
+              : "Can't reach StatusForge at http://127.0.0.1:53735/status — make sure StatusForge.io is running"
+          }
+          style={{ color: reachable ? "rgb(52, 199, 89)" : "rgb(239, 68, 68)" }}
+        >
+          {reachable ? "● StatusForge Connected" : "● StatusForge Not Found"}
+        </span>
       </div>
 
       {/* ── Body ───────────────────────────────────────────────────────── */}
