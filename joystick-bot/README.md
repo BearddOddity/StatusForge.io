@@ -84,7 +84,7 @@ actually sends.
 Incoming gateway messages log at debug level, so if the chat bot doesn't
 respond to `!game`, check the log file:
 
-- Windows: `%APPDATA%\com.bearddoddity.joystickbot\logs\joystick-bot.log`
+- Windows: `%LOCALAPPDATA%\com.bearddoddity.joystickbot\logs\joystick-bot.log`
 - macOS: `~/Library/Logs/com.bearddoddity.joystickbot/joystick-bot.log`
 - Linux: `~/.local/share/com.bearddoddity.joystickbot/logs/joystick-bot.log`
 
