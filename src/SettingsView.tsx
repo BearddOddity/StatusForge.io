@@ -814,7 +814,8 @@ function EngineSubTab({
           icon="⏳"
           badge={
             <span className="text-[10px] bg-white/5 border border-white/5 text-white/50 px-2 py-0.5 rounded font-mono font-medium">
-              Scan: {config.engine_settings.scan_interval}s
+              Scan {config.engine_settings.scan_interval}s · Fade{" "}
+              {config.engine_settings.overlay_fade_timer}s
             </span>
           }
         >
@@ -2599,7 +2600,8 @@ function SystemSubTab({
                   : "bg-white/5 border-white/5 text-white/50"
             }`}
           >
-            Channel: {prefs.updateChannel === "closed-beta" ? "Closed Beta" : prefs.updateChannel}
+            {prefs.updateChannel === "closed-beta" ? "Closed Beta" : prefs.updateChannel} · Log{" "}
+            {prefs.logLevel}
           </span>
         }
       >
@@ -3263,7 +3265,7 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         icon="📐"
         badge={
           <span className="text-[10px] bg-white/5 border border-white/5 text-white/50 px-2 py-0.5 rounded font-mono font-medium">
-            Radius: {prefs.borderRadius}
+            {prefs.borderRadius} · {prefs.panelOpacity}% · {prefs.fontScale}%
           </span>
         }
       >
