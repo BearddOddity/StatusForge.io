@@ -163,6 +163,7 @@ export default function DashboardView({
   onRefresh,
   openOverlayPicker,
   onOverlayPickerOpened,
+  onStartOnboarding,
 }: {
   engineStatus: EngineStatus;
   wsConnected: boolean;
@@ -174,7 +175,9 @@ export default function DashboardView({
   // silently switching views with no way to actually reach it.
   openOverlayPicker?: boolean;
   onOverlayPickerOpened?: () => void;
+  onStartOnboarding: () => void;
 }) {
+  const [setupHelpDismissed, setSetupHelpDismissed] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideText, setOverrideText] = useState("");
   const [overrideSubmitting, setOverrideSubmitting] = useState(false);
@@ -436,6 +439,33 @@ export default function DashboardView({
     <div>
       {/* Header */}
       <h2 className="text-2xl font-bold text-white tracking-tight mb-5">Dashboard</h2>
+
+      {!setupHelpDismissed && (
+        <div className="card-glass flex items-center justify-between gap-4 px-5 py-3 mb-5 border-purple-500/20 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-lg shrink-0">🧭</span>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-white/85 truncate">
+                Struggling to get set up?
+              </div>
+              <div className="text-[11px] text-white/40">
+                Walk through connecting platforms, overlays, and detection again — step by step.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setSetupHelpDismissed(true)}
+              className="text-[11px] text-white/40 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none px-2 py-1"
+            >
+              Dismiss
+            </button>
+            <Btn variant="success" onClick={onStartOnboarding}>
+              Start Setup Guide
+            </Btn>
+          </div>
+        </div>
+      )}
 
       {/* Now Playing */}
       <Card className="overflow-hidden mb-5">

@@ -75,6 +75,13 @@ function App() {
     setOpenOverlayPickerSignal(true);
   }, []);
 
+  // "Struggling to get set up?" banner on the Dashboard — same mechanism as
+  // Settings > System's "Replay Setup Guide" button.
+  const startOnboarding = useCallback(() => {
+    setOnboardingHidden(false);
+    saveSystemPrefs({ ...loadSystemPrefs(), onboardingComplete: false });
+  }, []);
+
   const [engineStatus, setEngineStatus] = useState<EngineStatus>({
     running: false,
     game_title: "Initializing...",
@@ -149,13 +156,14 @@ function App() {
           onRefresh={fetchStatus}
           openOverlayPicker={openOverlayPickerSignal}
           onOverlayPickerOpened={() => setOpenOverlayPickerSignal(false)}
+          onStartOnboarding={startOnboarding}
         />
       ),
       settings: <SettingsView engineStatus={engineStatus} onRefresh={fetchStatus} toast={toast} />,
       library: <LibraryView toast={toast} />,
       dev: <DevView />,
     }),
-    [engineStatus, wsConnected, toast, fetchStatus, openOverlayPickerSignal]
+    [engineStatus, wsConnected, toast, fetchStatus, openOverlayPickerSignal, startOnboarding]
   );
 
   // Sidebar collapse state lives in the theme prefs ("Sidebar Icons Only" in
