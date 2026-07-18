@@ -170,9 +170,30 @@ function EngineSubTab({
           <p className="text-white/60 text-xs flex-1">
             Overlay Token:{" "}
             <code className="bg-black/40 px-1.5 py-0.5 rounded font-mono text-white/90">
-              {overlayToken}
+              {overlayToken === "Loading..." ? overlayToken : "•".repeat(overlayToken.length)}
             </code>
           </p>
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(overlayToken);
+              toast("Overlay token copied to clipboard", "success");
+            }}
+            title="Copy overlay token"
+            className="p-1.5 rounded bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          </button>
           <button
             onClick={regenerateOverlayToken}
             className="text-[10px] px-2.5 py-1.5 rounded bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
