@@ -47,6 +47,28 @@ export function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
+  // Flashes the badge whenever its displayed text changes, so a setting
+  // that just saved (poll rate, idle text, token security mode, engine
+  // state, ...) gets a visible confirmation right where the user was
+  // looking, not just a toast elsewhere on screen. Reading textContent from
+  // the DOM (rather than diffing the `badge` ReactNode itself) means this
+  // works for every CollapsibleSection automatically, with no per-instance
+  // wiring needed.
+  const badgeRef = useRef<HTMLDivElement>(null);
+  const prevBadgeTextRef = useRef<string | null>(null);
+  const [badgeFlash, setBadgeFlash] = useState(false);
+
+  useEffect(() => {
+    const text = badgeRef.current?.textContent ?? null;
+    if (prevBadgeTextRef.current !== null && text !== null && text !== prevBadgeTextRef.current) {
+      setBadgeFlash(true);
+      const t = setTimeout(() => setBadgeFlash(false), 1500);
+      prevBadgeTextRef.current = text;
+      return () => clearTimeout(t);
+    }
+    prevBadgeTextRef.current = text;
+  });
+
   return (
     <div
       className={`border rounded-2xl transition-all duration-300 overflow-hidden mb-4 
@@ -76,7 +98,16 @@ export function CollapsibleSection({
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {badge && <div className="flex items-center">{badge}</div>}
+          {badge && (
+            <div
+              ref={badgeRef}
+              className={`flex items-center rounded-full transition-all duration-500 ${
+                badgeFlash ? "ring-2 ring-emerald-400/60 scale-110" : "ring-2 ring-transparent"
+              }`}
+            >
+              {badge}
+            </div>
+          )}
           <div
             className={`w-7 h-7 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] flex items-center justify-center text-white/40 hover:text-white/80 transition-all duration-300 ${
               open ? "rotate-180 bg-white/[0.06] text-white/70" : ""

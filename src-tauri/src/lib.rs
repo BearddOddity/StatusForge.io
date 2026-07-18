@@ -180,6 +180,12 @@ struct SystemMonitorInner {
     sys: sysinfo::System,
     last_refresh: Option<std::time::Instant>,
     last_stats: SystemStats,
+    // Logical core count, for normalizing sysinfo's per-process cpu_usage()
+    // (which is a sum across all cores a multi-threaded process touches —
+    // easily 150-400% for this app's UI/webview/tokio/detection threads on
+    // a busy multi-core machine) down to a 0-100% reading of overall system
+    // capacity, matching what Task Manager shows by default.
+    cpu_count: f32,
 }
 
 /// Shared, debounced `sysinfo::System` for the System Performance panel.
@@ -193,6 +199,9 @@ impl Default for SystemMonitor {
 
 impl SystemMonitor {
     pub fn new() -> Self {
+        let cpu_count = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1) as f32;
         Self(Mutex::new(SystemMonitorInner {
             sys: sysinfo::System::new(),
             last_refresh: None,
@@ -200,22 +209,38 @@ impl SystemMonitor {
                 cpu_percent: 0.0,
                 memory_mb: 0,
             },
+            cpu_count,
         }))
     }
 
     /// Refreshes now regardless of `CPU_REFRESH_MIN_INTERVAL` — used once at
     /// startup to move the CPU-usage baseline from "process exec()" to
     /// "app finished initializing," so the frontend's first real poll isn't
-    /// diffed against the whole cold-start burst.
+    /// diffed against the whole cold-start burst. Also computes and stores
+    /// real stats immediately (not just refreshing sysinfo's internal
+    /// table) — without this, a frontend poll landing inside the first
+    /// `CPU_REFRESH_MIN_INTERVAL` window after startup (the Dashboard's
+    /// on-mount call almost always does) would see `should_refresh = false`
+    /// below and return the hardcoded 0%/0 MB placeholder instead of a real
+    /// reading.
     fn prime(&self) {
         if let Ok(pid) = sysinfo::get_current_pid() {
             let mut inner = self.0.lock().unwrap();
             inner.sys.refresh_processes_specifics(
                 sysinfo::ProcessesToUpdate::Some(&[pid]),
                 true,
-                sysinfo::ProcessRefreshKind::nothing().with_cpu(),
+                sysinfo::ProcessRefreshKind::nothing()
+                    .with_cpu()
+                    .with_memory(),
             );
             inner.last_refresh = Some(std::time::Instant::now());
+            if let Some(proc) = inner.sys.process(pid) {
+                let cpu_count = inner.cpu_count;
+                inner.last_stats = SystemStats {
+                    cpu_percent: proc.cpu_usage() / cpu_count,
+                    memory_mb: proc.memory() / (1024 * 1024),
+                };
+            }
         }
     }
 }
@@ -247,9 +272,10 @@ fn get_system_stats(monitor: tauri::State<SystemMonitor>) -> Result<SystemStats,
                 .with_memory(),
         );
         inner.last_refresh = Some(std::time::Instant::now());
+        let cpu_count = inner.cpu_count;
         let proc = inner.sys.process(pid).ok_or("process not found")?;
         inner.last_stats = SystemStats {
-            cpu_percent: proc.cpu_usage(),
+            cpu_percent: proc.cpu_usage() / cpu_count,
             memory_mb: proc.memory() / (1024 * 1024),
         };
     }
