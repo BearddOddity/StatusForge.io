@@ -47,41 +47,6 @@ export function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
-  // Flashes the badge as a "something in here just changed" confirmation,
-  // right where the user was looking, not just a toast elsewhere on screen.
-  //
-  // Two triggers, since a section's badge often only summarizes ONE field
-  // (e.g. Timing & Rates' badge shows the scan interval, but the section
-  // also holds grace period / overlay poll rate / fade timer — editing
-  // those doesn't change the badge text at all):
-  //   1. The badge's own textContent changing (covers e.g. engine
-  //      ONLINE/OFFLINE flips driven by the backend, not a direct click).
-  //   2. Any click/input/change bubbling up from the section's body — covers
-  //      every field regardless of whether it's reflected in the badge.
-  // Custom Toggle/GlassSelect controls here are buttons, not native
-  // checkboxes/<select>, so "click" has to be included alongside
-  // "input"/"change" to catch them.
-  const badgeRef = useRef<HTMLDivElement>(null);
-  const prevBadgeTextRef = useRef<string | null>(null);
-  const [badgeFlash, setBadgeFlash] = useState(false);
-  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const triggerFlash = () => {
-    setBadgeFlash(true);
-    clearTimeout(flashTimeoutRef.current);
-    flashTimeoutRef.current = setTimeout(() => setBadgeFlash(false), 1500);
-  };
-
-  useEffect(() => {
-    const text = badgeRef.current?.textContent ?? null;
-    if (prevBadgeTextRef.current !== null && text !== null && text !== prevBadgeTextRef.current) {
-      triggerFlash();
-    }
-    prevBadgeTextRef.current = text;
-  });
-
-  useEffect(() => () => clearTimeout(flashTimeoutRef.current), []);
-
   return (
     <div
       className={`border rounded-2xl transition-all duration-300 overflow-hidden mb-4 
@@ -111,16 +76,7 @@ export function CollapsibleSection({
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {badge && (
-            <div
-              ref={badgeRef}
-              className={`flex items-center rounded-full transition-all duration-500 ${
-                badgeFlash ? "ring-2 ring-emerald-400/60 scale-110" : "ring-2 ring-transparent"
-              }`}
-            >
-              {badge}
-            </div>
-          )}
+          {badge && <div className="flex items-center">{badge}</div>}
           <div
             className={`w-7 h-7 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] flex items-center justify-center text-white/40 hover:text-white/80 transition-all duration-300 ${
               open ? "rotate-180 bg-white/[0.06] text-white/70" : ""
@@ -146,9 +102,7 @@ export function CollapsibleSection({
         }`}
       >
         <div className="overflow-hidden">
-          <div className="p-6" onClickCapture={triggerFlash} onInputCapture={triggerFlash}>
-            {children}
-          </div>
+          <div className="p-6">{children}</div>
         </div>
       </div>
     </div>

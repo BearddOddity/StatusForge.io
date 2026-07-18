@@ -984,6 +984,14 @@ function EngineSubTab({
                 } else {
                   toast("Migration failed", "error");
                 }
+                // The "Protected"/"Plaintext config" badge and the stored-entries
+                // list both read keychainInfo, which was only ever fetched once
+                // on mount — without this, a successful migration left both
+                // showing the pre-migration state until the user reopened
+                // Settings.
+                getKeychainStatus()
+                  .then(setKeychainInfo)
+                  .catch(() => {});
               }}
               className="btn-cta"
             >
