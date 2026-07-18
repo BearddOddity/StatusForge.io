@@ -66,6 +66,7 @@ const STEP_LABELS = [
   "Cover Art",
   "Detection",
   "Exit Behavior",
+  "Performance",
   "Done",
 ];
 const STEAMGRIDDB_API_URL = "https://www.steamgriddb.com/profile/preferences/api";
@@ -86,6 +87,7 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
   const [sgdbSaved, setSgdbSaved] = useState(false);
   const [minimizeToTray, setMinimizeToTray] = useState(() => loadSystemPrefs().minimizeToTray);
+  const [hardwareAccel, setHardwareAccel] = useState(() => loadSystemPrefs().hardwareAccel);
 
   useEffect(() => {
     fetchConfig().then(setConfig);
@@ -182,6 +184,11 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
   const chooseExitBehavior = (toTray: boolean) => {
     setMinimizeToTray(toTray);
     saveSystemPrefs({ ...loadSystemPrefs(), minimizeToTray: toTray });
+  };
+
+  const choosePerformance = (accel: boolean) => {
+    setHardwareAccel(accel);
+    saveSystemPrefs({ ...loadSystemPrefs(), hardwareAccel: accel });
   };
 
   const isLast = step === STEP_LABELS.length - 1;
@@ -640,8 +647,87 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
               </>
             )}
 
-            {/* ── Step 6: Done ────────────────────────────────────────── */}
+            {/* ── Step 6: Performance ─────────────────────────────────── */}
             {step === 6 && (
+              <>
+                <div className="text-4xl mb-4">⚡</div>
+                <h3 className="text-white font-bold text-lg mb-2">Smooth or lightweight?</h3>
+                <p className="text-white/50 text-[13px] leading-relaxed mb-5 max-w-[380px] mx-auto">
+                  Controls how much GPU StatusForge uses for its own animations. You can change this
+                  later in Settings.
+                </p>
+
+                <div className="flex flex-col gap-2.5 w-full mb-5">
+                  <button
+                    onClick={() => choosePerformance(true)}
+                    className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer ${
+                      hardwareAccel
+                        ? "bg-violet-500/10 border-violet-500/30"
+                        : "bg-white/[0.03] border-white/10 hover:border-white/20"
+                    }`}
+                  >
+                    <span
+                      className="w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center"
+                      style={{
+                        borderColor: hardwareAccel ? "#9146FF" : "rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      {hardwareAccel && (
+                        <span className="w-2 h-2 rounded-full" style={{ background: "#9146FF" }} />
+                      )}
+                    </span>
+                    <span>
+                      <span className="block text-white text-[13px] font-semibold">
+                        Smooth animations
+                      </span>
+                      <span className="block text-white/40 text-[11px] mt-0.5">
+                        Uses your GPU to render the window. Best on most machines.
+                      </span>
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => choosePerformance(false)}
+                    className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer ${
+                      !hardwareAccel
+                        ? "bg-violet-500/10 border-violet-500/30"
+                        : "bg-white/[0.03] border-white/10 hover:border-white/20"
+                    }`}
+                  >
+                    <span
+                      className="w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center"
+                      style={{
+                        borderColor: !hardwareAccel ? "#9146FF" : "rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      {!hardwareAccel && (
+                        <span className="w-2 h-2 rounded-full" style={{ background: "#9146FF" }} />
+                      )}
+                    </span>
+                    <span>
+                      <span className="block text-white text-[13px] font-semibold">
+                        Best performance
+                      </span>
+                      <span className="block text-white/40 text-[11px] mt-0.5">
+                        Turns off heavy CSS animations — lighter on CPU, useful while you're also
+                        running a game and encoding a stream.
+                      </span>
+                    </span>
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setStep(7)}
+                  className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-white"
+                  style={{ background: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)" }}
+                >
+                  Continue
+                </button>
+              </>
+            )}
+
+            {/* ── Step 7: Done ────────────────────────────────────────── */}
+            {step === 7 && (
               <>
                 <div className="text-4xl mb-4">✅</div>
                 <h3 className="text-white font-bold text-lg mb-2">You're all set</h3>
