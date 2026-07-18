@@ -966,16 +966,16 @@ pub fn build_twitch_auth_url(client_id: &str, state: &str, code_challenge: &str)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Widget Token Rotation (Security Audit #5)
+// Overlay Token Rotation (Security Audit #5)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub fn rotate_widget_token(base_dir: &std::path::Path) -> Result<String, String> {
+pub fn rotate_overlay_token(base_dir: &std::path::Path) -> Result<String, String> {
     let mut config = load_config_at(base_dir)?;
     let mut bytes = vec![0u8; 16];
     rand::thread_rng().fill_bytes(&mut bytes);
     let new_token = URL_SAFE_NO_PAD.encode(&bytes);
-    config.engine_settings.widget_token = new_token.clone();
+    config.engine_settings.overlay_token = new_token.clone();
     save_config_at(base_dir, &config)?;
-    log::info!("[AUTH] Widget token rotated successfully");
+    log::info!("[AUTH] Overlay token rotated successfully");
     Ok(new_token)
 }

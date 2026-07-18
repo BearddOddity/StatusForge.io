@@ -32,7 +32,7 @@ export interface EngineStatus {
   publisher: string;
   release_date: string;
   cover_url: string;
-  widgetToken: string;
+  overlayToken: string;
 }
 
 export interface ApiKeys {
@@ -49,14 +49,14 @@ export interface EngineSettings {
   sb_port: number;
   scan_interval: number;
   grace_period: number;
-  widget_poll_rate: number;
+  overlay_poll_rate: number;
   safe_mode: boolean;
   auto_push: boolean;
   platform_push_enabled: boolean;
-  widget_fade_timer: number;
+  overlay_fade_timer: number;
   strict_forge_mode: boolean;
   sb_action_name: string;
-  widget_token: string;
+  overlay_token: string;
   // Blipy / dual-PC
   blipy_pin: string;
   blipy_pairing_key: string;

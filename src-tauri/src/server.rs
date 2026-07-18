@@ -1,13 +1,13 @@
-//! Local widget/status server.
+//! Local overlay/status server.
 //!
 //! One listener on 127.0.0.1:53735 serves BOTH protocols by peeking the first
 //! byte of each connection:
 //! - TLS  (0x16 handshake) → Twitch OAuth callback (`https://127.0.0.1:53735/...`)
-//! - plain HTTP            → widget overlays (`/status`, `/settings`, `/widgets/*`,
+//! - plain HTTP            → overlays (`/status`, `/settings`, `/widgets/*`,
 //!   `/ws` WebSocket) and the Kick OAuth callback (`http://localhost:53735/...`)
 //!
-//! Widget endpoints accept an optional `X-Forge-Token` header or `?token=`
-//! query parameter; when present it must match `engine_settings.widget_token`
+//! Overlay endpoints accept an optional `X-Forge-Token` header or `?token=`
+//! query parameter; when present it must match `engine_settings.overlay_token`
 //! (401 otherwise). The server only ever binds loopback.
 
 use std::sync::atomic::Ordering;
@@ -86,7 +86,7 @@ fn check_token(headers: &HeaderMap, query_token: Option<&str>) -> Result<(), Sta
     let expected = crate::app_base_dir()
         .ok()
         .and_then(|base| crate::auth::load_config_at(&base).ok())
-        .map(|c| c.engine_settings.widget_token)
+        .map(|c| c.engine_settings.overlay_token)
         .unwrap_or_default();
     if !expected.is_empty() && constant_time_eq(provided.as_bytes(), expected.as_bytes()) {
         Ok(())
@@ -541,7 +541,7 @@ pub fn build_status(engine: &EngineState) -> serde_json::Value {
     let config = load_config();
     let fade_timer = config
         .as_ref()
-        .map(|c| c.engine_settings.widget_fade_timer)
+        .map(|c| c.engine_settings.overlay_fade_timer)
         .unwrap_or(15);
 
     let game_title = game.as_ref().map(|g| g.title.clone()).unwrap_or_default();
@@ -618,8 +618,8 @@ async fn settings_handler(
     let config = load_config();
     let es = config.map(|c| c.engine_settings);
     Ok(Json(serde_json::json!({
-        "widget_poll_rate": es.as_ref().map(|e| e.widget_poll_rate).unwrap_or(3),
-        "widget_fade_timer": es.as_ref().map(|e| e.widget_fade_timer).unwrap_or(15),
+        "overlay_poll_rate": es.as_ref().map(|e| e.overlay_poll_rate).unwrap_or(3),
+        "overlay_fade_timer": es.as_ref().map(|e| e.overlay_fade_timer).unwrap_or(15),
         "idle_category": es.as_ref().map(|e| e.idle_category.clone()).unwrap_or_else(|| "Just Chatting".to_string()),
     })))
 }
@@ -661,18 +661,21 @@ async fn health_handler() -> StatusCode {
     StatusCode::OK
 }
 
-/// Serves an overlay widget file (HTML + its assets) gated by the real
-/// `widget_token`, at the URL the frontend's Overlay Generator hands out
-/// (`/forge-widget/{token}/{file}`). Unlike `check_token`, a missing/wrong
+/// Serves an overlay file (HTML + its assets) gated by the real
+/// `overlay_token`, at the URL the frontend's Overlay Generator hands out
+/// (`/forge-overlay/{token}/{file}`). `/forge-widget/...` routes here too —
+/// the old path from before the widget→overlay rename — so a URL already
+/// pasted into an OBS Browser Source keeps working forever; only newly
+/// generated URLs use the new path. Unlike `check_token`, a missing/wrong
 /// token is always rejected here — an OBS browser-source URL is the one
-/// widget surface meant to leave the machine (pasted into streaming
+/// overlay surface meant to leave the machine (pasted into streaming
 /// software, screen-shared, etc.), so it doesn't get the loopback-implies-
 /// trusted pass that `/status`/`/settings` get.
-async fn forge_widget_handler(
+async fn forge_overlay_handler(
     axum::extract::Path((token, file)): axum::extract::Path<(String, String)>,
 ) -> Result<axum::response::Response, StatusCode> {
     let expected = load_config()
-        .map(|c| c.engine_settings.widget_token)
+        .map(|c| c.engine_settings.overlay_token)
         .unwrap_or_default();
     if expected.is_empty() || !constant_time_eq(token.as_bytes(), expected.as_bytes()) {
         return Err(StatusCode::UNAUTHORIZED);
@@ -709,7 +712,10 @@ fn build_router(state: ServerState) -> Router {
         .route("/settings", get(settings_handler))
         .route("/ws", get(ws_handler))
         .route("/health", get(health_handler))
-        .route("/forge-widget/{token}/{file}", get(forge_widget_handler))
+        .route("/forge-overlay/{token}/{file}", get(forge_overlay_handler))
+        // Old route name, kept working for URLs already pasted into an OBS
+        // Browser Source before the widget→overlay rename.
+        .route("/forge-widget/{token}/{file}", get(forge_overlay_handler))
         .route("/api/forge-full", get(forge_full_handler))
         .route("/api/exiled-apps", get(exiled_apps_handler))
         .route("/list", post(list_handler))

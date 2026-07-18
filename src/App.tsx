@@ -8,7 +8,7 @@ import {
 } from "@tauri-apps/plugin-notification";
 import appIcon from "../icons/icon.png";
 import type { EngineStatus, ViewId } from "@/types";
-import { fetchEngineStatus, fetchWidgetToken, tauriApi } from "@/hooks/useTauriApi";
+import { fetchEngineStatus, fetchOverlayToken, tauriApi } from "@/hooks/useTauriApi";
 import {
   loadSystemPrefs,
   saveSystemPrefs,
@@ -71,10 +71,10 @@ function App() {
     publisher: "",
     release_date: "",
     cover_url: "",
-    widgetToken: "",
+    overlayToken: "",
   });
 
-  const { connected: wsConnected, data: wsData } = useWebSocket(engineStatus.widgetToken);
+  const { connected: wsConnected, data: wsData } = useWebSocket(engineStatus.overlayToken);
 
   useEffect(() => {
     if (wsData) {
@@ -94,14 +94,14 @@ function App() {
   }, [wsData]);
 
   const fetchStatus = useCallback(async () => {
-    const [data, token] = await Promise.all([fetchEngineStatus(), fetchWidgetToken()]);
+    const [data, token] = await Promise.all([fetchEngineStatus(), fetchOverlayToken()]);
     setEngineStatus((prev) => ({
       ...prev,
       running: data.running,
       game_title: data.game_title || prev.game_title,
       process_name: data.process_name || prev.process_name,
       is_playing: data.is_playing,
-      widgetToken: token,
+      overlayToken: token,
     }));
   }, []);
 

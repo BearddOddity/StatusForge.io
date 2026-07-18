@@ -4,7 +4,7 @@ import type { EngineStatus, ToastType, SystemStats, ViewId } from "@/types";
 import {
   tauriApi,
   getSystemStats,
-  fetchWidgetToken,
+  fetchOverlayToken,
   fetchConfig,
   saveConfig,
 } from "@/hooks/useTauriApi";
@@ -135,13 +135,19 @@ function maskUrl(url: string): string {
   try {
     const u = new URL(url);
     const parts = u.pathname.split("/");
-    const tokenIdx = parts.indexOf("forge-widget") + 1;
-    if (tokenIdx > 0 && parts[tokenIdx]) {
+    // Overlay URLs already saved by a user before the widget->overlay
+    // rename still use the old segment name — recognize both.
+    const routeIdx =
+      parts.indexOf("forge-overlay") >= 0
+        ? parts.indexOf("forge-overlay")
+        : parts.indexOf("forge-widget");
+    const tokenIdx = routeIdx + 1;
+    if (routeIdx >= 0 && parts[tokenIdx]) {
       const raw = parts[tokenIdx];
       const masked = raw.length > 4 ? "•".repeat(raw.length - 4) + raw.slice(-4) : "••••";
       parts[tokenIdx] = masked;
     }
-    return "/" + parts.slice(parts.indexOf("forge-widget") + 1).join("/");
+    return "/" + parts.slice(routeIdx + 1).join("/");
   } catch {
     return url;
   }
@@ -256,11 +262,11 @@ export default function DashboardView({
   const [overlayViewMode, setOverlayViewMode] = useState<"grid" | "carousel">("grid");
   const overlayPickerRef = useRef<HTMLDivElement>(null);
 
-  const [widgetToken, setWidgetToken] = useState("");
+  const [overlayToken, setOverlayToken] = useState("");
   useEffect(() => {
     let cancelled = false;
-    fetchWidgetToken().then((t) => {
-      if (!cancelled) setWidgetToken(t);
+    fetchOverlayToken().then((t) => {
+      if (!cancelled) setOverlayToken(t);
     });
     return () => {
       cancelled = true;
@@ -375,11 +381,11 @@ export default function DashboardView({
   }, []);
 
   const addOverlayUrl = (file: string, label: string) => {
-    if (!widgetToken) {
+    if (!overlayToken) {
       toast("Overlay token not loaded yet — try again in a moment", "error");
       return;
     }
-    const url = `http://127.0.0.1:53735/forge-widget/${widgetToken}/${file}`;
+    const url = `http://127.0.0.1:53735/forge-overlay/${overlayToken}/${file}`;
     const id = `overlay-${overlayIdCounter}`;
     setOverlayUrls((prev) => [...prev, { id, url, label }]);
     setOverlayIdCounter((c) => c + 1);
@@ -876,9 +882,9 @@ export default function DashboardView({
                     className="group text-left cursor-pointer"
                   >
                     <div className="relative w-full h-[220px] rounded-2xl overflow-hidden border border-white/10 bg-[#0a0a12] transition-all duration-200 group-hover:border-purple-500/50 group-hover:shadow-lg group-hover:shadow-purple-500/15">
-                      {widgetToken ? (
+                      {overlayToken ? (
                         <iframe
-                          src={`http://127.0.0.1:53735/forge-widget/${widgetToken}/${o.file}`}
+                          src={`http://127.0.0.1:53735/forge-overlay/${overlayToken}/${o.file}`}
                           title={`${o.label} preview`}
                           tabIndex={-1}
                           className="pointer-events-none absolute top-1/2 left-1/2 border-0"
@@ -928,10 +934,10 @@ export default function DashboardView({
                           <div
                             className={`relative w-full h-[220px] rounded-2xl overflow-hidden border bg-[#0a0a12] transition-all duration-300 ${a ? "border-purple-500/50 shadow-lg shadow-purple-500/15" : "border-white/10"}`}
                           >
-                            {widgetToken ? (
+                            {overlayToken ? (
                               <iframe
                                 key={o.id}
-                                src={`http://127.0.0.1:53735/forge-widget/${widgetToken}/${o.file}`}
+                                src={`http://127.0.0.1:53735/forge-overlay/${overlayToken}/${o.file}`}
                                 title={`${o.label} preview`}
                                 tabIndex={-1}
                                 className="pointer-events-none absolute top-1/2 left-1/2 border-0"

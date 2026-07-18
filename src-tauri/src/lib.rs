@@ -71,10 +71,10 @@ fn init_app_base_dir(app: &tauri::AppHandle) {
             match bootstrapped {
                 Ok(()) => {
                     log::info!("Bootstrapped Config.json from template");
-                    // The template ships a placeholder widget token; give each fresh
-                    // install a unique one so overlay widgets authenticate.
-                    if let Err(e) = auth::rotate_widget_token(&base) {
-                        log::warn!("Failed to generate initial widget token: {}", e);
+                    // The template ships a placeholder overlay token; give each fresh
+                    // install a unique one so overlays authenticate.
+                    if let Err(e) = auth::rotate_overlay_token(&base) {
+                        log::warn!("Failed to generate initial overlay token: {}", e);
                     }
                 }
                 Err(e) => log::warn!("Failed to bootstrap Config.json from template: {}", e),
@@ -287,7 +287,7 @@ fn get_engine_status(state: tauri::State<Arc<EngineState>>) -> Result<EngineStat
 }
 
 #[tauri::command]
-async fn get_widget_token() -> Result<String, String> {
+async fn get_overlay_token() -> Result<String, String> {
     let base = app_base_dir()?;
     let config_path = base.join("Config.json");
 
@@ -297,9 +297,12 @@ async fn get_widget_token() -> Result<String, String> {
             .map_err(|e| format!("Failed to read config: {}", e))?;
         let config: serde_json::Value =
             serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
-        Ok(config
-            .get("engine_settings")
-            .and_then(|v| v.get("widget_token"))
+        let engine_settings = config.get("engine_settings");
+        Ok(engine_settings
+            .and_then(|v| v.get("overlay_token"))
+            // Falls back to the pre-rename key for a Config.json that
+            // hasn't been re-saved (and therefore migrated) yet.
+            .or_else(|| engine_settings.and_then(|v| v.get("widget_token")))
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown")
             .to_string())
@@ -1705,11 +1708,11 @@ async fn sync_library_now(app_handle: tauri::AppHandle) -> Result<String, String
     Ok("Library synced".to_string())
 }
 
-/// Rotate widget token (Security Audit #5). Returns the new token.
+/// Rotate overlay token (Security Audit #5). Returns the new token.
 #[tauri::command]
-fn rotate_widget_token() -> Result<String, String> {
+fn rotate_overlay_token() -> Result<String, String> {
     let base_dir = app_base_dir()?;
-    auth::rotate_widget_token(&base_dir)
+    auth::rotate_overlay_token(&base_dir)
 }
 
 /// Exile a game: drop it from the library and delist its lowercase title so
@@ -2256,7 +2259,7 @@ pub fn run() {
             get_app_version,
             get_platform,
             get_engine_status,
-            get_widget_token,
+            get_overlay_token,
             export_config,
             import_config,
             start_engine,
@@ -2284,7 +2287,7 @@ pub fn run() {
             check_platform_live_status,
             sync_kick_db,
             sync_library_now,
-            rotate_widget_token,
+            rotate_overlay_token,
             exile_app,
             dev_get_log_tail,
             dev_get_diagnostics,
@@ -2319,7 +2322,7 @@ mod config_command_tests {
         let base = APP_BASE_DIR.get().unwrap().clone();
 
         let mut config = config::AppConfig::default();
-        config.engine_settings.widget_poll_rate = 4;
+        config.engine_settings.overlay_poll_rate = 4;
         config.engine_settings.idle_category = "Art".into();
         config.engine_settings.blipy_pin = "12".into(); // half-typed → sanitized to 0000
         config.api_keys.rawg = "rawg-key".into();
@@ -2337,7 +2340,7 @@ mod config_command_tests {
 
         let out = export_config(Some(ConfigExportPayload { path: None })).unwrap();
         let es = &out["engine_settings"];
-        assert_eq!(es["widget_poll_rate"], 4);
+        assert_eq!(es["overlay_poll_rate"], 4);
         assert_eq!(es["idle_category"], "Art");
         assert_eq!(es["blipy_pin"], "0000");
         assert_eq!(out["api_keys"]["rawg"], "rawg-key");

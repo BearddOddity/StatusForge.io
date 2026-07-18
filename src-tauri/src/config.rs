@@ -55,8 +55,8 @@ pub struct EngineSettings {
     pub scan_interval: u64,
     #[serde(default = "default_grace_period")]
     pub grace_period: u64,
-    #[serde(default = "default_widget_poll_rate")]
-    pub widget_poll_rate: u64,
+    #[serde(default = "default_overlay_poll_rate", alias = "widget_poll_rate")]
+    pub overlay_poll_rate: u64,
     #[serde(default)]
     pub safe_mode: bool,
     #[serde(default)]
@@ -66,14 +66,14 @@ pub struct EngineSettings {
     /// doesn't silently stop routing that was already working.
     #[serde(default = "default_platform_push_enabled")]
     pub platform_push_enabled: bool,
-    #[serde(default = "default_widget_fade_timer")]
-    pub widget_fade_timer: u64,
+    #[serde(default = "default_overlay_fade_timer", alias = "widget_fade_timer")]
+    pub overlay_fade_timer: u64,
     #[serde(default)]
     pub strict_forge_mode: bool,
     #[serde(default = "default_sb_action_name")]
     pub sb_action_name: String,
-    #[serde(default = "default_widget_token")]
-    pub widget_token: String,
+    #[serde(default = "default_overlay_token", alias = "widget_token")]
+    pub overlay_token: String,
     /// Old configs saved before the SPARK → Blipy rename still load fine —
     /// `alias` accepts the old JSON key, new saves write the new one.
     #[serde(default = "default_blipy_pin", alias = "spark_pin")]
@@ -119,14 +119,14 @@ impl Default for EngineSettings {
             sb_port: default_sb_port(),
             scan_interval: default_scan_interval(),
             grace_period: default_grace_period(),
-            widget_poll_rate: default_widget_poll_rate(),
+            overlay_poll_rate: default_overlay_poll_rate(),
             safe_mode: false,
             auto_push: false,
             platform_push_enabled: default_platform_push_enabled(),
-            widget_fade_timer: default_widget_fade_timer(),
+            overlay_fade_timer: default_overlay_fade_timer(),
             strict_forge_mode: false,
             sb_action_name: default_sb_action_name(),
-            widget_token: default_widget_token(),
+            overlay_token: default_overlay_token(),
             blipy_pin: default_blipy_pin(),
             blipy_pairing_key: String::new(),
             blipy_link_active: false,
@@ -400,16 +400,16 @@ fn default_scan_interval() -> u64 {
 fn default_grace_period() -> u64 {
     15
 }
-fn default_widget_poll_rate() -> u64 {
+fn default_overlay_poll_rate() -> u64 {
     3
 }
-fn default_widget_fade_timer() -> u64 {
+fn default_overlay_fade_timer() -> u64 {
     15
 }
 fn default_sb_action_name() -> String {
     "UpdateCategory".to_string()
 }
-fn default_widget_token() -> String {
+fn default_overlay_token() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     (0..16)
@@ -494,12 +494,11 @@ impl AppConfig {
         if self.engine_settings.grace_period > 300 {
             errors.push("grace_period must be <= 300".to_string());
         }
-        if self.engine_settings.widget_poll_rate == 0 {
-            errors.push("widget_poll_rate must be > 0".to_string());
+        if self.engine_settings.overlay_poll_rate == 0 {
+            errors.push("overlay_poll_rate must be > 0".to_string());
         }
-        if self.engine_settings.widget_fade_timer == 0 {
-            errors.push("widget_fade_timer must be > 0".to_string());
-        }
+        // overlay_fade_timer has no lower-bound check — 0 is valid and
+        // means "never fade."
         if self.engine_settings.confidence_threshold < 0.0
             || self.engine_settings.confidence_threshold > 1.0
         {
@@ -557,9 +556,12 @@ impl AppConfig {
         // Clamp numeric values
         self.engine_settings.scan_interval = self.engine_settings.scan_interval.clamp(2, 300);
         self.engine_settings.grace_period = self.engine_settings.grace_period.clamp(0, 300);
-        self.engine_settings.widget_poll_rate = self.engine_settings.widget_poll_rate.clamp(1, 60);
-        self.engine_settings.widget_fade_timer =
-            self.engine_settings.widget_fade_timer.clamp(1, 300);
+        self.engine_settings.overlay_poll_rate =
+            self.engine_settings.overlay_poll_rate.clamp(1, 60);
+        // 0 is a valid, intentional value here — "never fade" — not
+        // something to clamp away like the other numeric settings.
+        self.engine_settings.overlay_fade_timer =
+            self.engine_settings.overlay_fade_timer.clamp(0, 120);
         self.engine_settings.confidence_threshold =
             self.engine_settings.confidence_threshold.clamp(0.0, 1.0);
         self.engine_settings.ram_threshold = self.engine_settings.ram_threshold.clamp(0, 100);
@@ -614,18 +616,25 @@ mod tests {
         // whole config save.
         let mut c = AppConfig::default();
         c.engine_settings.blipy_pin = "12".into();
-        c.engine_settings.widget_fade_timer = 0;
-        c.engine_settings.widget_poll_rate = 0;
+        c.engine_settings.overlay_poll_rate = 0;
         c.engine_settings.scan_interval = 0;
         c.engine_settings.confidence_threshold = 5.0;
         c.engine_settings.ram_threshold = 900;
         c.sanitize();
         assert_eq!(c.engine_settings.blipy_pin, "0000");
-        assert_eq!(c.engine_settings.widget_fade_timer, 1);
-        assert_eq!(c.engine_settings.widget_poll_rate, 1);
+        assert_eq!(c.engine_settings.overlay_poll_rate, 1);
         assert_eq!(c.engine_settings.scan_interval, 2);
         assert_eq!(c.engine_settings.confidence_threshold, 1.0);
         assert_eq!(c.engine_settings.ram_threshold, 100);
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn overlay_fade_timer_zero_means_never_fade_and_survives_sanitize() {
+        let mut c = AppConfig::default();
+        c.engine_settings.overlay_fade_timer = 0;
+        c.sanitize();
+        assert_eq!(c.engine_settings.overlay_fade_timer, 0);
         assert!(c.validate().is_ok());
     }
 
@@ -683,6 +692,23 @@ mod tests {
         assert_eq!(c.engine_settings.blipy_pin, "4242");
         assert_eq!(c.engine_settings.blipy_pairing_key, "old-key");
         assert!(c.engine_settings.blipy_link_active);
+    }
+
+    /// Same guarantee as above, for the widget->overlay rename: a
+    /// Config.json saved before the rename still loads correctly.
+    #[test]
+    fn old_widget_keys_still_load_into_renamed_overlay_fields() {
+        let json = r#"{
+            "engine_settings": {
+                "widget_poll_rate": 8,
+                "widget_fade_timer": 0,
+                "widget_token": "OLD_TOKEN_VALUE"
+            }
+        }"#;
+        let c: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(c.engine_settings.overlay_poll_rate, 8);
+        assert_eq!(c.engine_settings.overlay_fade_timer, 0);
+        assert_eq!(c.engine_settings.overlay_token, "OLD_TOKEN_VALUE");
     }
 
     /// Regression guard against Config.json.template silently drifting out

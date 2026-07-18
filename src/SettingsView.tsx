@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { EngineStatus, AppConfig, SettingsSubTab, ToastType, ApiKeys } from "@/types";
 import type { KeychainStatus } from "@/types";
-import { fetchWidgetToken, getKeychainStatus, saveConfig, tauriApi } from "@/hooks/useTauriApi";
+import { fetchOverlayToken, getKeychainStatus, saveConfig, tauriApi } from "@/hooks/useTauriApi";
 import {
   SubTabBtn,
   CollapsibleSection,
@@ -36,7 +36,7 @@ function EngineSubTab({
   onRefresh: () => void;
   toast: (msg: string, type?: ToastType) => void;
 }) {
-  const [widgetToken, setWidgetToken] = useState("Loading...");
+  const [overlayToken, setOverlayToken] = useState("Loading...");
   const [keychainInfo, setKeychainInfo] = useState<KeychainStatus | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [platform, setPlatform] = useState<string>("windows");
@@ -62,9 +62,9 @@ function EngineSubTab({
   }, []);
 
   useEffect(() => {
-    fetchWidgetToken()
-      .then((t) => setWidgetToken(t))
-      .catch(() => setWidgetToken(defaultConfig.engine_settings.widget_token));
+    fetchOverlayToken()
+      .then((t) => setOverlayToken(t))
+      .catch(() => setOverlayToken(defaultConfig.engine_settings.overlay_token));
     getKeychainStatus()
       .then((s) => setKeychainInfo(s))
       .catch(() => setKeychainInfo({ stored: ["twitch_token", "kick_token"], count: 2 }));
@@ -117,14 +117,14 @@ function EngineSubTab({
   const [scoreOpen, setScoreOpen] = useState(false);
   const [showPipelineAdvanced, setShowPipelineAdvanced] = useState(false);
 
-  const regenerateWidgetToken = () => {
+  const regenerateOverlayToken = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     const token = Array.from(
       { length: 22 },
       () => chars[Math.floor(Math.random() * chars.length)]
     ).join("");
-    setEngine("widget_token", token);
-    setWidgetToken(token);
+    setEngine("overlay_token", token);
+    setOverlayToken(token);
     toast("Overlay token regenerated — save to apply", "info");
   };
 
@@ -167,11 +167,11 @@ function EngineSubTab({
           <p className="text-white/60 text-xs flex-1">
             Overlay Token:{" "}
             <code className="bg-black/40 px-1.5 py-0.5 rounded font-mono text-white/90">
-              {widgetToken}
+              {overlayToken}
             </code>
           </p>
           <button
-            onClick={regenerateWidgetToken}
+            onClick={regenerateOverlayToken}
             className="text-[10px] px-2.5 py-1.5 rounded bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
           >
             ↻ Regenerate
@@ -829,8 +829,8 @@ function EngineSubTab({
                 type="number"
                 min={1}
                 max={60}
-                value={config.engine_settings.widget_poll_rate}
-                onChange={(e) => setEngine("widget_poll_rate", clampInt(e.target.value, 1, 60, 1))}
+                value={config.engine_settings.overlay_poll_rate}
+                onChange={(e) => setEngine("overlay_poll_rate", clampInt(e.target.value, 1, 60, 1))}
                 className="input-glass font-mono"
               />
             </div>
@@ -842,9 +842,9 @@ function EngineSubTab({
                 type="number"
                 min={0}
                 max={120}
-                value={config.engine_settings.widget_fade_timer}
+                value={config.engine_settings.overlay_fade_timer}
                 onChange={(e) =>
-                  setEngine("widget_fade_timer", clampInt(e.target.value, 0, 120, 0))
+                  setEngine("overlay_fade_timer", clampInt(e.target.value, 0, 120, 0))
                 }
                 className="input-glass font-mono"
               />
@@ -1020,14 +1020,14 @@ const defaultConfig: AppConfig = {
     sb_port: 8080,
     scan_interval: 15,
     grace_period: 0,
-    widget_poll_rate: 8,
+    overlay_poll_rate: 8,
     safe_mode: false,
     auto_push: false,
     platform_push_enabled: true,
-    widget_fade_timer: 15,
+    overlay_fade_timer: 15,
     strict_forge_mode: false,
     sb_action_name: "UpdateCategory",
-    widget_token: "",
+    overlay_token: "",
     blipy_pin: "0000",
     blipy_pairing_key: "",
     blipy_link_active: false,

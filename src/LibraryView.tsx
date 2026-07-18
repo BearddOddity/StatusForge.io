@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { ForgeDatabase, ForgeLibraryEntry, ToastType } from "@/types";
-import { fetchWidgetToken } from "@/hooks/useTauriApi";
+import { fetchOverlayToken } from "@/hooks/useTauriApi";
 import { Card, Btn } from "@/components/ui";
 import CarouselView from "@/components/CarouselView";
 import GridView from "@/components/GridView";
@@ -131,7 +131,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
 
   const load = useCallback(async () => {
     setLoading(true);
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       const [forgeRes, exiledRes, settingsRes] = await Promise.all([
         fetch("http://127.0.0.1:53735/api/forge-full", { headers: { "X-Forge-Token": token } }),
@@ -183,7 +183,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
     for (const key of ["cover_url", "logo_url"] as const) {
       const value = resolved[key];
       if (!value) continue;
-      const token = await fetchWidgetToken();
+      const token = await fetchOverlayToken();
       const res = await fetch("http://127.0.0.1:53735/api/resolve-cover", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Forge-Token": token },
@@ -203,7 +203,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   const saveEntry = async (updated: Partial<ForgeLibraryEntry>) => {
     const resolved = await resolveCoverFields(updated);
     if (!resolved) return;
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       await fetch("http://127.0.0.1:53735/list", {
         method: "POST",
@@ -218,7 +218,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   };
 
   const reinstate = async (proc: string) => {
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       await fetch("http://127.0.0.1:53735/unexile", {
         method: "POST",
@@ -234,7 +234,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
 
   const deleteExiled = async (proc: string) => {
     if (!confirm(`Permanently delete "${proc}" from the database?`)) return;
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       const metaRes = await fetch("http://127.0.0.1:53735/export-meta", {
         headers: { "X-Forge-Token": token },
@@ -263,7 +263,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   };
 
   const handleExile = async (title: string) => {
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       const metaRes = await fetch("http://127.0.0.1:53735/export-meta", {
         headers: { "X-Forge-Token": token },
@@ -289,7 +289,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   };
 
   const saveBaseMetadata = async (title: string, year: string, dev: string) => {
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     const payload: Record<string, string> = { title };
     if (year) payload["custom_release_year"] = year;
     if (dev) {
@@ -311,7 +311,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   ): Promise<ForgeLibraryEntry | null> => {
     try {
       await saveBaseMetadata(title, year, dev);
-      const token = await fetchWidgetToken();
+      const token = await fetchOverlayToken();
       const scanRes = await fetch("http://127.0.0.1:53735/api/scan-metadata", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Forge-Token": token },
@@ -325,7 +325,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   };
 
   const handleScanMetadata = async (title: string): Promise<ForgeLibraryEntry | null> => {
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       const scanRes = await fetch("http://127.0.0.1:53735/api/scan-metadata", {
         method: "POST",
