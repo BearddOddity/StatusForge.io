@@ -268,4 +268,4 @@ jobs:
       - name: Trigger download-page sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run update-download-page.yml --repo "${{ github.repository }}" --ref development_phase
+        run: gh workflow run update-download-page.yml --repo "${{ github.repository }}" --ref main
