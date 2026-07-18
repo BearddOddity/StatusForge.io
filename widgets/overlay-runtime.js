@@ -37,6 +37,15 @@
     if (!cover) return;
     cover.style.opacity = 0;
     setTimeout(() => {
+      // Explicitly reset every background property, not just the image —
+      // the offline fallback (if it ran first, e.g. StatusForge was slow
+      // to report the first real game) sets a small fixed backgroundSize/
+      // backgroundPosition/backgroundRepeat via inline style, which
+      // otherwise silently overrides the CSS class's "cover" sizing
+      // forever, shrinking every real cover into a letterboxed thumbnail.
+      cover.style.backgroundSize = "cover";
+      cover.style.backgroundPosition = "center";
+      cover.style.backgroundRepeat = "no-repeat";
       if (url) {
         cover.style.backgroundImage = "url(" + url + ")";
         cover.style.backgroundColor = "#111";
