@@ -71,11 +71,23 @@
       opts.ids || {}
     );
 
+    // The Overlay Generator's picker loads every overlay in an iframe with
+    // ?preview=1 so users can see what each style looks like — that's a
+    // style browser, not a live stream check, so it should never fade or
+    // hide itself based on the real fade timer / idle state the way an
+    // actual OBS source does.
+    const preview = new URLSearchParams(window.location.search).get("preview") === "1";
+
     let lastGame = "";
     let sessionInterval;
     let titleShownAt = 0;
     let startTime = 0;
     let pollRate = 3000;
+
+    if (preview) {
+      const w0 = document.getElementById(ids.root);
+      if (w0) w0.style.opacity = "1";
+    }
 
     function updateTimer() {
       if (!startTime) return;
@@ -132,16 +144,18 @@
             }
           }
 
-          // Re-checked every poll (not just on a title change) so a
-          // Settings change to the fade timer takes effect right away
-          // instead of waiting for the next game switch.
-          if (data.fade_timer > 0) {
+          if (preview) {
+            w.style.opacity = "1";
+          } else if (data.fade_timer > 0) {
+            // Re-checked every poll (not just on a title change) so a
+            // Settings change to the fade timer takes effect right away
+            // instead of waiting for the next game switch.
             const elapsed = (Date.now() - titleShownAt) / 1000;
             w.style.opacity = elapsed >= data.fade_timer ? "0" : "1";
           } else {
             w.style.opacity = "1";
           }
-        } else {
+        } else if (!preview) {
           w.style.opacity = "0";
           lastGame = "";
           clearInterval(sessionInterval);
@@ -150,7 +164,8 @@
       } catch (e) {}
     }
 
-    // Offline fallback
+    // Offline fallback — instant in preview mode so the picker never shows
+    // a blank gap while waiting on the normal 1.5s delay.
     setTimeout(function () {
       if (!lastGame) {
         lastGame = "__offline__";
@@ -170,7 +185,7 @@
           cover.style.backgroundColor = "#1a1a2e";
         }
       }
-    }, 1500);
+    }, preview ? 0 : 1500);
 
     initializeOverlay();
   }

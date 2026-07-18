@@ -884,7 +884,10 @@ export default function DashboardView({
                     <div className="relative w-full h-[220px] rounded-2xl overflow-hidden border border-white/10 bg-[#0a0a12] transition-all duration-200 group-hover:border-purple-500/50 group-hover:shadow-lg group-hover:shadow-purple-500/15">
                       {overlayToken ? (
                         <iframe
-                          src={`http://127.0.0.1:53735/forge-overlay/${overlayToken}/${o.file}`}
+                          // ?preview=1 tells the overlay to stay fully visible
+                          // regardless of the real fade timer / idle state —
+                          // this is a style picker, not a live stream check.
+                          src={`http://127.0.0.1:53735/forge-overlay/${overlayToken}/${o.file}?preview=1`}
                           title={`${o.label} preview`}
                           tabIndex={-1}
                           className="pointer-events-none absolute top-1/2 left-1/2 border-0"
@@ -937,7 +940,7 @@ export default function DashboardView({
                             {overlayToken ? (
                               <iframe
                                 key={o.id}
-                                src={`http://127.0.0.1:53735/forge-overlay/${overlayToken}/${o.file}`}
+                                src={`http://127.0.0.1:53735/forge-overlay/${overlayToken}/${o.file}?preview=1`}
                                 title={`${o.label} preview`}
                                 tabIndex={-1}
                                 className="pointer-events-none absolute top-1/2 left-1/2 border-0"
