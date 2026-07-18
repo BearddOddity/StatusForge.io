@@ -183,20 +183,22 @@ function App() {
   }, []);
 
   // Minimize to tray: intercept window close and hide instead when enabled.
+  // Cleanup awaits the same promise the setup started (rather than a separate
+  // `unlisten` variable) so a fast mount/unmount — e.g. StrictMode's dev-only
+  // double-invoke — can't run cleanup before the listener finishes
+  // registering, which would otherwise leak a permanent extra listener.
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    getCurrentWindow()
+    const unlistenPromise = getCurrentWindow()
       .onCloseRequested((event) => {
         if (loadSystemPrefs().minimizeToTray) {
           event.preventDefault();
           getCurrentWindow().hide();
         }
       })
-      .then((u) => {
-        unlisten = u;
-      })
-      .catch(() => {});
-    return () => unlisten?.();
+      .catch(() => undefined);
+    return () => {
+      unlistenPromise.then((u) => u?.());
+    };
   }, []);
 
   // Desktop notifications + custom webhook relay on engine events.

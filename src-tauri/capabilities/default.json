@@ -2,10 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "enables the default permissions",
-  "windows": [
-    "main",
-    "blipy"
-  ],
+  "windows": ["main", "blipy"],
   "permissions": [
     "core:default",
     "fs:default",
@@ -19,6 +16,7 @@
     "notification:default",
     "core:window:allow-hide",
     "core:window:allow-show",
-    "core:window:allow-set-focus"
+    "core:window:allow-set-focus",
+    "core:window:allow-destroy"
   ]
 }
