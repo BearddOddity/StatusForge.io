@@ -30,6 +30,11 @@ export interface SystemPrefs {
   // First-launch setup wizard. Set once it's finished/skipped; a "Replay
   // Setup Guide" button in Settings > System flips it back to false.
   onboardingComplete: boolean;
+  // Dashboard's "Struggling to get set up?" banner. Defaults to showing (a
+  // fresh install has no stored prefs, so this key is absent and falls back
+  // to the default below) and stays dismissed permanently once closed — it
+  // only comes back on an actual fresh install, not a page reload.
+  setupBannerDismissed: boolean;
 }
 
 export const defaultSystemPrefs: SystemPrefs = {
@@ -51,6 +56,7 @@ export const defaultSystemPrefs: SystemPrefs = {
   showDevTools: false,
   showAccessTokens: false,
   onboardingComplete: false,
+  setupBannerDismissed: false,
 };
 
 export const SYSTEM_PREFS_KEY = "statusforge_system_prefs";

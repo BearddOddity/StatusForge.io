@@ -11,6 +11,7 @@ import {
 import { Card, Btn, FieldSection } from "@/components/ui";
 import { Toggle } from "@/components/SettingsComponents";
 import { resolveImageSrc } from "@/utils/imageSrc";
+import { loadSystemPrefs, saveSystemPrefs } from "@/systemPrefs";
 
 const idleCover = "/just%20chatting.png";
 const offlineCover = "/offline.svg";
@@ -177,7 +178,13 @@ export default function DashboardView({
   onOverlayPickerOpened?: () => void;
   onStartOnboarding: () => void;
 }) {
-  const [setupHelpDismissed, setSetupHelpDismissed] = useState(false);
+  const [setupHelpDismissed, setSetupHelpDismissed] = useState(
+    () => loadSystemPrefs().setupBannerDismissed
+  );
+  const dismissSetupHelp = () => {
+    setSetupHelpDismissed(true);
+    saveSystemPrefs({ ...loadSystemPrefs(), setupBannerDismissed: true });
+  };
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideText, setOverrideText] = useState("");
   const [overrideSubmitting, setOverrideSubmitting] = useState(false);
@@ -455,7 +462,7 @@ export default function DashboardView({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => setSetupHelpDismissed(true)}
+              onClick={dismissSetupHelp}
               className="text-[11px] text-white/40 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none px-2 py-1"
             >
               Dismiss
