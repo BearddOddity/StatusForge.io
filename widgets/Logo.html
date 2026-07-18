@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>StatusForge Logo Widget</title>
+<title>StatusForge Logo Overlay</title>
 <style>
   body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; display: flex; justify-content: center; align-items: center; -webkit-font-smoothing: antialiased; }
   .widget-container { width: 560px; height: 280px; display: flex; justify-content: center; align-items: center; position: relative; opacity: 0; transition: opacity 1s ease-in-out; }
@@ -49,7 +49,8 @@
 
 <script>
     let lastGame = "";
-    let widgetFadeTimer = null;
+    let titleShownAt = 0;
+    let hasLogo = false;
     let pollRate = 3000;
 
     // This page is only ever loaded via /forge-widget/<token>/Logo.html, so
@@ -83,32 +84,34 @@
             if (data.is_playing) {
                 if (data.game_title !== lastGame) {
                     lastGame = data.game_title;
+                    titleShownAt = Date.now();
+                    hasLogo = !!data.logo_url;
 
-                    if (widgetFadeTimer) clearTimeout(widgetFadeTimer);
-
-                    if (data.logo_url) {
+                    if (hasLogo) {
                         logo.classList.remove("visible", "offline-icon");
                         setTimeout(() => {
                             logo.src = data.logo_url;
                             logo.classList.add("visible");
                         }, 300);
-                        w.style.opacity = "1";
-                    } else {
-                        // No logo for this game — nothing sensible to show,
-                        // stay hidden rather than an empty/broken image.
-                        w.style.opacity = "0";
                     }
+                }
 
-                    if (data.fade_timer > 0) {
-                        widgetFadeTimer = setTimeout(() => {
-                            w.style.opacity = "0";
-                        }, data.fade_timer * 1000);
-                    }
+                if (!hasLogo) {
+                    // No logo for this game — nothing sensible to show,
+                    // stay hidden rather than an empty/broken image.
+                    w.style.opacity = "0";
+                } else if (data.fade_timer > 0) {
+                    // Re-checked every poll (not just on a title change) so
+                    // a Settings change to the fade timer takes effect right
+                    // away instead of waiting for the next game switch.
+                    const elapsed = (Date.now() - titleShownAt) / 1000;
+                    w.style.opacity = elapsed >= data.fade_timer ? "0" : "1";
+                } else {
+                    w.style.opacity = "1";
                 }
             } else {
                 w.style.opacity = "0";
                 lastGame = "";
-                if (widgetFadeTimer) clearTimeout(widgetFadeTimer);
             }
         } catch(e) {}
     }

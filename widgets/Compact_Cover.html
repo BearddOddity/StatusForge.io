@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>BearddOddity Compact Cover Widget</title>
+<title>BearddOddity Compact Cover Overlay</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=swap');
   body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; display: flex; justify-content: center; align-items: center; -webkit-font-smoothing: antialiased; }
@@ -54,7 +54,7 @@
 <script>
     let lastGame = "";
     let sessionInterval;
-    let widgetFadeTimer = null;
+    let titleShownAt = 0;
     let startTime = 0;
     let pollRate = 3000;
 
@@ -91,10 +91,7 @@
 
                 if (data.game_title !== lastGame) {
                     lastGame = data.game_title;
-
-                    if (widgetFadeTimer) clearTimeout(widgetFadeTimer);
-
-                    w.style.opacity = "1";
+                    titleShownAt = Date.now();
 
                     smoothTextUpdate("t", data.game_title);
                     smoothTextUpdate("r", data.release_date || "UNKNOWN");
@@ -106,19 +103,22 @@
                     } else {
                         applyCoverArt('');
                     }
+                }
 
-                    if (data.fade_timer > 0) {
-                        widgetFadeTimer = setTimeout(() => {
-                            w.style.opacity = "0";
-                        }, data.fade_timer * 1000);
-                    }
+                // Re-checked every poll (not just on a title change) so a
+                // Settings change to the fade timer takes effect right away
+                // instead of waiting for the next game switch.
+                if (data.fade_timer > 0) {
+                    const elapsed = (Date.now() - titleShownAt) / 1000;
+                    w.style.opacity = elapsed >= data.fade_timer ? "0" : "1";
+                } else {
+                    w.style.opacity = "1";
                 }
             } else {
                 w.style.opacity = "0";
                 lastGame = "";
                 clearInterval(sessionInterval);
                 sessionInterval = null;
-                if (widgetFadeTimer) clearTimeout(widgetFadeTimer);
             }
         } catch(e) {}
     }
