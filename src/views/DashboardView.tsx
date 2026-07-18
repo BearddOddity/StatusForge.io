@@ -161,12 +161,19 @@ export default function DashboardView({
   toast,
   onNavigate,
   onRefresh,
+  openOverlayPicker,
+  onOverlayPickerOpened,
 }: {
   engineStatus: EngineStatus;
   wsConnected: boolean;
   toast: (msg: string, type?: ToastType) => void;
   onNavigate: (view: ViewId) => void;
   onRefresh: () => Promise<void>;
+  // Lets a caller outside this view (the onboarding wizard's "Browse other
+  // overlay styles" link) open the picker modal on arrival instead of
+  // silently switching views with no way to actually reach it.
+  openOverlayPicker?: boolean;
+  onOverlayPickerOpened?: () => void;
 }) {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideText, setOverrideText] = useState("");
@@ -261,6 +268,13 @@ export default function DashboardView({
   const [overlayIndex, setOverlayIndex] = useState(0);
   const [overlayViewMode, setOverlayViewMode] = useState<"grid" | "carousel">("grid");
   const overlayPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (openOverlayPicker) {
+      setOverlayPickerOpen(true);
+      onOverlayPickerOpened?.();
+    }
+  }, [openOverlayPicker, onOverlayPickerOpened]);
 
   const [overlayToken, setOverlayToken] = useState("");
   useEffect(() => {

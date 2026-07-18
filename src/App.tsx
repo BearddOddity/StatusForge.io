@@ -61,6 +61,20 @@ function App() {
     setShowOnboarding(false);
   }, []);
 
+  // "Browse other overlay styles in the Dashboard" (onboarding's Overlay
+  // step) used to just switch views while the wizard stayed rendered on top
+  // of everything, so the Dashboard — and its overlay picker — was there but
+  // completely unreachable. Hiding the wizard (without marking onboarding
+  // complete) and auto-opening the picker on arrival makes the link actually
+  // do what it says; a small pill brings the wizard back afterward.
+  const [onboardingHidden, setOnboardingHidden] = useState(false);
+  const [openOverlayPickerSignal, setOpenOverlayPickerSignal] = useState(false);
+  const browseOverlaysFromOnboarding = useCallback(() => {
+    setOnboardingHidden(true);
+    setCurrentView("dashboard");
+    setOpenOverlayPickerSignal(true);
+  }, []);
+
   const [engineStatus, setEngineStatus] = useState<EngineStatus>({
     running: false,
     game_title: "Initializing...",
@@ -133,13 +147,15 @@ function App() {
           toast={toast}
           onNavigate={setCurrentView}
           onRefresh={fetchStatus}
+          openOverlayPicker={openOverlayPickerSignal}
+          onOverlayPickerOpened={() => setOpenOverlayPickerSignal(false)}
         />
       ),
       settings: <SettingsView engineStatus={engineStatus} onRefresh={fetchStatus} toast={toast} />,
       library: <LibraryView toast={toast} />,
       dev: <DevView />,
     }),
-    [engineStatus, wsConnected, toast, fetchStatus]
+    [engineStatus, wsConnected, toast, fetchStatus, openOverlayPickerSignal]
   );
 
   // Sidebar collapse state lives in the theme prefs ("Sidebar Icons Only" in
@@ -333,7 +349,20 @@ function App() {
         {views[currentView]}
       </main>
       {showOnboarding && (
-        <OnboardingWizard onFinish={finishOnboarding} onNavigate={setCurrentView} />
+        <OnboardingWizard
+          onFinish={finishOnboarding}
+          onBrowseOverlays={browseOverlaysFromOnboarding}
+          hidden={onboardingHidden}
+        />
+      )}
+      {showOnboarding && onboardingHidden && (
+        <button
+          onClick={() => setOnboardingHidden(false)}
+          className="fixed bottom-5 right-5 z-[290] px-4 py-2.5 rounded-full text-xs font-semibold text-white cursor-pointer shadow-lg transition-transform hover:scale-105"
+          style={{ background: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)" }}
+        >
+          ← Resume Setup Guide
+        </button>
       )}
     </div>
   );

@@ -1,14 +1,18 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import type { ViewId, AppConfig, EngineStatus } from "@/types";
+import type { AppConfig, EngineStatus } from "@/types";
 import { fetchConfig, saveConfig, fetchOverlayToken, tauriApi } from "@/hooks/useTauriApi";
 import OAuthConnectModal from "@/components/OAuthConnectModal";
 import { loadSystemPrefs, saveSystemPrefs } from "@/systemPrefs";
 
 interface Props {
   onFinish: () => void;
-  onNavigate: (view: ViewId) => void;
+  onBrowseOverlays: () => void;
+  // Hides the wizard's rendered output without unmounting it, so its `step`
+  // (and everything else in local state) survives a trip to the Dashboard to
+  // browse overlay styles and back via the "Resume Setup Guide" pill.
+  hidden?: boolean;
 }
 
 type Platform = "twitch" | "kick";
@@ -22,6 +26,7 @@ const PLATFORM_INFO: Record<
     connectUrl: string;
     devConsoleUrl: string;
     setupHint: string;
+    clientTypeHint: string;
     redirectUri: string;
     clientIdKey: keyof AppConfig["broadcaster"];
     clientSecretKey: keyof AppConfig["broadcaster"];
@@ -37,6 +42,7 @@ const PLATFORM_INFO: Record<
     devConsoleUrl: "https://dev.twitch.tv/console/apps/create",
     setupHint:
       'Give the app any name, set Category to "Application Integration," paste the redirect URL below, then hit Create. Open the app and copy the Client ID — click "New Secret" to generate the Client Secret.',
+    clientTypeHint: 'When asked for OAuth Client Type, pick "Confidential" — not Public.',
     redirectUri: "https://127.0.0.1:53735/oauth/callback/twitch",
     clientIdKey: "twitch_client",
     clientSecretKey: "twitch_secret",
@@ -51,6 +57,7 @@ const PLATFORM_INFO: Record<
     devConsoleUrl: "https://kick.com/settings/developer",
     setupHint:
       'Click "Create Application," give it any name, and paste the redirect URL below. Once it\'s created, copy the Client ID and Client Secret it shows you.',
+    clientTypeHint: 'When asked for Client Type, pick "Confidential" — not Public.',
     redirectUri: "http://localhost:53735/oauth/callback/kick",
     clientIdKey: "kick_client",
     clientSecretKey: "kick_secret",
@@ -71,7 +78,7 @@ const STEP_LABELS = [
 ];
 const STEAMGRIDDB_API_URL = "https://www.steamgriddb.com/profile/preferences/api";
 
-export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
+export default function OnboardingWizard({ onFinish, onBrowseOverlays, hidden }: Props) {
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState<AppConfig | null>(null);
   // Both platforms are set up independently on the same screen — this only
@@ -88,6 +95,7 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
   const [sgdbSaved, setSgdbSaved] = useState(false);
   const [minimizeToTray, setMinimizeToTray] = useState(() => loadSystemPrefs().minimizeToTray);
   const [hardwareAccel, setHardwareAccel] = useState(() => loadSystemPrefs().hardwareAccel);
+  const [startingEngine, setStartingEngine] = useState(false);
 
   useEffect(() => {
     fetchConfig().then(setConfig);
@@ -191,8 +199,23 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
     saveSystemPrefs({ ...loadSystemPrefs(), hardwareAccel: accel });
   };
 
+  const startEngine = async () => {
+    setStartingEngine(true);
+    try {
+      await tauriApi("start_engine");
+      const res = await tauriApi("get_engine_status");
+      if (res && typeof res === "object" && !("error" in res)) {
+        setEngineStatus(res as EngineStatus);
+      }
+    } finally {
+      setStartingEngine(false);
+    }
+  };
+
   const isLast = step === STEP_LABELS.length - 1;
   const detected = engineStatus?.is_playing && engineStatus.game_title;
+
+  if (hidden) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[300] flex items-center justify-center">
@@ -318,6 +341,9 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
                                   <p className="text-white/35 text-[10.5px] leading-relaxed mt-1.5">
                                     {i.setupHint}
                                   </p>
+                                  <p className="text-amber-300/70 text-[10.5px] leading-relaxed mt-1.5">
+                                    ⚠ {i.clientTypeHint}
+                                  </p>
                                 </div>
 
                                 <div className="mb-3">
@@ -421,9 +447,7 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
                 </button>
 
                 <button
-                  onClick={() => {
-                    onNavigate("dashboard");
-                  }}
+                  onClick={onBrowseOverlays}
                   className="text-[11px] text-white/40 hover:text-white/60 transition-colors cursor-pointer mb-5"
                 >
                   Browse other overlay styles in the Dashboard →
@@ -544,18 +568,38 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
                         </div>
                       </div>
                     </>
-                  ) : (
+                  ) : engineStatus?.running ? (
                     <>
                       <span className="w-2 h-2 rounded-full bg-white/30 animate-pulse shrink-0" />
                       <span className="text-white/50 text-[12px]">
                         Watching for a game — nothing detected yet.
                       </span>
                     </>
+                  ) : (
+                    <>
+                      <div className="text-left min-w-0 flex-1">
+                        <div className="text-[10px] uppercase tracking-wider text-amber-400/70 font-semibold">
+                          Engine offline
+                        </div>
+                        <div className="text-white/50 text-[12px]">
+                          It doesn't start automatically yet — turn it on to try detection now.
+                        </div>
+                      </div>
+                      <button
+                        onClick={startEngine}
+                        disabled={startingEngine}
+                        className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer text-white disabled:opacity-50 disabled:cursor-default"
+                        style={{ background: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)" }}
+                      >
+                        {startingEngine ? "Starting…" : "Start Engine"}
+                      </button>
+                    </>
                   )}
                 </div>
 
                 <p className="text-white/25 text-[11px] mb-5">
-                  If it ever guesses wrong, fix it instantly from the Dashboard.
+                  If it ever guesses wrong, fix it instantly from the Dashboard. Want it running
+                  every launch? Turn on Auto-start Engine in Settings.
                 </p>
 
                 <button
