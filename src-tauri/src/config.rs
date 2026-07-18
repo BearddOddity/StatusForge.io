@@ -380,8 +380,6 @@ pub struct EngineStatus {
     pub release_date: String,
     #[serde(default)]
     pub cover_url: String,
-    #[serde(default)]
-    pub widget_token: String,
 }
 
 // ============================================================================

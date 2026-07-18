@@ -117,15 +117,18 @@ function EngineSubTab({
   const [scoreOpen, setScoreOpen] = useState(false);
   const [showPipelineAdvanced, setShowPipelineAdvanced] = useState(false);
 
-  const regenerateOverlayToken = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    const token = Array.from(
-      { length: 22 },
-      () => chars[Math.floor(Math.random() * chars.length)]
-    ).join("");
-    setEngine("overlay_token", token);
-    setOverlayToken(token);
-    toast("Overlay token regenerated — save to apply", "info");
+  const regenerateOverlayToken = async () => {
+    // Delegates to the backend (cryptographically-random bytes, saved
+    // immediately) rather than generating one client-side — a token that
+    // gates every overlay URL shouldn't be picked with Math.random().
+    const result = await tauriApi("rotate_overlay_token");
+    if (typeof result !== "string") {
+      toast("Failed to regenerate overlay token", "error");
+      return;
+    }
+    setOverlayToken(result);
+    setEngine("overlay_token", result);
+    toast("Overlay token regenerated", "success");
   };
 
   return (
