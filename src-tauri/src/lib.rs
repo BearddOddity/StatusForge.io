@@ -308,7 +308,6 @@ fn get_engine_status(state: tauri::State<Arc<EngineState>>) -> Result<EngineStat
         publisher: s("publisher"),
         release_date: s("release_date"),
         cover_url: s("cover_url"),
-        ..Default::default()
     })
 }
 
