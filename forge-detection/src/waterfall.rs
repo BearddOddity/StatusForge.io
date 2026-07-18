@@ -23,9 +23,17 @@ pub type LogFn = Box<dyn Fn(&str, &str, u64) + Send + Sync>;
 
 const SYSTEM_EXILES: &[&str] = &[
     "explorer.exe",
+    // Web browsers — we don't detect websites, only real game processes.
     "chrome.exe",
     "msedge.exe",
     "firefox.exe",
+    "brave.exe",
+    "opera.exe",
+    "opera_gx.exe",
+    "vivaldi.exe",
+    "iexplore.exe",
+    "chromium.exe",
+    "safari.exe",
     "discord.exe",
     "obs64.exe",
     "obs32.exe",
@@ -351,6 +359,9 @@ impl GameDetector {
             " - firefox",
             " - edge",
             " - youtube",
+            " - brave",
+            " - opera",
+            " - vivaldi",
         ]
         .iter()
         .any(|s| title_lower.contains(s))
@@ -1066,6 +1077,44 @@ mod tests {
                 &proc("steam.exe", "c:\\steam\\steam.exe", 900)
             )
             .is_none());
+    }
+
+    #[test]
+    fn web_browsers_are_never_detected_as_games() {
+        let s = scout_with(&[], &[], false);
+        for exe in [
+            "brave.exe",
+            "opera.exe",
+            "opera_gx.exe",
+            "vivaldi.exe",
+            "iexplore.exe",
+            "chromium.exe",
+        ] {
+            let path = format!("d:\\browsers\\{}", exe);
+            assert!(
+                s.evaluate(&win("Some Game Title", true), &proc(exe, &path, 900))
+                    .is_none(),
+                "{} should never be detected as a game",
+                exe
+            );
+        }
+    }
+
+    #[test]
+    fn brave_and_other_browser_titles_are_killed() {
+        let s = scout_with(&[], &[], false);
+        for suffix in [" - Brave", " - Opera", " - Vivaldi"] {
+            let title = format!("Some Website Tab{}", suffix);
+            assert!(
+                s.evaluate(
+                    &win(&title, true),
+                    &proc("game.exe", "d:\\g\\game.exe", 900),
+                )
+                .is_none(),
+                "title ending in \"{}\" should be filtered as a browser title",
+                suffix
+            );
+        }
     }
 
     #[test]
