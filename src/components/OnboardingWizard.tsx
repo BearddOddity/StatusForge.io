@@ -58,10 +58,14 @@ const STEP_LABELS = ["Welcome", "Connect", "Overlay", "Detection", "Done"];
 export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [platform, setPlatform] = useState<Platform>("twitch");
+  // Both platforms are set up independently on the same screen — this only
+  // tracks which one's form is expanded/being connected right now, not an
+  // exclusive choice of platform.
+  const [expanded, setExpanded] = useState<Platform | null>("twitch");
+  const [oauthPlatform, setOauthPlatform] = useState<Platform>("twitch");
   const [saving, setSaving] = useState(false);
   const [oauthOpen, setOauthOpen] = useState(false);
-  const [copiedRedirect, setCopiedRedirect] = useState(false);
+  const [copiedRedirect, setCopiedRedirect] = useState<Platform | null>(null);
   const [overlayToken, setOverlayToken] = useState("");
   const [overlayCopied, setOverlayCopied] = useState(false);
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
@@ -96,11 +100,14 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
     }
   }, [step, overlayToken]);
 
-  const info = PLATFORM_INFO[platform];
   const bc = config?.broadcaster;
-  const isConnected = !!(bc && (bc[info.tokenKey] || bc[info.refreshKey]));
-  const clientId = (bc?.[info.clientIdKey] as string) || "";
-  const clientSecret = (bc?.[info.clientSecretKey] as string) || "";
+  const isConnectedTo = (p: Platform) => {
+    const i = PLATFORM_INFO[p];
+    return !!(bc && (bc[i.tokenKey] || bc[i.refreshKey]));
+  };
+  const twitchConnected = isConnectedTo("twitch");
+  const kickConnected = isConnectedTo("kick");
+  const anyConnected = twitchConnected || kickConnected;
 
   const setField = (key: string, value: string) => {
     setConfig((prev) =>
@@ -108,7 +115,7 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
     );
   };
 
-  const persistAndConnect = async () => {
+  const persistAndConnect = async (p: Platform) => {
     if (!config) return;
     setSaving(true);
     try {
@@ -116,6 +123,7 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
     } finally {
       setSaving(false);
     }
+    setOauthPlatform(p);
     setOauthOpen(true);
   };
 
@@ -123,10 +131,10 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
     fetchConfig().then(setConfig);
   };
 
-  const copyRedirect = () => {
-    navigator.clipboard?.writeText(info.redirectUri);
-    setCopiedRedirect(true);
-    setTimeout(() => setCopiedRedirect(false), 1500);
+  const copyRedirect = (p: Platform) => {
+    navigator.clipboard?.writeText(PLATFORM_INFO[p].redirectUri);
+    setCopiedRedirect(p);
+    setTimeout(() => setCopiedRedirect(null), 1500);
   };
 
   const copyOverlayUrl = () => {
@@ -193,120 +201,146 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
               </>
             )}
 
-            {/* ── Step 1: Connect a platform ──────────────────────────── */}
+            {/* ── Step 1: Connect platforms ───────────────────────────── */}
             {step === 1 && (
               <>
                 <div className="text-4xl mb-4">🔗</div>
-                <h3 className="text-white font-bold text-lg mb-2">Connect Twitch or Kick</h3>
+                <h3 className="text-white font-bold text-lg mb-2">Connect Twitch and Kick</h3>
                 <p className="text-white/50 text-[13px] leading-relaxed mb-5 max-w-[380px] mx-auto">
-                  This is the one step that really matters — without it, StatusForge has nothing to
-                  update.
+                  Set up either one, or both — StatusForge updates every platform you connect at the
+                  same time.
                 </p>
 
-                <div className="flex w-full mb-4 rounded-lg bg-white/[0.04] border border-white/10 p-0.5">
-                  {(["twitch", "kick"] as Platform[]).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPlatform(p)}
-                      className={`flex-1 text-[11px] font-semibold py-1.5 rounded-md transition-all cursor-pointer ${
-                        platform === p
-                          ? "bg-white/10 text-white"
-                          : "text-white/40 hover:text-white/70"
-                      }`}
-                    >
-                      {PLATFORM_INFO[p].label}
-                    </button>
-                  ))}
+                <div className="flex flex-col gap-2.5 w-full mb-5">
+                  {(["twitch", "kick"] as Platform[]).map((p) => {
+                    const i = PLATFORM_INFO[p];
+                    const connected = isConnectedTo(p);
+                    const clientId = (bc?.[i.clientIdKey] as string) || "";
+                    const clientSecret = (bc?.[i.clientSecretKey] as string) || "";
+                    const isExpanded = expanded === p;
+
+                    return (
+                      <div
+                        key={p}
+                        className="w-full rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden"
+                      >
+                        <button
+                          onClick={() => setExpanded(isExpanded ? null : p)}
+                          className="w-full flex items-center justify-between gap-2.5 px-4 py-3 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{
+                                background: connected ? "#34d399" : "rgba(255,255,255,0.25)",
+                              }}
+                            />
+                            <span className="text-white text-[13px] font-semibold">{i.label}</span>
+                            {connected && (
+                              <span className="text-emerald-400 text-[10px] font-medium uppercase tracking-wide">
+                                Connected
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-white/30 text-[11px] select-none">
+                            {isExpanded ? "Hide ▲" : connected ? "Manage ▾" : "Set up ▾"}
+                          </span>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="px-4 pb-4 text-left">
+                            {connected ? (
+                              <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                                <span className="text-emerald-400 text-sm">✓</span>
+                                <span className="text-emerald-300 text-[11px] font-medium">
+                                  {i.label} is connected and ready to update.
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="mb-3">
+                                  <span className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
+                                    1. Register an app on {i.label}
+                                  </span>
+                                  <button
+                                    onClick={() => openUrl(i.devConsoleUrl).catch(() => {})}
+                                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-semibold cursor-pointer border border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white transition-all"
+                                  >
+                                    Open {i.label} Developer Console ↗
+                                  </button>
+                                </div>
+
+                                <div className="mb-3">
+                                  <span className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
+                                    2. Set its OAuth Redirect URL to
+                                  </span>
+                                  <button
+                                    onClick={() => copyRedirect(p)}
+                                    className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-black/40 border border-white/10 cursor-pointer hover:border-white/20 transition-all"
+                                  >
+                                    <code className="text-[10px] text-white/70 font-mono truncate">
+                                      {i.redirectUri}
+                                    </code>
+                                    <span className="text-[10px] text-white/40 shrink-0">
+                                      {copiedRedirect === p ? "Copied ✓" : "Copy"}
+                                    </span>
+                                  </button>
+                                </div>
+
+                                <div className="mb-3">
+                                  <span className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
+                                    3. Paste its Client ID and Secret
+                                  </span>
+                                  <div className="flex flex-col gap-2">
+                                    <input
+                                      value={clientId}
+                                      onChange={(e) => setField(i.clientIdKey, e.target.value)}
+                                      placeholder="Client ID"
+                                      className="input-glass"
+                                    />
+                                    <input
+                                      type="password"
+                                      value={clientSecret}
+                                      onChange={(e) => setField(i.clientSecretKey, e.target.value)}
+                                      placeholder="Client Secret"
+                                      className="input-glass"
+                                    />
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => persistAndConnect(p)}
+                                  disabled={!clientId.trim() || !clientSecret.trim() || saving}
+                                  className="w-full py-2 rounded-lg text-[11px] font-semibold transition-all cursor-pointer text-white disabled:opacity-40 disabled:cursor-default"
+                                  style={{ background: i.gradient }}
+                                >
+                                  {saving ? "Saving…" : `Connect ${i.label}`}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {isConnected ? (
-                  <div className="w-full text-left">
-                    <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
-                      <span className="text-emerald-400 text-base">✓</span>
-                      <span className="text-emerald-300 text-[12px] font-medium">
-                        {info.label} is connected
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full text-left mb-4">
-                    <div className="mb-3">
-                      <span className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
-                        1. Register an app on {info.label}
-                      </span>
-                      <button
-                        onClick={() => openUrl(info.devConsoleUrl).catch(() => {})}
-                        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-semibold cursor-pointer border border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white transition-all"
-                      >
-                        Open {info.label} Developer Console ↗
-                      </button>
-                    </div>
-
-                    <div className="mb-3">
-                      <span className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
-                        2. Set its OAuth Redirect URL to
-                      </span>
-                      <button
-                        onClick={copyRedirect}
-                        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-black/40 border border-white/10 cursor-pointer hover:border-white/20 transition-all"
-                      >
-                        <code className="text-[10px] text-white/70 font-mono truncate">
-                          {info.redirectUri}
-                        </code>
-                        <span className="text-[10px] text-white/40 shrink-0">
-                          {copiedRedirect ? "Copied ✓" : "Copy"}
-                        </span>
-                      </button>
-                    </div>
-
-                    <div className="mb-1">
-                      <span className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
-                        3. Paste its Client ID and Secret
-                      </span>
-                      <div className="flex flex-col gap-2">
-                        <input
-                          value={clientId}
-                          onChange={(e) => setField(info.clientIdKey, e.target.value)}
-                          placeholder="Client ID"
-                          className="input-glass"
-                        />
-                        <input
-                          type="password"
-                          value={clientSecret}
-                          onChange={(e) => setField(info.clientSecretKey, e.target.value)}
-                          placeholder="Client Secret"
-                          className="input-glass"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 <div className="flex flex-col gap-2">
-                  {isConnected ? (
-                    <button
-                      onClick={() => setStep(2)}
-                      className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-white"
-                      style={{ background: info.gradient }}
-                    >
-                      Continue
-                    </button>
-                  ) : (
-                    <button
-                      onClick={persistAndConnect}
-                      disabled={!clientId.trim() || !clientSecret.trim() || saving}
-                      className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-white disabled:opacity-40 disabled:cursor-default"
-                      style={{ background: info.gradient }}
-                    >
-                      {saving ? "Saving…" : `Connect ${info.label}`}
-                    </button>
-                  )}
                   <button
                     onClick={() => setStep(2)}
-                    className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/70"
+                    className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-white"
+                    style={{ background: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)" }}
                   >
-                    {isConnected ? "Skip" : "I'll do this later"}
+                    Continue
                   </button>
+                  {!anyConnected && (
+                    <button
+                      onClick={() => setStep(2)}
+                      className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/70"
+                    >
+                      I'll do this later
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -451,8 +485,8 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
         <OAuthConnectModal
           open={oauthOpen}
           onClose={() => setOauthOpen(false)}
-          platform={platform}
-          connectUrl={info.connectUrl}
+          platform={oauthPlatform}
+          connectUrl={PLATFORM_INFO[oauthPlatform].connectUrl}
           onSuccess={onOAuthSuccess}
         />
       )}
