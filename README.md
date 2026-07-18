@@ -1,5 +1,7 @@
 # StatusForge.io
 
+[Website](https://bearddoddity.github.io/statusforge/) · [Download](https://bearddoddity.github.io/statusforge/download.html)
+
 StatusForge watches what game you're playing and keeps your stream's category up to date automatically — no more forgetting to switch your Twitch/Kick category, no more doing it by hand between rounds.
 
 ## What it does
