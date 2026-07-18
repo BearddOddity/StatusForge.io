@@ -65,7 +65,7 @@ const overlays = [
     file: "Compact_Cover.html",
     icon: "🎵",
     width: 620,
-    height: 200,
+    height: 230,
   },
 ];
 

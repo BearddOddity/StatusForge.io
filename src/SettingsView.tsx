@@ -840,11 +840,11 @@ function EngineSubTab({
               </label>
               <input
                 type="number"
-                min={1}
-                max={300}
+                min={0}
+                max={120}
                 value={config.engine_settings.widget_fade_timer}
                 onChange={(e) =>
-                  setEngine("widget_fade_timer", clampInt(e.target.value, 1, 300, 1))
+                  setEngine("widget_fade_timer", clampInt(e.target.value, 0, 120, 0))
                 }
                 className="input-glass font-mono"
               />
