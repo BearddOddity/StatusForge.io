@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { type ExiledApp } from "@/types";
 import { Btn, MetadataField, CoverImage, FieldSection } from "./ui";
+import { resolveImageSrc } from "@/utils/imageSrc";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // OverlayMetadataPanel — right-slide metadata editor
@@ -20,8 +21,12 @@ interface OverlayMetadataPanelProps {
         steam_id: string;
         igdb_id: string;
         rawg_id: string;
+        sgdb_id: string;
+        gog_id: string;
+        thegamesdb_id: string;
         twitch_id: string;
         kick_id: string;
+        aliases?: { name: string }[];
       }
     | undefined;
   isOpen: boolean;
@@ -48,14 +53,28 @@ const FIELD_SECTIONS = [
         placeholder: "e.g. FalloutNV.exe",
         hint: "The exact .exe the scanner should match to this title (comma-separate more than one, full paths are fine too — only the file name is used). Fixes a game that's detected under the wrong name or not detected at all.",
       },
+      {
+        key: "aliases",
+        label: "Detection Aliases",
+        placeholder: "e.g. DS3, Dark Souls 3",
+        hint: "Other names that should resolve to this game — abbreviations, other languages, odd window titles. Comma-separate multiple; matching ignores case.",
+      },
     ],
   },
   {
     title: "Cover",
     icon: "🖼️",
     fields: [
-      { key: "cover_url", label: "Cover URL" },
-      { key: "logo_url", label: "Logo URL" },
+      {
+        key: "cover_url",
+        label: "Cover URL",
+        hint: "A direct image link, a local file path, or a SteamGridDB page link (e.g. steamgriddb.com/grid/12345).",
+      },
+      {
+        key: "logo_url",
+        label: "Logo URL",
+        hint: "A direct image link, a local file path, or a SteamGridDB page link (e.g. steamgriddb.com/logo/12345).",
+      },
     ],
   },
   {
@@ -65,6 +84,9 @@ const FIELD_SECTIONS = [
       { key: "steam_id", label: "Steam" },
       { key: "igdb_id", label: "IGDB" },
       { key: "rawg_id", label: "RAWG" },
+      { key: "sgdb_id", label: "SteamGridDB" },
+      { key: "gog_id", label: "GOG" },
+      { key: "thegamesdb_id", label: "TheGamesDB" },
       { key: "twitch_id", label: "Twitch" },
       { key: "kick_id", label: "Kick" },
     ],
@@ -95,9 +117,13 @@ export function OverlayMetadataPanel({
         cover_url: entry.cover_url || "",
         logo_url: entry.logo_url || "",
         executables: entry.executables || "",
+        aliases: (entry.aliases || []).map((a) => a.name).join(", "),
         steam_id: entry.steam_id || "",
         igdb_id: entry.igdb_id || "",
         rawg_id: entry.rawg_id || "",
+        sgdb_id: entry.sgdb_id || "",
+        gog_id: entry.gog_id || "",
+        thegamesdb_id: entry.thegamesdb_id || "",
         twitch_id: entry.twitch_id || "",
         kick_id: entry.kick_id || "",
       });
@@ -173,7 +199,7 @@ export function OverlayMetadataPanel({
               <div className="w-full aspect-[2/3] rounded-2xl overflow-hidden bg-black/30 border border-white/10 shadow-lg shadow-black/30 hover:border-white/15 transition-all flex items-center justify-center p-4">
                 {editData.logo_url ? (
                   <img
-                    src={editData.logo_url}
+                    src={resolveImageSrc(editData.logo_url)}
                     alt={`${editData.title || ""} logo`}
                     className="max-w-full max-h-full object-contain"
                     onError={(e) => {
@@ -264,7 +290,10 @@ export function OverlayMetadataPanel({
                       }
                       onSave={(val) => onSave({ title: editData.title, [field.key]: val })}
                       onSearch={
-                        field.key !== "title" && field.key !== "executables" && entry.title
+                        field.key !== "title" &&
+                        field.key !== "executables" &&
+                        field.key !== "aliases" &&
+                        entry.title
                           ? () => runScan(field.key)
                           : undefined
                       }
@@ -380,10 +409,17 @@ interface AddGameOverlayPanelProps {
     steam_id: string;
     igdb_id: string;
     rawg_id: string;
+    sgdb_id: string;
+    gog_id: string;
+    thegamesdb_id: string;
     twitch_id: string;
     kick_id: string;
   }) => void;
-  onSearch: () => Promise<{
+  onSearch: (
+    title: string,
+    year: string,
+    dev: string
+  ) => Promise<{
     title?: string;
     genre?: string;
     release_year?: string;
@@ -393,6 +429,9 @@ interface AddGameOverlayPanelProps {
     steam_id?: string;
     igdb_id?: string;
     rawg_id?: string;
+    sgdb_id?: string;
+    gog_id?: string;
+    thegamesdb_id?: string;
     twitch_id?: string;
     kick_id?: string;
   } | null>;
@@ -436,7 +475,8 @@ export function AddGameOverlayPanel({
   if (!open) return null;
 
   const handleSearch = async () => {
-    const res = await onSearch();
+    if (!title.trim()) return;
+    const res = await onSearch(title, year, dev);
     if (res) setResult(res);
   };
 
@@ -459,6 +499,9 @@ export function AddGameOverlayPanel({
       steam_id: src.steam_id || "",
       igdb_id: src.igdb_id || "",
       rawg_id: src.rawg_id || "",
+      sgdb_id: src.sgdb_id || "",
+      gog_id: src.gog_id || "",
+      thegamesdb_id: src.thegamesdb_id || "",
       twitch_id: src.twitch_id || "",
       kick_id: src.kick_id || "",
     });
@@ -563,7 +606,7 @@ export function AddGameOverlayPanel({
           )}
         </div>
         <div className="p-5 pb-5 border-t border-white/[0.06] flex gap-2 shrink-0">
-          <Btn onClick={handleSearch} className="flex-1 justify-center">
+          <Btn onClick={handleSearch} disabled={!title.trim()} className="flex-1 justify-center">
             🔍 Search APIs
           </Btn>
           <Btn variant="success" onClick={handleSubmit} className="flex-1 justify-center">

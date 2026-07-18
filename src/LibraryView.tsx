@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { ForgeDatabase, ForgeLibraryEntry, ToastType } from "@/types";
-import { fetchWidgetToken } from "@/hooks/useTauriApi";
+import { fetchOverlayToken } from "@/hooks/useTauriApi";
 import { Card, Btn } from "@/components/ui";
 import CarouselView from "@/components/CarouselView";
 import GridView from "@/components/GridView";
@@ -131,17 +131,26 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
 
   const load = useCallback(async () => {
     setLoading(true);
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
-      const [forgeRes, exiledRes] = await Promise.all([
+      const [forgeRes, exiledRes, settingsRes] = await Promise.all([
         fetch("http://127.0.0.1:53735/api/forge-full", { headers: { "X-Forge-Token": token } }),
         fetch("http://127.0.0.1:53735/api/exiled-apps", { headers: { "X-Forge-Token": token } }),
+        fetch("http://127.0.0.1:53735/settings", { headers: { "X-Forge-Token": token } }),
       ]);
       if (forgeRes.ok) {
         const data = (await forgeRes.json()) as Record<string, ForgeLibraryEntry>;
-        const entries = Object.values(data).sort((a, b) =>
-          (a.title || "").localeCompare(b.title || "")
-        );
+        // The idle category (e.g. "Just Chatting") gets a Library entry so its
+        // cover is editable, but it isn't a game — keep it out of the browsing
+        // grid/carousel.
+        let idleCategory = "";
+        if (settingsRes.ok) {
+          const s = (await settingsRes.json()) as { idle_category?: string };
+          idleCategory = (s.idle_category || "").trim().toLowerCase();
+        }
+        const entries = Object.values(data)
+          .filter((e) => e.title.trim().toLowerCase() !== idleCategory)
+          .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
         setLibrary(entries);
       } else {
         setLibrary([]);
@@ -164,13 +173,42 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
 
   // ── API helpers ──
 
+  // A pasted cover/logo can be a direct image URL, a local file path, or a
+  // SteamGridDB page link (e.g. steamgriddb.com/grid/805055) — resolve the
+  // page link to its real image URL before saving so it always renders.
+  const resolveCoverFields = async (
+    updated: Partial<ForgeLibraryEntry>
+  ): Promise<Partial<ForgeLibraryEntry> | null> => {
+    const resolved = { ...updated };
+    for (const key of ["cover_url", "logo_url"] as const) {
+      const value = resolved[key];
+      if (!value) continue;
+      const token = await fetchOverlayToken();
+      const res = await fetch("http://127.0.0.1:53735/api/resolve-cover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Forge-Token": token },
+        body: JSON.stringify({ url: value }),
+      });
+      if (!res.ok) {
+        const message = await res.text().catch(() => "");
+        toast(message || `Couldn't resolve ${key === "cover_url" ? "Cover" : "Logo"} URL`, "error");
+        return null;
+      }
+      const body = (await res.json()) as { url: string };
+      resolved[key] = body.url;
+    }
+    return resolved;
+  };
+
   const saveEntry = async (updated: Partial<ForgeLibraryEntry>) => {
-    const token = await fetchWidgetToken();
+    const resolved = await resolveCoverFields(updated);
+    if (!resolved) return;
+    const token = await fetchOverlayToken();
     try {
       await fetch("http://127.0.0.1:53735/list", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Forge-Token": token },
-        body: JSON.stringify(updated),
+        body: JSON.stringify(resolved),
       });
       toast("Saved", "success");
       load();
@@ -180,7 +218,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   };
 
   const reinstate = async (proc: string) => {
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       await fetch("http://127.0.0.1:53735/unexile", {
         method: "POST",
@@ -196,7 +234,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
 
   const deleteExiled = async (proc: string) => {
     if (!confirm(`Permanently delete "${proc}" from the database?`)) return;
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       const metaRes = await fetch("http://127.0.0.1:53735/export-meta", {
         headers: { "X-Forge-Token": token },
@@ -225,7 +263,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   };
 
   const handleExile = async (title: string) => {
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       const metaRes = await fetch("http://127.0.0.1:53735/export-meta", {
         headers: { "X-Forge-Token": token },
@@ -251,7 +289,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   };
 
   const saveBaseMetadata = async (title: string, year: string, dev: string) => {
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     const payload: Record<string, string> = { title };
     if (year) payload["custom_release_year"] = year;
     if (dev) {
@@ -273,7 +311,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   ): Promise<ForgeLibraryEntry | null> => {
     try {
       await saveBaseMetadata(title, year, dev);
-      const token = await fetchWidgetToken();
+      const token = await fetchOverlayToken();
       const scanRes = await fetch("http://127.0.0.1:53735/api/scan-metadata", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Forge-Token": token },
@@ -287,7 +325,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
   };
 
   const handleScanMetadata = async (title: string): Promise<ForgeLibraryEntry | null> => {
-    const token = await fetchWidgetToken();
+    const token = await fetchOverlayToken();
     try {
       const scanRes = await fetch("http://127.0.0.1:53735/api/scan-metadata", {
         method: "POST",
@@ -519,8 +557,8 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
         <AddGameOverlayPanel
           open={showAddGame}
           onClose={() => setShowAddGame(false)}
-          onAdd={(entry) => saveBaseMetadata(entry.title, entry.release_year, entry.developer)}
-          onSearch={async () => handleAddGameScan("", "", "")}
+          onAdd={(entry) => saveEntry(entry)}
+          onSearch={handleAddGameScan}
           gameCategories={[]}
           libraryGenres={[]}
         />

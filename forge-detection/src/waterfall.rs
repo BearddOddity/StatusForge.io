@@ -1,7 +1,6 @@
-//!  the core detection orchestrator.
+//! GameDetector — the core detection orchestrator.
 //!
-//! Rust port of the original forge_scanner.py, with the
-//! same staged pipeline:
+//! Staged detection pipeline:
 //!
 //! 1. Active window / foreground process identification (OS-specific)
 //! 2. listed_apps VIP lookup (instant match)
@@ -11,7 +10,7 @@
 //! 5. Steam running-app id, wrapper/launcher parent process
 //! 6. Confidence scoring for DRM-free / indie games
 //!
-//! The `LogFn` type alias is also used by the native engine loop in the host app.
+//! The `LogFn` type alias is also used by the engine loop in the host app.
 
 use std::collections::HashMap;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
@@ -24,9 +23,17 @@ pub type LogFn = Box<dyn Fn(&str, &str, u64) + Send + Sync>;
 
 const SYSTEM_EXILES: &[&str] = &[
     "explorer.exe",
+    // Web browsers — we don't detect websites, only real game processes.
     "chrome.exe",
     "msedge.exe",
     "firefox.exe",
+    "brave.exe",
+    "opera.exe",
+    "opera_gx.exe",
+    "vivaldi.exe",
+    "iexplore.exe",
+    "chromium.exe",
+    "safari.exe",
     "discord.exe",
     "obs64.exe",
     "obs32.exe",
@@ -176,13 +183,13 @@ pub struct ProcessSnapshot {
     pub parent_name: String,
 }
 
-pub struct ForgeWaterfall {
+pub struct GameDetector {
     log: LogFn,
     knowledge: Option<ForgeKnowledge>,
     sys: System,
 }
 
-impl ForgeWaterfall {
+impl GameDetector {
     pub fn new(log: LogFn) -> Self {
         Self {
             log,
@@ -280,6 +287,14 @@ impl ForgeWaterfall {
             .map(|s| s.as_str())
             .or_else(|| known_exe_title_alias(exe_name))
         {
+            (self.log)(
+                &format!(
+                    "[MATCH] Stage 1 listed_apps/alias: \"{}\" -> \"{}\"",
+                    exe_name, title
+                ),
+                "debug",
+                60,
+            );
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -304,6 +319,11 @@ impl ForgeWaterfall {
             if window_title.trim().eq_ignore_ascii_case("settings") {
                 return None;
             }
+            (self.log)(
+                &format!("[MATCH] Xbox Game Pass piercer: \"{}\"", window_title),
+                "debug",
+                60,
+            );
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -316,9 +336,19 @@ impl ForgeWaterfall {
         // ── Stage 2:(hard kills) ─────────────────────────────
         if !kw.config.process_filter_bypass {
             if kw.delisted_apps.contains(exe_name) || SYSTEM_EXILES.contains(&exe_name.as_str()) {
+                (self.log)(
+                    &format!("[FILTER] \"{}\" is delisted or a system exile", exe_name),
+                    "debug",
+                    300,
+                );
                 return None;
             }
             if BANNED_PATHS.iter().any(|b| exe_path.contains(b)) {
+                (self.log)(
+                    &format!("[FILTER] \"{}\" is a banned path", exe_path),
+                    "debug",
+                    300,
+                );
                 return None;
             }
         }
@@ -329,15 +359,62 @@ impl ForgeWaterfall {
             " - firefox",
             " - edge",
             " - youtube",
+            " - brave",
+            " - opera",
+            " - vivaldi",
         ]
         .iter()
         .any(|s| title_lower.contains(s))
         {
+            (self.log)(
+                &format!("[FILTER] Browser/chat window title: \"{}\"", window_title),
+                "debug",
+                300,
+            );
             return None;
         }
 
+        // ── Known emulator passthrough ─────────────────────────────────────
+        // Most emulator UIs are built on Qt or wxWidgets — exactly what the
+        // UI-framework trap below exists to filter out. Recognizing the
+        // process by name here, before that trap runs, means PCSX2/Dolphin/
+        // RPCS3/etc. don't get silently dropped as if they were some generic
+        // desktop utility.
+        if kw.config.emulator_detection && EMULATOR_TAGS.iter().any(|emu| exe_name.contains(emu)) {
+            // Window title usually has the loaded game once one's running;
+            // if it's empty (menu screen, or a build/config that never sets
+            // one), fall back to the emulator's own log file (e.g. PCSX2's
+            // emulog.txt logs the disc name on load), then to its launch
+            // arguments — still just files/metadata the OS and the emulator
+            // itself already produce, nothing reaching into the emulator or
+            // the game.
+            let rom_title = window_title
+                .is_empty()
+                .then(|| {
+                    crate::emulator_logs::title_from_emulator_log(exe_name, exe_path)
+                        .or_else(|| extract_rom_name_from_cmdline(&proc.cmdline))
+                })
+                .flatten();
+            let effective_title = rom_title.as_deref().unwrap_or(window_title);
+            (self.log)(
+                &format!(
+                    "[MATCH] Known emulator \"{}\": title=\"{}\"",
+                    exe_name, effective_title
+                ),
+                "debug",
+                60,
+            );
+            return Some(format_game_output(
+                exe_name,
+                exe_path,
+                effective_title,
+                "Emulator",
+                kw.config.emulator_detection,
+            ));
+        }
+
         // ── Stage 3: (behavioral traps) ───────────────────
-        if !self.survives_great_filter(window, proc, &kw.config) {
+        if !self.survives_behavioral_traps(window, proc, &kw.config) {
             return None;
         }
 
@@ -345,6 +422,11 @@ impl ForgeWaterfall {
         if exe_path.contains("steamapps") {
             if let Some(app_id) = platform::read_steam_running_app_id() {
                 if app_id > 0 {
+                    (self.log)(
+                        &format!("[MATCH] Steam Registry app_id={}: \"{}\"", app_id, exe_name),
+                        "debug",
+                        60,
+                    );
                     return Some(format_game_output(
                         exe_name,
                         exe_path,
@@ -358,7 +440,15 @@ impl ForgeWaterfall {
 
         #[cfg(target_os = "linux")]
         {
-            if let Some(platform_tag) = linux_golden_ticket(window.pid) {
+            if let Some(platform_tag) = linux_launch_context(window.pid) {
+                (self.log)(
+                    &format!(
+                        "[MATCH] Linux launch context ({}): \"{}\"",
+                        platform_tag, exe_name
+                    ),
+                    "debug",
+                    60,
+                );
                 return Some(format_game_output(
                     exe_name,
                     exe_path,
@@ -373,6 +463,14 @@ impl ForgeWaterfall {
         if !proc.parent_name.is_empty() {
             let parent = proc.parent_name.as_str();
             if ["wine64-preloader", "proton", "wine"].contains(&parent) || parent.ends_with(".sh") {
+                (self.log)(
+                    &format!(
+                        "[MATCH] Proton/Wine wrapper (parent={}): \"{}\"",
+                        parent, exe_name
+                    ),
+                    "debug",
+                    60,
+                );
                 return Some(format_game_output(
                     exe_name,
                     exe_path,
@@ -382,6 +480,14 @@ impl ForgeWaterfall {
                 ));
             }
             if ["epicgameslauncher.exe", "eadesktop.exe", "upc.exe"].contains(&parent) {
+                (self.log)(
+                    &format!(
+                        "[MATCH] Official launcher (parent={}): \"{}\"",
+                        parent, exe_name
+                    ),
+                    "debug",
+                    60,
+                );
                 return Some(format_game_output(
                     exe_name,
                     exe_path,
@@ -394,20 +500,45 @@ impl ForgeWaterfall {
 
         // ── Stage 5: Confidence scoring (indies / DRM-free) ────────────────
         let mut confidence: f64 = 0.0;
+        let mut factors: Vec<&str> = Vec::new();
         if kw.config.score_engine_dna && has_engine_dna(exe_path) {
             confidence += 0.4;
+            factors.push("engine_dna=+0.4");
         }
         if kw.config.score_fullscreen && window.is_fullscreen {
             confidence += 0.3;
+            factors.push("fullscreen=+0.3");
         }
         if kw.config.score_window_title && !window_title.is_empty() && title_lower != *exe_name {
             confidence += 0.2;
+            factors.push("window_title=+0.2");
         }
         if kw.config.score_ram && proc.memory_mb > kw.config.ram_threshold_mb {
             confidence += 0.1;
+            factors.push("ram=+0.1");
         }
+        (self.log)(
+            &format!(
+                "[SCORE] \"{}\": {} (total {:.1} / threshold {:.1})",
+                exe_name,
+                if factors.is_empty() {
+                    "no factors matched".to_string()
+                } else {
+                    factors.join(", ")
+                },
+                confidence,
+                kw.config.confidence_threshold
+            ),
+            "debug",
+            60,
+        );
 
         if confidence >= kw.config.confidence_threshold {
+            (self.log)(
+                &format!("[MATCH] Stage 5 confidence pass: \"{}\"", exe_name),
+                "debug",
+                60,
+            );
             return Some(format_game_output(
                 exe_name,
                 exe_path,
@@ -417,12 +548,20 @@ impl ForgeWaterfall {
             ));
         }
 
+        (self.log)(
+            &format!(
+                "[FILTER] Stage 5 confidence below threshold: \"{}\"",
+                exe_name
+            ),
+            "debug",
+            60,
+        );
         None
     }
 
     // ── Behavioral traps ───────────────────────────────────────────────────
 
-    fn survives_great_filter(
+    fn survives_behavioral_traps(
         &self,
         window: &ActiveWindow,
         proc: &ProcessSnapshot,
@@ -577,8 +716,7 @@ pub fn extract_true_game_name(exe_path: &str) -> String {
     }
 }
 
-/// Title-case each word ("elden ring" → "Elden Ring"), mirroring Python's
-/// `str.title()` closely enough for game folder names.
+/// Title-case each word ("elden ring" → "Elden Ring") for game folder names.
 fn title_case(s: &str) -> String {
     s.split_whitespace()
         .map(|w| {
@@ -590,6 +728,37 @@ fn title_case(s: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Disc-image and ROM extensions across emulated platforms, used to spot a
+/// launched game file in an emulator's own command-line arguments.
+const ROM_EXTENSIONS: &[&str] = &[
+    "iso", "bin", "cue", "chd", "cso", "gdi", "cdi", "pbp", "nsp", "xci", "3ds", "cia", "wbfs",
+    "rvz", "wux", "z64", "n64", "gba", "gb", "gbc", "nes", "sfc", "smc", "md", "gen",
+];
+
+/// Best-effort read of a ROM/game file name out of an emulator's own
+/// command-line arguments — e.g. `pcsx2-qt.exe --fullscreen "D:\ROMs\Some
+/// Game.iso"` -> `Some("Some Game")`. This is the process's own argument
+/// list as reported by the OS, same as `exe_name`/`exe_path` — nothing here
+/// reads or writes the emulator's memory or the emulated game's state.
+///
+/// A ROM path containing spaces isn't handled cleanly — cmdline here is
+/// already a flattened, space-joined string with argument boundaries lost,
+/// so a path like "Metroid Prime.rvz" only yields "Prime". Real games with
+/// spaceless file names (the common case) still come out right.
+fn extract_rom_name_from_cmdline(cmdline: &str) -> Option<String> {
+    let token = cmdline.split_whitespace().rfind(|tok| {
+        let trimmed = tok.trim_matches('"');
+        ROM_EXTENSIONS
+            .iter()
+            .any(|ext| trimmed.ends_with(&format!(".{}", ext)))
+    })?;
+    let trimmed = token.trim_matches('"').replace('\\', "/");
+    let file_name = trimmed.rsplit('/').next().unwrap_or(&trimmed);
+    let stem = file_name.rsplit_once('.').map_or(file_name, |(s, _)| s);
+    let title = title_case(&stem.replace(['_', '.'], " "));
+    (!title.is_empty()).then_some(title)
 }
 
 /// Build the final `GameDetection`, applying the emulator splitter, the macOS
@@ -616,7 +785,6 @@ pub fn format_game_output(
         && EMULATOR_TAGS.iter().any(|emu| exe_name.contains(emu))
         && !window_title.is_empty()
     {
-        // Python: window_title.split(' - ')[0].split(' | ')[-1]
         let first = window_title.split(" - ").next().unwrap_or(window_title);
         let clean = first
             .split(" | ")
@@ -683,7 +851,7 @@ fn macos_bundle_display_name(exe_path: &str) -> Option<String> {
 
 /// Linux: Feral GameMode and Flatpak sandbox membership.
 #[cfg(target_os = "linux")]
-fn linux_golden_ticket(pid: u32) -> Option<String> {
+fn linux_launch_context(pid: u32) -> Option<String> {
     use std::process::Command;
 
     if let Ok(out) = Command::new("gamemoded").arg("-s").output() {
@@ -710,18 +878,18 @@ fn linux_golden_ticket(pid: u32) -> Option<String> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tests — ported from the Python test_forge_scanner.py suite
+// Tests
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn scout() -> ForgeWaterfall {
-        ForgeWaterfall::new(Box::new(|_, _, _| {}))
+    fn scout() -> GameDetector {
+        GameDetector::new(Box::new(|_, _, _| {}))
     }
 
-    fn scout_with(listed: &[(&str, &str)], delisted: &[&str], strict: bool) -> ForgeWaterfall {
+    fn scout_with(listed: &[(&str, &str)], delisted: &[&str], strict: bool) -> GameDetector {
         let mut s = scout();
         s.update_forge_knowledge(
             listed
@@ -780,6 +948,62 @@ mod tests {
             .unwrap();
         assert_eq!(d.title, "ELDEN RING");
         assert_eq!(d.platform, "The Forge");
+    }
+
+    // ── Known emulator passthrough ──────────────────────────────────────
+
+    #[test]
+    fn emulator_bypasses_ui_framework_trap() {
+        // PCSX2's real Qt build ships qt6core.dll right next to the exe —
+        // exactly what trap_ui_framework looks for. Without the passthrough
+        // this gets silently dropped before it's ever recognized as PCSX2.
+        let tmp = std::env::temp_dir().join(format!("forge_emu_test_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("qt6core.dll"), b"").unwrap();
+        let exe = tmp.join("pcsx2-qt.exe");
+        std::fs::write(&exe, b"").unwrap();
+        let exe_path = exe.to_string_lossy().to_lowercase();
+
+        let s = scout_with(&[], &[], false);
+        let d = s
+            .evaluate(
+                &win("Some Game - PCSX2", false),
+                &proc("pcsx2-qt.exe", &exe_path, 10),
+            )
+            .expect("emulator should still be detected despite the Qt trap");
+        assert_eq!(d.platform, "Emulator");
+        assert_eq!(d.title, "Some Game");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn emulator_passthrough_still_respects_delisted_apps() {
+        let s = scout_with(&[], &["pcsx2-qt.exe"], false);
+        assert!(s
+            .evaluate(
+                &win("Some Game - PCSX2", false),
+                &proc("pcsx2-qt.exe", "d:\\emu\\pcsx2-qt.exe", 10)
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn emulator_passthrough_disabled_falls_back_to_normal_pipeline() {
+        // With emulator_detection off, a low-memory, title-less PCSX2 window
+        // gets trapped by the RAM floor like anything else would.
+        let mut s = scout_with(&[], &[], false);
+        let config = ScannerConfig {
+            emulator_detection: false,
+            ..Default::default()
+        };
+        s.update_forge_knowledge(HashMap::new(), vec![], false, config);
+        assert!(s
+            .evaluate(
+                &win("", false),
+                &proc("pcsx2-qt.exe", "d:\\emu\\pcsx2-qt.exe", 10)
+            )
+            .is_none());
     }
 
     #[test]
@@ -853,6 +1077,44 @@ mod tests {
                 &proc("steam.exe", "c:\\steam\\steam.exe", 900)
             )
             .is_none());
+    }
+
+    #[test]
+    fn web_browsers_are_never_detected_as_games() {
+        let s = scout_with(&[], &[], false);
+        for exe in [
+            "brave.exe",
+            "opera.exe",
+            "opera_gx.exe",
+            "vivaldi.exe",
+            "iexplore.exe",
+            "chromium.exe",
+        ] {
+            let path = format!("d:\\browsers\\{}", exe);
+            assert!(
+                s.evaluate(&win("Some Game Title", true), &proc(exe, &path, 900))
+                    .is_none(),
+                "{} should never be detected as a game",
+                exe
+            );
+        }
+    }
+
+    #[test]
+    fn brave_and_other_browser_titles_are_killed() {
+        let s = scout_with(&[], &[], false);
+        for suffix in [" - Brave", " - Opera", " - Vivaldi"] {
+            let title = format!("Some Website Tab{}", suffix);
+            assert!(
+                s.evaluate(
+                    &win(&title, true),
+                    &proc("game.exe", "d:\\g\\game.exe", 900),
+                )
+                .is_none(),
+                "title ending in \"{}\" should be filtered as a browser title",
+                suffix
+            );
+        }
     }
 
     #[test]
@@ -972,7 +1234,7 @@ mod tests {
     // ── Stage 4: ─────────────────────────────────────────
 
     #[test]
-    fn proton_parent_is_golden() {
+    fn proton_parent_matches() {
         let s = scout_with(&[], &[], false);
         let mut p = proc("game.exe", "z:\\games\\common\\Elden Ring\\game.exe", 900);
         p.parent_name = "proton".to_string();
@@ -982,7 +1244,7 @@ mod tests {
     }
 
     #[test]
-    fn launcher_parent_is_golden() {
+    fn launcher_parent_matches() {
         let s = scout_with(&[], &[], false);
         let mut p = proc("fortnite.exe", "d:\\epic\\fortnite\\fortnite.exe", 2000);
         p.parent_name = "epicgameslauncher.exe".to_string();
@@ -1178,6 +1440,49 @@ mod tests {
         assert!(!has_engine_dna(&exe.to_string_lossy().to_lowercase()));
         assert!(!has_engine_dna("z:/does/not/exist/game.exe"));
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ── ROM name from emulator cmdline ───────────────────────────────────
+
+    #[test]
+    fn extracts_rom_name_from_various_extensions() {
+        assert_eq!(
+            extract_rom_name_from_cmdline(
+                r#"pcsx2-qt.exe --fullscreen "d:\roms\ps2\Some_Game.iso""#
+            ),
+            Some("Some Game".to_string())
+        );
+        // A path containing a space isn't handled cleanly — the flattened
+        // cmdline has already lost the argument boundary, so this only
+        // catches the last whitespace-delimited chunk ("Prime.rvz"), not
+        // the full "Metroid Prime". Documented limitation, not a crash.
+        assert_eq!(
+            extract_rom_name_from_cmdline("dolphin.exe -b -e /home/user/roms/Metroid Prime.rvz"),
+            Some("Prime".to_string())
+        );
+        assert_eq!(
+            extract_rom_name_from_cmdline("retroarch.exe -L core.dll d:/roms/Chrono.Trigger.sfc"),
+            Some("Chrono Trigger".to_string())
+        );
+    }
+
+    #[test]
+    fn no_rom_extension_in_cmdline_returns_none() {
+        assert_eq!(
+            extract_rom_name_from_cmdline("pcsx2-qt.exe --fullscreen"),
+            None
+        );
+        assert_eq!(extract_rom_name_from_cmdline(""), None);
+    }
+
+    #[test]
+    fn emulator_with_no_window_title_falls_back_to_cmdline_rom_name() {
+        let s = scout_with(&[], &[], false);
+        let mut proc = proc("pcsx2-qt.exe", "d:\\emu\\pcsx2-qt.exe", 200);
+        proc.cmdline = r#"pcsx2-qt.exe --fullscreen "d:\roms\Some_Game.iso""#.to_string();
+        let d = s.evaluate(&win("", false), &proc).unwrap();
+        assert_eq!(d.platform, "Emulator");
+        assert_eq!(d.title, "Some Game");
     }
 
     // ── Built-in exe/title aliases ──────────────────────────────────────

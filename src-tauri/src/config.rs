@@ -39,6 +39,8 @@ pub struct ApiKeys {
     pub igdb_secret: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub igdb_token: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub thegamesdb: String,
 }
 
 /// Engine/runtime settings
@@ -53,8 +55,8 @@ pub struct EngineSettings {
     pub scan_interval: u64,
     #[serde(default = "default_grace_period")]
     pub grace_period: u64,
-    #[serde(default = "default_widget_poll_rate")]
-    pub widget_poll_rate: u64,
+    #[serde(default = "default_overlay_poll_rate", alias = "widget_poll_rate")]
+    pub overlay_poll_rate: u64,
     #[serde(default)]
     pub safe_mode: bool,
     #[serde(default)]
@@ -64,24 +66,26 @@ pub struct EngineSettings {
     /// doesn't silently stop routing that was already working.
     #[serde(default = "default_platform_push_enabled")]
     pub platform_push_enabled: bool,
-    #[serde(default = "default_widget_fade_timer")]
-    pub widget_fade_timer: u64,
+    #[serde(default = "default_overlay_fade_timer", alias = "widget_fade_timer")]
+    pub overlay_fade_timer: u64,
     #[serde(default)]
     pub strict_forge_mode: bool,
     #[serde(default = "default_sb_action_name")]
     pub sb_action_name: String,
-    #[serde(default = "default_widget_token")]
-    pub widget_token: String,
-    #[serde(default = "default_spark_pin")]
-    pub spark_pin: String,
-    /// Optional user-set pairing key mixed into the SPARK heartbeat HMAC secret.
-    #[serde(default)]
-    pub spark_pairing_key: String,
+    #[serde(default = "default_overlay_token", alias = "widget_token")]
+    pub overlay_token: String,
+    /// Old configs saved before the SPARK → Blipy rename still load fine —
+    /// `alias` accepts the old JSON key, new saves write the new one.
+    #[serde(default = "default_blipy_pin", alias = "spark_pin")]
+    pub blipy_pin: String,
+    /// Optional user-set pairing key mixed into the Blipy heartbeat HMAC secret.
+    #[serde(default, alias = "spark_pairing_key")]
+    pub blipy_pairing_key: String,
     /// When true, this PC's local scanner stops reporting detections —
-    /// only the paired SPARK agent drives the game state. Prevents the two
+    /// only the paired Blipy agent drives the game state. Prevents the two
     /// detection sources from crosswiring when a dual-PC link is in use.
-    #[serde(default)]
-    pub spark_link_active: bool,
+    #[serde(default, alias = "spark_link_active")]
+    pub blipy_link_active: bool,
     #[serde(default = "default_emulator_detection")]
     pub emulator_detection: bool,
     #[serde(default = "default_ram_threshold")]
@@ -115,17 +119,17 @@ impl Default for EngineSettings {
             sb_port: default_sb_port(),
             scan_interval: default_scan_interval(),
             grace_period: default_grace_period(),
-            widget_poll_rate: default_widget_poll_rate(),
+            overlay_poll_rate: default_overlay_poll_rate(),
             safe_mode: false,
             auto_push: false,
             platform_push_enabled: default_platform_push_enabled(),
-            widget_fade_timer: default_widget_fade_timer(),
+            overlay_fade_timer: default_overlay_fade_timer(),
             strict_forge_mode: false,
             sb_action_name: default_sb_action_name(),
-            widget_token: default_widget_token(),
-            spark_pin: default_spark_pin(),
-            spark_pairing_key: String::new(),
-            spark_link_active: false,
+            overlay_token: default_overlay_token(),
+            blipy_pin: default_blipy_pin(),
+            blipy_pairing_key: String::new(),
+            blipy_link_active: false,
             emulator_detection: default_emulator_detection(),
             ram_threshold: default_ram_threshold(),
             process_filter_bypass: false,
@@ -142,9 +146,9 @@ impl Default for EngineSettings {
     }
 }
 
-// Detection is always native (Rust) — the legacy Python/Spark detection-mode
-// selector was removed. Old configs containing a `detection` section or an
-// `engine_settings.detection_mode` field still parse: unknown keys are ignored.
+// An old config containing a `detection` section or an
+// `engine_settings.detection_mode` field still parses fine: unknown keys
+// are ignored.
 
 /// Broadcaster/platform configuration. Same skip-empty-on-serialize reasoning
 /// as `ApiKeys` — removing a routing integration must actually make it
@@ -182,6 +186,48 @@ pub enum RoutingMode {
     #[default]
     StreamerBot,
     Native,
+}
+
+/// A user-created alternative name for a game (language variant,
+/// abbreviation, misleading window title, ...). Stored on the canonical
+/// library entry itself, so an alias can only point at a canonical title —
+/// alias→alias chaining is unrepresentable by construction.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[serde(default)]
+pub struct GameAlias {
+    pub name: String,
+    /// 1 = highest; resolution tie-breaker #1.
+    #[serde(default = "default_alias_priority")]
+    pub priority: u8,
+    /// Language tag ("en", "ja", ...); resolution tie-breaker #2.
+    #[serde(default = "default_alias_language")]
+    pub language: String,
+    /// Sortable creation timestamp (zero-padded unix seconds — no chrono
+    /// dep here); final resolution tie-breaker (oldest wins, string order).
+    pub added_at: String,
+    /// User-flagged preferred alias; resolution tie-breaker #3.
+    pub preferred: bool,
+}
+
+/// One weekly-sync check-in against Twitch/Kick's live category list for a
+/// single library entry — logged so a user can see what changed (or that
+/// nothing did), not just that a background sync ran at some point.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[serde(default)]
+pub struct SyncHistoryEntry {
+    /// Zero-padded unix seconds (matches GameAlias::added_at).
+    pub timestamp: String,
+    /// "weekly_sync" today; room for other check-in types later.
+    pub action: String,
+    /// e.g. "twitch: 12345 -> 67890", or "none" when nothing changed.
+    pub changes: String,
+}
+
+fn default_alias_priority() -> u8 {
+    1
+}
+fn default_alias_language() -> String {
+    "en".to_string()
 }
 
 /// Forge database entry
@@ -224,6 +270,8 @@ pub struct ForgeLibraryEntry {
     #[serde(default)]
     pub sgdb_id: String,
     #[serde(default)]
+    pub thegamesdb_id: String,
+    #[serde(default)]
     pub xbox_title_id: String,
     #[serde(default)]
     pub epic_id: String,
@@ -238,6 +286,16 @@ pub struct ForgeLibraryEntry {
     /// until they edit that field again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locked_fields: Vec<String>,
+    /// Alternative names the user set up for this game, resolved during
+    /// detection (Stage 0) before anything gets broadcast or upserted.
+    /// Skipped when empty so a Forge_Database.json from before this feature
+    /// existed still round-trips byte-for-byte.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<GameAlias>,
+    /// Weekly Twitch/Kick category-id check-ins, newest last, pruned to the
+    /// last 7 days — see `metadata::weekly_library_sync`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sync_history: Vec<SyncHistoryEntry>,
 }
 
 /// Forge database
@@ -254,7 +312,7 @@ pub struct ForgeDatabase {
 
 /// Finds the existing `library` key for `title`, tolerating the whitespace/
 /// casing drift that different sources (raw OS window titles from the
-/// native scanner and a paired SPARK agent, vs. hand-typed titles in the
+/// native scanner and a paired Blipy agent, vs. hand-typed titles in the
 /// Library editor) can introduce for what a human would call the same
 /// game. Every insertion site should resolve through this first instead of
 /// keying on the raw title directly — otherwise "Half-Life" and "half-life "
@@ -275,6 +333,35 @@ pub fn find_library_key(db: &ForgeDatabase, title: &str) -> Option<String> {
         .cloned()
 }
 
+/// Stage 0 of detection: resolves a raw title through the library's aliases.
+/// Returns `None` if nothing matches, or if `raw_title` is already a real
+/// library entry (a canonical title always wins over an alias).
+///
+/// Language tie-breaking is hardcoded to "en" until more UI languages ship.
+pub fn resolve_title_alias(db: &ForgeDatabase, raw_title: &str) -> Option<String> {
+    if find_library_key(db, raw_title).is_some() {
+        return None;
+    }
+    let records: Vec<forge_detection::alias::AliasRecord> = db
+        .library
+        .values()
+        .flat_map(|entry| {
+            entry
+                .aliases
+                .iter()
+                .map(|a| forge_detection::alias::AliasRecord {
+                    canonical: entry.title.clone(),
+                    name: a.name.clone(),
+                    priority: a.priority,
+                    language: a.language.clone(),
+                    added_at: a.added_at.clone(),
+                    preferred: a.preferred,
+                })
+        })
+        .collect();
+    forge_detection::alias::resolve_alias(raw_title, &records, "en")
+}
+
 /// Engine status returned to frontend
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 
@@ -293,8 +380,6 @@ pub struct EngineStatus {
     pub release_date: String,
     #[serde(default)]
     pub cover_url: String,
-    #[serde(default)]
-    pub widget_token: String,
 }
 
 // ============================================================================
@@ -313,16 +398,16 @@ fn default_scan_interval() -> u64 {
 fn default_grace_period() -> u64 {
     15
 }
-fn default_widget_poll_rate() -> u64 {
+fn default_overlay_poll_rate() -> u64 {
     3
 }
-fn default_widget_fade_timer() -> u64 {
+fn default_overlay_fade_timer() -> u64 {
     15
 }
 fn default_sb_action_name() -> String {
     "UpdateCategory".to_string()
 }
-fn default_widget_token() -> String {
+fn default_overlay_token() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     (0..16)
@@ -333,7 +418,7 @@ fn default_widget_token() -> String {
         })
         .collect()
 }
-fn default_spark_pin() -> String {
+fn default_blipy_pin() -> String {
     "0000".to_string()
 }
 fn default_emulator_detection() -> bool {
@@ -407,12 +492,11 @@ impl AppConfig {
         if self.engine_settings.grace_period > 300 {
             errors.push("grace_period must be <= 300".to_string());
         }
-        if self.engine_settings.widget_poll_rate == 0 {
-            errors.push("widget_poll_rate must be > 0".to_string());
+        if self.engine_settings.overlay_poll_rate == 0 {
+            errors.push("overlay_poll_rate must be > 0".to_string());
         }
-        if self.engine_settings.widget_fade_timer == 0 {
-            errors.push("widget_fade_timer must be > 0".to_string());
-        }
+        // overlay_fade_timer has no lower-bound check — 0 is valid and
+        // means "never fade."
         if self.engine_settings.confidence_threshold < 0.0
             || self.engine_settings.confidence_threshold > 1.0
         {
@@ -427,14 +511,14 @@ impl AppConfig {
         if self.engine_settings.sb_action_name.len() > 100 {
             errors.push("sb_action_name too long (max 100 chars)".to_string());
         }
-        if self.engine_settings.spark_pin.len() != 4
+        if self.engine_settings.blipy_pin.len() != 4
             || !self
                 .engine_settings
-                .spark_pin
+                .blipy_pin
                 .chars()
                 .all(|c| c.is_ascii_digit())
         {
-            errors.push("spark_pin must be 4 digits".to_string());
+            errors.push("blipy_pin must be 4 digits".to_string());
         }
 
         // No "at least one platform client" rule here on purpose: pusher.rs's
@@ -470,9 +554,12 @@ impl AppConfig {
         // Clamp numeric values
         self.engine_settings.scan_interval = self.engine_settings.scan_interval.clamp(2, 300);
         self.engine_settings.grace_period = self.engine_settings.grace_period.clamp(0, 300);
-        self.engine_settings.widget_poll_rate = self.engine_settings.widget_poll_rate.clamp(1, 60);
-        self.engine_settings.widget_fade_timer =
-            self.engine_settings.widget_fade_timer.clamp(1, 300);
+        self.engine_settings.overlay_poll_rate =
+            self.engine_settings.overlay_poll_rate.clamp(1, 60);
+        // 0 is a valid, intentional value here — "never fade" — not
+        // something to clamp away like the other numeric settings.
+        self.engine_settings.overlay_fade_timer =
+            self.engine_settings.overlay_fade_timer.clamp(0, 120);
         self.engine_settings.confidence_threshold =
             self.engine_settings.confidence_threshold.clamp(0.0, 1.0);
         self.engine_settings.ram_threshold = self.engine_settings.ram_threshold.clamp(0, 100);
@@ -480,14 +567,14 @@ impl AppConfig {
         // Truncate strings
         self.engine_settings.idle_category.truncate(100);
         self.engine_settings.sb_action_name.truncate(100);
-        if self.engine_settings.spark_pin.len() != 4
+        if self.engine_settings.blipy_pin.len() != 4
             || !self
                 .engine_settings
-                .spark_pin
+                .blipy_pin
                 .chars()
                 .all(|c| c.is_ascii_digit())
         {
-            self.engine_settings.spark_pin = "0000".to_string();
+            self.engine_settings.blipy_pin = "0000".to_string();
         }
 
         // Truncate API keys
@@ -526,16 +613,14 @@ mod tests {
         // cleared number fields) must be repaired by sanitize(), not fail the
         // whole config save.
         let mut c = AppConfig::default();
-        c.engine_settings.spark_pin = "12".into();
-        c.engine_settings.widget_fade_timer = 0;
-        c.engine_settings.widget_poll_rate = 0;
+        c.engine_settings.blipy_pin = "12".into();
+        c.engine_settings.overlay_poll_rate = 0;
         c.engine_settings.scan_interval = 0;
         c.engine_settings.confidence_threshold = 5.0;
         c.engine_settings.ram_threshold = 900;
         c.sanitize();
-        assert_eq!(c.engine_settings.spark_pin, "0000");
-        assert_eq!(c.engine_settings.widget_fade_timer, 1);
-        assert_eq!(c.engine_settings.widget_poll_rate, 1);
+        assert_eq!(c.engine_settings.blipy_pin, "0000");
+        assert_eq!(c.engine_settings.overlay_poll_rate, 1);
         assert_eq!(c.engine_settings.scan_interval, 2);
         assert_eq!(c.engine_settings.confidence_threshold, 1.0);
         assert_eq!(c.engine_settings.ram_threshold, 100);
@@ -543,11 +628,20 @@ mod tests {
     }
 
     #[test]
+    fn overlay_fade_timer_zero_means_never_fade_and_survives_sanitize() {
+        let mut c = AppConfig::default();
+        c.engine_settings.overlay_fade_timer = 0;
+        c.sanitize();
+        assert_eq!(c.engine_settings.overlay_fade_timer, 0);
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
     fn sanitize_resets_non_numeric_pin() {
         let mut c = AppConfig::default();
-        c.engine_settings.spark_pin = "abcd".into();
+        c.engine_settings.blipy_pin = "abcd".into();
         c.sanitize();
-        assert_eq!(c.engine_settings.spark_pin, "0000");
+        assert_eq!(c.engine_settings.blipy_pin, "0000");
     }
 
     #[test]
@@ -568,7 +662,7 @@ mod tests {
     #[test]
     fn config_survives_json_round_trip() {
         let mut c = AppConfig::default();
-        c.engine_settings.spark_pairing_key = "pair-key".into();
+        c.engine_settings.blipy_pairing_key = "pair-key".into();
         c.engine_settings.idle_category = "Art".into();
         c.api_keys.steamgrid = "sg".into();
         c.broadcaster.twitch_client = "tc".into();
@@ -578,6 +672,41 @@ mod tests {
             serde_json::to_value(&back).unwrap(),
             serde_json::to_value(&c).unwrap()
         );
+    }
+
+    /// A Config.json saved before the SPARK → Blipy rename still has to load
+    /// correctly — old installs shouldn't need to re-pair just because the
+    /// field got renamed.
+    #[test]
+    fn old_spark_keys_still_load_into_renamed_blipy_fields() {
+        let json = r#"{
+            "engine_settings": {
+                "spark_pin": "4242",
+                "spark_pairing_key": "old-key",
+                "spark_link_active": true
+            }
+        }"#;
+        let c: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(c.engine_settings.blipy_pin, "4242");
+        assert_eq!(c.engine_settings.blipy_pairing_key, "old-key");
+        assert!(c.engine_settings.blipy_link_active);
+    }
+
+    /// Same guarantee as above, for the widget->overlay rename: a
+    /// Config.json saved before the rename still loads correctly.
+    #[test]
+    fn old_widget_keys_still_load_into_renamed_overlay_fields() {
+        let json = r#"{
+            "engine_settings": {
+                "widget_poll_rate": 8,
+                "widget_fade_timer": 0,
+                "widget_token": "OLD_TOKEN_VALUE"
+            }
+        }"#;
+        let c: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(c.engine_settings.overlay_poll_rate, 8);
+        assert_eq!(c.engine_settings.overlay_fade_timer, 0);
+        assert_eq!(c.engine_settings.overlay_token, "OLD_TOKEN_VALUE");
     }
 
     /// Regression guard against Config.json.template silently drifting out

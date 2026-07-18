@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BearddOddity Info Box Overlay</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=swap');
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; display: flex; justify-content: center; align-items: center; -webkit-font-smoothing: antialiased; }
+  .widget-container { width: 560px; display: flex; justify-content: center; align-items: center; font-family: 'Montserrat', sans-serif; position: relative; opacity: 0; transition: opacity 1s ease-in-out; }
+  .info-box { width: 100%; min-height: 180px; position: relative; border-radius: 35px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 10px 10px 30px rgba(0,0,0,0.6); overflow: hidden; }
+  .info-content { position: relative; padding: 25px 40px; text-align: left; display: flex; flex-direction: column; justify-content: center; }
+  .metallic-text { background: linear-gradient(to bottom, #ffffff 0%, #dcdcdc 50%, #ffffff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.8)); display: inline-block; }
+  .game-title { font-weight: 900; margin-bottom: 8px; line-height: 1.1; font-size: 26px; letter-spacing: -0.5px; word-wrap: break-word; }
+  .slider-stage { position: relative; height: 60px; overflow: hidden; width: 100%; }
+  .slider-track { position: absolute; width: 100%; animation: slideData 16s infinite ease-in-out; }
+  @keyframes slideData {
+      0%, 20% { transform: translateY(0); }
+      25%, 45% { transform: translateY(-60px); }
+      50%, 70% { transform: translateY(-120px); }
+      75%, 95% { transform: translateY(-180px); }
+      100% { transform: translateY(0); }
+  }
+  .slide-item { height: 60px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+  .label-text { font-weight: 800; text-transform: uppercase; letter-spacing: 2px; font-size: 13px; margin-bottom: 2px; color: rgba(255, 255, 255, 0.5); }
+  .data-text { font-weight: 800; font-size: 19px; line-height: 1.1; }
+</style>
+</head>
+<body>
+<div class="widget-container" id="w">
+  <div class="info-box">
+    <div class="info-content">
+      <div id="t" class="metallic-text game-title">...</div>
+      <div class="slider-stage">
+        <div class="slider-track">
+          <div class="slide-item"><span class="label-text">Released</span><span id="r" class="metallic-text data-text">...</span></div>
+          <div class="slide-item"><span class="label-text">Genre</span><span id="g" class="metallic-text data-text">...</span></div>
+          <div class="slide-item"><span class="label-text">Publisher</span><span id="p" class="metallic-text data-text">...</span></div>
+          <div class="slide-item"><span class="label-text">Session</span><span id="s" class="metallic-text data-text">00:00:00</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="overlay-runtime.js"></script>
+<script>
+    OverlayRuntime.start({ hasCover: false });
+</script>
+</body>
+</html>

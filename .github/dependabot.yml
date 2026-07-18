@@ -9,9 +9,9 @@ updates:
       npm-minor-patch:
         update-types: ["minor", "patch"]
 
-  # SPARK companion app frontend
+  # Blipy companion app frontend
   - package-ecosystem: "npm"
-    directory: "/spark-app"
+    directory: "/blipy-app"
     schedule:
       interval: "weekly"
     groups:
@@ -36,9 +36,9 @@ updates:
       cargo-minor-patch:
         update-types: ["minor", "patch"]
 
-  # SPARK companion app
+  # Blipy companion app
   - package-ecosystem: "cargo"
-    directory: "/spark-app/src-tauri"
+    directory: "/blipy-app/src-tauri"
     schedule:
       interval: "weekly"
     groups:

@@ -303,10 +303,12 @@ export function EditRemoveButtons({
   isEditing,
   onToggleEdit,
   onRemove,
+  removeLabel = "Remove",
 }: {
   isEditing: boolean;
   onToggleEdit: () => void;
   onRemove: () => void;
+  removeLabel?: string;
 }) {
   return (
     <div className="flex items-center gap-1.5 shrink-0">
@@ -314,7 +316,7 @@ export function EditRemoveButtons({
         {isEditing ? "Close" : "Edit"}
       </button>
       <button onClick={onRemove} className="btn-icon-sm remove">
-        Remove
+        {removeLabel}
       </button>
     </div>
   );

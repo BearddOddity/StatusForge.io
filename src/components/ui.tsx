@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
+import { resolveImageSrc } from "@/utils/imageSrc";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Card — surface container (glass treatment)
@@ -108,7 +109,7 @@ export function CoverImage({
   }
   return (
     <img
-      src={src}
+      src={resolveImageSrc(src)}
       alt={alt}
       loading={lazy ? "lazy" : "eager"}
       className={`w-full h-full object-cover ${className}`}

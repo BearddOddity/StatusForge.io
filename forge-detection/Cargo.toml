@@ -1,10 +1,10 @@
 [package]
 name = "forge-detection"
 version = "1.0.0"
-description = "ForgeWaterfall — native game detection engine (Windows / macOS / Linux). Shared by StatusForge, SPARK, and StreamerSuite."
-authors = ["BeardedOddity"]
+description = "GameDetector — game detection engine (Windows / macOS / Linux). Shared by StatusForge, Blipy, and StreamerSuite."
+authors = ["BearddOddity"]
 license = "MIT"
-repository = "https://github.com/BeardedOddity/StatusForge.io"
+repository = "https://github.com/BearddOddity/StatusForge.io"
 edition = "2021"
 rust-version = "1.77.2"
 

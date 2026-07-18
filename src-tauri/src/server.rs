@@ -1,15 +1,16 @@
-//! Local widget/status server — native replacement for the Python Flask server.
+//! Local overlay/status server.
 //!
 //! One listener on 127.0.0.1:53735 serves BOTH protocols by peeking the first
 //! byte of each connection:
 //! - TLS  (0x16 handshake) → Twitch OAuth callback (`https://127.0.0.1:53735/...`)
-//! - plain HTTP            → widget overlays (`/status`, `/settings`, `/widgets/*`,
+//! - plain HTTP            → overlays (`/status`, `/settings`, `/widgets/*`,
 //!   `/ws` WebSocket) and the Kick OAuth callback (`http://localhost:53735/...`)
 //!
-//! Widget endpoints accept an optional `X-Forge-Token` header or `?token=`
-//! query parameter; when present it must match `engine_settings.widget_token`
+//! Overlay endpoints accept an optional `X-Forge-Token` header or `?token=`
+//! query parameter; when present it must match `engine_settings.overlay_token`
 //! (401 otherwise). The server only ever binds loopback.
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use axum::{
@@ -27,14 +28,14 @@ use tokio::sync::watch;
 
 use crate::auth::SharedOAuthState;
 use crate::config::{AppConfig, ForgeDatabase};
-use crate::NativeEngineState;
+use crate::EngineState;
 
 pub const SERVER_ADDR: &str = "127.0.0.1:53735";
 
 /// Shared state for the widget/status server.
 #[derive(Clone)]
 pub struct ServerState {
-    pub engine: Arc<NativeEngineState>,
+    pub engine: Arc<EngineState>,
     pub oauth: SharedOAuthState,
 }
 
@@ -85,7 +86,7 @@ fn check_token(headers: &HeaderMap, query_token: Option<&str>) -> Result<(), Sta
     let expected = crate::app_base_dir()
         .ok()
         .and_then(|base| crate::auth::load_config_at(&base).ok())
-        .map(|c| c.engine_settings.widget_token)
+        .map(|c| c.engine_settings.overlay_token)
         .unwrap_or_default();
     if !expected.is_empty() && constant_time_eq(provided.as_bytes(), expected.as_bytes()) {
         Ok(())
@@ -182,6 +183,18 @@ pub fn upsert_library_entry(
         .and_then(|k| db.library.remove(k))
         .unwrap_or_default();
 
+    // The editor sends `aliases` as a comma-separated string (same shape as
+    // `executables`); resolve it into structured GameAlias values BEFORE the
+    // serde overlay below, which would reject a bare string where the entry
+    // expects a Vec. An array body (future richer editor / import) passes
+    // through the overlay untouched.
+    let parsed_aliases = match body.get("aliases") {
+        Some(serde_json::Value::String(s)) => {
+            Some(parse_alias_names(db, &title, s, &existing.aliases)?)
+        }
+        _ => None,
+    };
+
     // Overlay on the serialized existing entry — serde ignores unknown keys,
     // so arbitrary extra body fields are dropped and known ones merge in.
     let mut obj = match serde_json::to_value(&existing) {
@@ -196,6 +209,12 @@ pub fn upsert_library_entry(
             other => other,
         };
         obj.insert(key.to_string(), v.clone());
+    }
+    if let Some(aliases) = parsed_aliases {
+        obj.insert(
+            "aliases".to_string(),
+            serde_json::to_value(aliases).map_err(|e| format!("alias serialize failed: {}", e))?,
+        );
     }
     obj.insert(
         "title".to_string(),
@@ -260,6 +279,63 @@ fn split_executables(s: &str) -> Vec<String> {
         })
         .filter(|p| !p.is_empty())
         .collect()
+}
+
+/// Parses the editor's comma-separated alias text into `GameAlias` values
+/// for the entry being saved (`entry_title`).
+///
+/// - An existing name keeps its old priority/language/added_at/preferred.
+/// - A new name gets defaults and a fresh timestamp.
+/// - The entry's own title, and duplicates, are dropped quietly.
+/// - A name that matches a DIFFERENT entry's title is rejected — canonical
+///   titles always beat aliases, so it could never actually resolve.
+fn parse_alias_names(
+    db: &ForgeDatabase,
+    entry_title: &str,
+    raw: &str,
+    existing: &[crate::config::GameAlias],
+) -> Result<Vec<crate::config::GameAlias>, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let entry_title_norm = forge_detection::alias::normalize_alias_name(entry_title);
+
+    let mut seen: Vec<String> = Vec::new();
+    let mut out: Vec<crate::config::GameAlias> = Vec::new();
+    for part in raw.split(',') {
+        let name = part.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let norm = forge_detection::alias::normalize_alias_name(name);
+        if norm == entry_title_norm || seen.contains(&norm) {
+            continue;
+        }
+        if let Some(other) = crate::config::find_library_key(db, name) {
+            if forge_detection::alias::normalize_alias_name(&other) != entry_title_norm {
+                return Err(format!(
+                    "\"{}\" is already a game in your library — an alias can't shadow another game's title",
+                    name
+                ));
+            }
+        }
+        seen.push(norm.clone());
+        out.push(
+            existing
+                .iter()
+                .find(|a| forge_detection::alias::normalize_alias_name(&a.name) == norm)
+                .cloned()
+                .unwrap_or_else(|| crate::config::GameAlias {
+                    name: name.to_string(),
+                    priority: 1,
+                    language: "en".to_string(),
+                    added_at: format!("{:010}", now),
+                    preferred: false,
+                }),
+        );
+    }
+    Ok(out)
 }
 
 /// Remove a process (case-insensitive) from the delisted list.
@@ -379,6 +455,30 @@ async fn scan_metadata_handler(
     ))
 }
 
+#[derive(Deserialize)]
+struct ResolveCoverBody {
+    url: String,
+}
+
+/// Resolves a pasted cover/logo value that isn't actually an image link.
+/// Right now that means a SteamGridDB asset *page* URL, like
+/// steamgriddb.com/grid/805055 — that's an HTML page, not the image itself.
+/// Anything else (a real direct URL, a local file path) comes back
+/// unchanged; local paths get handled on the frontend via Tauri's asset
+/// protocol instead.
+async fn resolve_cover_handler(
+    Query(q): Query<TokenQuery>,
+    headers: HeaderMap,
+    Json(body): Json<ResolveCoverBody>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    check_token(&headers, q.token.as_deref()).map_err(|s| (s, String::new()))?;
+    let config = load_config().unwrap_or_default();
+    let resolved = crate::metadata::resolve_cover_field(&body.url, &config.api_keys.steamgrid)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(serde_json::json!({ "url": resolved })))
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Browser-initiated OAuth logins (mirror the kick_login/twitch_login commands)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -429,9 +529,10 @@ async fn twitch_login_handler(State(state): State<ServerState>) -> Result<Redire
     )))
 }
 
-/// Build the status payload the overlays consume — game info from the native
+/// Build the status payload the overlays consume — game info from the
 /// engine (or LAN Hub), enriched with Forge_Database library metadata.
-pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
+pub fn build_status(engine: &EngineState) -> serde_json::Value {
+    let running = engine.running.load(Ordering::Relaxed);
     let game = engine.current_game.lock().unwrap().clone();
     let process = engine.current_process.lock().unwrap().clone();
     let is_playing = *engine.is_playing.lock().unwrap();
@@ -440,16 +541,19 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
     let config = load_config();
     let fade_timer = config
         .as_ref()
-        .map(|c| c.engine_settings.widget_fade_timer)
+        .map(|c| c.engine_settings.overlay_fade_timer)
         .unwrap_or(15);
 
     let game_title = game.as_ref().map(|g| g.title.clone()).unwrap_or_default();
 
     // Enrich with Forge_Database.json library metadata when we have a match.
-    // While idle, fall back to the idle category's own library entry (e.g.
-    // "Just Chatting") so a custom cover set for it via the Library editor
-    // shows up here too, instead of always falling through to the app's
-    // built-in placeholder image.
+    // While idle (but running), fall back to the idle category's own
+    // library entry (e.g. "Just Chatting") so a custom cover set for it via
+    // the Library editor shows up here too, instead of always falling
+    // through to the app's built-in placeholder image. Skipped entirely
+    // while the engine isn't running — there's no live idle session to
+    // reflect, so the widget/Dashboard should show truly offline, not the
+    // idle category's cover.
     let mut genre = String::new();
     let mut developer = String::new();
     let mut publisher = String::new();
@@ -458,10 +562,12 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
     let mut logo_url = String::new();
     let lookup_title = if !game_title.is_empty() {
         Some(game_title.clone())
-    } else {
+    } else if running {
         config
             .as_ref()
             .map(|c| c.engine_settings.idle_category.clone())
+    } else {
+        None
     };
     if let Some(lookup_title) = lookup_title {
         if let Ok(db) = load_db() {
@@ -479,7 +585,7 @@ pub fn build_status(engine: &NativeEngineState) -> serde_json::Value {
     }
 
     serde_json::json!({
-        "running": true,
+        "running": running,
         "game_title": game_title,
         "process_name": process,
         "is_playing": is_playing,
@@ -512,8 +618,8 @@ async fn settings_handler(
     let config = load_config();
     let es = config.map(|c| c.engine_settings);
     Ok(Json(serde_json::json!({
-        "widget_poll_rate": es.as_ref().map(|e| e.widget_poll_rate).unwrap_or(3),
-        "widget_fade_timer": es.as_ref().map(|e| e.widget_fade_timer).unwrap_or(15),
+        "overlay_poll_rate": es.as_ref().map(|e| e.overlay_poll_rate).unwrap_or(3),
+        "overlay_fade_timer": es.as_ref().map(|e| e.overlay_fade_timer).unwrap_or(15),
         "idle_category": es.as_ref().map(|e| e.idle_category.clone()).unwrap_or_else(|| "Just Chatting".to_string()),
     })))
 }
@@ -555,18 +661,21 @@ async fn health_handler() -> StatusCode {
     StatusCode::OK
 }
 
-/// Serves an overlay widget file (HTML + its assets) gated by the real
-/// `widget_token`, at the URL the frontend's Overlay Generator hands out
-/// (`/forge-widget/{token}/{file}`). Unlike `check_token`, a missing/wrong
+/// Serves an overlay file (HTML + its assets) gated by the real
+/// `overlay_token`, at the URL the frontend's Overlay Generator hands out
+/// (`/forge-overlay/{token}/{file}`). `/forge-widget/...` routes here too —
+/// the old path from before the widget→overlay rename — so a URL already
+/// pasted into an OBS Browser Source keeps working forever; only newly
+/// generated URLs use the new path. Unlike `check_token`, a missing/wrong
 /// token is always rejected here — an OBS browser-source URL is the one
-/// widget surface meant to leave the machine (pasted into streaming
+/// overlay surface meant to leave the machine (pasted into streaming
 /// software, screen-shared, etc.), so it doesn't get the loopback-implies-
 /// trusted pass that `/status`/`/settings` get.
-async fn forge_widget_handler(
+async fn forge_overlay_handler(
     axum::extract::Path((token, file)): axum::extract::Path<(String, String)>,
 ) -> Result<axum::response::Response, StatusCode> {
     let expected = load_config()
-        .map(|c| c.engine_settings.widget_token)
+        .map(|c| c.engine_settings.overlay_token)
         .unwrap_or_default();
     if expected.is_empty() || !constant_time_eq(token.as_bytes(), expected.as_bytes()) {
         return Err(StatusCode::UNAUTHORIZED);
@@ -603,7 +712,10 @@ fn build_router(state: ServerState) -> Router {
         .route("/settings", get(settings_handler))
         .route("/ws", get(ws_handler))
         .route("/health", get(health_handler))
-        .route("/forge-widget/{token}/{file}", get(forge_widget_handler))
+        .route("/forge-overlay/{token}/{file}", get(forge_overlay_handler))
+        // Old route name, kept working for URLs already pasted into an OBS
+        // Browser Source before the widget→overlay rename.
+        .route("/forge-widget/{token}/{file}", get(forge_overlay_handler))
         .route("/api/forge-full", get(forge_full_handler))
         .route("/api/exiled-apps", get(exiled_apps_handler))
         .route("/list", post(list_handler))
@@ -611,6 +723,7 @@ fn build_router(state: ServerState) -> Router {
         .route("/export-meta", get(export_meta_handler))
         .route("/import-meta", post(import_meta_handler))
         .route("/api/scan-metadata", post(scan_metadata_handler))
+        .route("/api/resolve-cover", post(resolve_cover_handler))
         .route("/kick/login", get(kick_login_handler))
         .route("/twitch/login", get(twitch_login_handler))
         .route(
@@ -829,6 +942,93 @@ mod tests {
             db.listed_apps.get("apblauncher.exe"),
             Some(&"APB Reloaded".to_string())
         );
+    }
+
+    #[test]
+    fn aliases_string_field_parses_into_structured_aliases() {
+        let mut db = ForgeDatabase::default();
+        let body = serde_json::json!({
+            "title": "Dark Souls III",
+            "aliases": "DS3, Dark Souls 3, ",
+        });
+        upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+        let aliases = &db.library["Dark Souls III"].aliases;
+        assert_eq!(aliases.len(), 2);
+        assert_eq!(aliases[0].name, "DS3");
+        assert_eq!(aliases[0].priority, 1);
+        assert_eq!(aliases[0].language, "en");
+        assert!(!aliases[0].added_at.is_empty());
+        assert_eq!(aliases[1].name, "Dark Souls 3");
+    }
+
+    #[test]
+    fn alias_reedit_preserves_metadata_and_dedupes() {
+        let mut db = ForgeDatabase::default();
+        let first = serde_json::json!({ "title": "Dark Souls III", "aliases": "DS3" });
+        upsert_library_entry(&mut db, first.as_object().unwrap()).unwrap();
+        let original_added_at = db.library["Dark Souls III"].aliases[0].added_at.clone();
+
+        // Re-save with the same name (different case), a duplicate, the
+        // entry's own title, and one new name.
+        let second = serde_json::json!({
+            "title": "Dark Souls III",
+            "aliases": "ds3, DS3, Dark Souls III, Souls III",
+        });
+        upsert_library_entry(&mut db, second.as_object().unwrap()).unwrap();
+        let aliases = &db.library["Dark Souls III"].aliases;
+        assert_eq!(aliases.len(), 2);
+        assert_eq!(aliases[0].added_at, original_added_at); // metadata survives
+        assert_eq!(aliases[1].name, "Souls III");
+    }
+
+    #[test]
+    fn alias_shadowing_another_library_title_is_rejected() {
+        let mut db = ForgeDatabase::default();
+        let other = serde_json::json!({ "title": "Elden Ring" });
+        upsert_library_entry(&mut db, other.as_object().unwrap()).unwrap();
+
+        let body = serde_json::json!({
+            "title": "Dark Souls III",
+            "aliases": "elden ring",
+        });
+        assert!(upsert_library_entry(&mut db, body.as_object().unwrap()).is_err());
+        // The failed save must not have inserted a half-built entry.
+        assert!(!db.library.contains_key("Dark Souls III"));
+    }
+
+    #[test]
+    fn entry_without_aliases_serializes_without_aliases_key() {
+        // Backward compat: pre-alias Forge_Database.json round-trips with no
+        // new keys appearing on entries that have no aliases.
+        let mut db = ForgeDatabase::default();
+        let body = serde_json::json!({ "title": "Celeste" });
+        upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+        let json = serde_json::to_value(&db.library["Celeste"]).unwrap();
+        assert!(json.get("aliases").is_none());
+    }
+
+    #[test]
+    fn resolve_title_alias_prefers_canonical_titles_over_aliases() {
+        let mut db = ForgeDatabase::default();
+        let a = serde_json::json!({ "title": "Dark Souls III", "aliases": "DS3" });
+        upsert_library_entry(&mut db, a.as_object().unwrap()).unwrap();
+
+        // A raw title that IS a library title resolves to itself (None).
+        assert_eq!(
+            crate::config::resolve_title_alias(&db, "Dark Souls III"),
+            None
+        );
+        assert_eq!(
+            crate::config::resolve_title_alias(&db, "dark souls iii "),
+            None
+        );
+        // An alias resolves to the canonical title, case-insensitively.
+        assert_eq!(
+            crate::config::resolve_title_alias(&db, " ds3"),
+            Some("Dark Souls III".to_string())
+        );
+        // Unknown titles stay unresolved.
+        assert_eq!(crate::config::resolve_title_alias(&db, "Elden Ring"), None);
     }
 
     #[test]

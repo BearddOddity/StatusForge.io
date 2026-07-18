@@ -174,7 +174,7 @@ export default function OAuthConnectModal({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={handleClose}>
+    <div className="fixed inset-0 z-[350] flex items-center justify-center" onClick={handleClose}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
 

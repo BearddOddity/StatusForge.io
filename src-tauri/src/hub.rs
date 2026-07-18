@@ -1,11 +1,11 @@
 //! LAN Hub — the StatusForge side of the dual-PC link.
 //!
 //! - **Announce**: broadcasts `{"app":"StatusForge_Hub","hub_name":…}` on UDP
-//!   53736 so SPARK agents can show which hub they're broadcasting to.
-//! - **Receive**: listens on UDP 53735 for SPARK heartbeats, validates the
-//!   4-digit PIN + HMAC signature (see `spark_protocol`), and feeds the
+//!   53736 so Blipy agents can show which hub they're broadcasting to.
+//! - **Receive**: listens on UDP 53735 for Blipy heartbeats, validates the
+//!   4-digit PIN + HMAC signature (see `blipy_protocol`), and feeds the
 //!   detected `{game, process}` into the same status/broadcast path the local
-//!   native engine uses — overlays update identically for 1-PC and 2-PC users.
+//!   engine uses — overlays update identically for 1-PC and 2-PC users.
 
 use std::net::UdpSocket;
 use std::sync::{Arc, Mutex};
@@ -14,18 +14,18 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use tauri::Emitter;
 
-use crate::scanner::GameDetection;
-use crate::spark_protocol::{
+use crate::blipy_protocol::{
     self, HeartbeatError, HubAnnounce, DISCOVERY_PORT, HEARTBEAT_PORT, PROTOCOL_VERSION,
 };
-use crate::NativeEngineState;
+use crate::scanner::GameDetection;
+use crate::EngineState;
 
-/// A SPARK heartbeat is considered stale after this many seconds
-/// (SPARK sends roughly every 10s).
-const SPARK_STALE_SECS: f64 = 30.0;
+/// A Blipy heartbeat is considered stale after this many seconds
+/// (Blipy sends roughly every 10s).
+const BLIPY_STALE_SECS: f64 = 30.0;
 
 #[derive(Debug, Clone, Serialize, Default)]
-pub struct PairedSpark {
+pub struct PairedBlipy {
     pub hostname: String,
     pub last_seen: f64,
     pub game: Option<String>,
@@ -34,7 +34,7 @@ pub struct PairedSpark {
 
 pub struct HubState {
     pub hub_name: String,
-    pub paired: Mutex<Option<PairedSpark>>,
+    pub paired: Mutex<Option<PairedBlipy>>,
     /// Count of rejected packets (wrong PIN / bad signature), for diagnostics.
     pub rejected: Mutex<u64>,
 }
@@ -73,18 +73,18 @@ fn read_pairing() -> (String, String) {
         .and_then(|base| crate::auth::load_config_at(&base).ok());
     match config {
         Some(c) => (
-            c.engine_settings.spark_pin,
-            c.engine_settings.spark_pairing_key,
+            c.engine_settings.blipy_pin,
+            c.engine_settings.blipy_pairing_key,
         ),
         None => ("0000".to_string(), String::new()),
     }
 }
 
 /// Best-effort: load config + Forge DB and push the idle category. Used
-/// when a SPARK-sourced game clears, mirroring the native loop's
+/// when a Blipy-sourced game clears, mirroring the engine loop's
 /// grace-period-expired path. Never errors — logs and gives up quietly,
 /// same as every other pusher call site.
-fn push_idle_category(base: &std::path::Path) {
+fn push_idle_category(base: &std::path::Path, app_handle: Option<&tauri::AppHandle>) {
     let Ok(config) = crate::auth::load_config_at(base) else {
         return;
     };
@@ -93,26 +93,29 @@ fn push_idle_category(base: &std::path::Path) {
             .ok()
             .and_then(|c| serde_json::from_str(&c).ok())
             .unwrap_or_default();
-    crate::pusher::push_category(
+    let health_events = crate::pusher::push_category(
         base,
         &config,
         &forge_db,
         &config.engine_settings.idle_category,
     );
+    if let Some(app) = app_handle {
+        crate::emit_health_events(app, &health_events);
+    }
 }
 
 /// Apply a validated heartbeat to the shared engine state so overlays and the
 /// frontend update exactly as with local detection.
 ///
-/// SPARK only detects and forwards — no game database, no metadata, no
+/// Blipy only detects and forwards — no game database, no metadata, no
 /// platform pushes on its side. This app is what finds metadata and pushes
-/// categories, so a SPARK-sourced detection gets funneled through the same
+/// categories, so a Blipy-sourced detection gets funneled through the same
 /// `on_game_detected` a local detection uses (needs a real AppHandle, so
 /// this is skipped in the unit tests that pass `None`).
 pub fn apply_heartbeat(
     hub: &HubState,
-    engine: &Arc<NativeEngineState>,
-    hb: &spark_protocol::Heartbeat,
+    engine: &Arc<EngineState>,
+    hb: &blipy_protocol::Heartbeat,
     app_handle: Option<&tauri::AppHandle>,
 ) {
     let mut changed = false;
@@ -122,7 +125,7 @@ pub fn apply_heartbeat(
         if prev_game != hb.game {
             changed = true;
         }
-        *paired = Some(PairedSpark {
+        *paired = Some(PairedBlipy {
             hostname: hb.hostname.clone(),
             last_seen: now_secs(),
             game: hb.game.clone(),
@@ -136,10 +139,17 @@ pub fn apply_heartbeat(
 
     match (&hb.game, &hb.process) {
         (Some(game), process) => {
+            // Stage 0 alias resolution, same as the local engine loop —
+            // Blipy forwards raw titles and this app owns the library, so
+            // a Blipy-sourced "DS3" must land as "Dark Souls III" too.
+            let title = crate::server::load_db()
+                .ok()
+                .and_then(|db| crate::config::resolve_title_alias(&db, game))
+                .unwrap_or_else(|| game.clone());
             let detection = GameDetection {
-                title: game.clone(),
+                title,
                 process: process.clone().unwrap_or_default(),
-                platform: format!("SPARK ({})", hb.hostname),
+                platform: format!("Blipy ({})", hb.hostname),
             };
             *engine.current_game.lock().unwrap() = Some(detection.clone());
             *engine.current_process.lock().unwrap() = detection.process.clone();
@@ -163,24 +173,24 @@ pub fn apply_heartbeat(
             }
         }
         (None, _) => {
-            // SPARK reports idle — clear only if the current game came from SPARK.
-            let from_spark = engine
+            // Blipy reports idle — clear only if the current game came from Blipy.
+            let from_blipy = engine
                 .current_game
                 .lock()
                 .unwrap()
                 .as_ref()
-                .map(|g| g.platform.starts_with("SPARK"))
+                .map(|g| g.platform.starts_with("Blipy"))
                 .unwrap_or(false);
-            if from_spark {
+            if from_blipy {
                 *engine.current_game.lock().unwrap() = None;
                 *engine.current_process.lock().unwrap() = String::new();
                 *engine.is_playing.lock().unwrap() = false;
                 *engine.start_time.lock().unwrap() = 0.0;
                 if let Some(app) = app_handle {
-                    let _ = app.emit("game-cleared", "SPARK idle");
+                    let _ = app.emit("game-cleared", "Blipy idle");
                 }
                 if let Ok(base) = crate::app_base_dir() {
-                    push_idle_category(&base);
+                    push_idle_category(&base, app_handle);
                 }
             }
         }
@@ -192,13 +202,13 @@ pub fn apply_heartbeat(
 /// Pure enough for the in-process dual-PC integration test.
 pub fn handle_packet(
     hub: &HubState,
-    engine: &Arc<NativeEngineState>,
+    engine: &Arc<EngineState>,
     data: &[u8],
     pin: &str,
     pairing_key: &str,
     app_handle: Option<&tauri::AppHandle>,
-) -> Result<spark_protocol::Heartbeat, HeartbeatError> {
-    match spark_protocol::validate_heartbeat(data, pin, pairing_key) {
+) -> Result<blipy_protocol::Heartbeat, HeartbeatError> {
+    match blipy_protocol::validate_heartbeat(data, pin, pairing_key) {
         Ok(hb) => {
             apply_heartbeat(hub, engine, &hb, app_handle);
             Ok(hb)
@@ -206,7 +216,7 @@ pub fn handle_packet(
         Err(e) => {
             if !matches!(e, HeartbeatError::NotAHeartbeat) {
                 *hub.rejected.lock().unwrap() += 1;
-                log::warn!("[HUB] Rejected SPARK packet: {}", e);
+                log::warn!("[HUB] Rejected Blipy packet: {}", e);
             }
             Err(e)
         }
@@ -214,7 +224,7 @@ pub fn handle_packet(
 }
 
 /// Start the Hub: heartbeat listener (UDP 53735) + discovery announcer (UDP 53736).
-pub fn start_hub(hub: Arc<HubState>, engine: Arc<NativeEngineState>, app_handle: tauri::AppHandle) {
+pub fn start_hub(hub: Arc<HubState>, engine: Arc<EngineState>, app_handle: tauri::AppHandle) {
     // ── Heartbeat listener ─────────────────────────────────────────────
     {
         let hub = hub.clone();
@@ -229,7 +239,7 @@ pub fn start_hub(hub: Arc<HubState>, engine: Arc<NativeEngineState>, app_handle:
                 }
             };
             log::info!(
-                "[HUB] Listening for SPARK heartbeats on udp/{}",
+                "[HUB] Listening for Blipy heartbeats on udp/{}",
                 HEARTBEAT_PORT
             );
             let mut buf = [0u8; 2048];
@@ -277,24 +287,24 @@ pub fn start_hub(hub: Arc<HubState>, engine: Arc<NativeEngineState>, app_handle:
             loop {
                 let _ = socket.send_to(&payload, ("255.255.255.255", DISCOVERY_PORT));
 
-                // Housekeeping: expire a stale SPARK pairing.
+                // Housekeeping: expire a stale Blipy pairing.
                 {
                     let mut paired = hub.paired.lock().unwrap();
                     if let Some(p) = paired.as_ref() {
-                        if now_secs() - p.last_seen > SPARK_STALE_SECS {
-                            log::info!("[HUB] SPARK '{}' went silent — unpairing", p.hostname);
+                        if now_secs() - p.last_seen > BLIPY_STALE_SECS {
+                            log::info!("[HUB] Blipy '{}' went silent — unpairing", p.hostname);
                             let had_game = p.game.is_some();
                             *paired = None;
                             drop(paired);
                             if had_game {
-                                let from_spark = engine
+                                let from_blipy = engine
                                     .current_game
                                     .lock()
                                     .unwrap()
                                     .as_ref()
-                                    .map(|g| g.platform.starts_with("SPARK"))
+                                    .map(|g| g.platform.starts_with("Blipy"))
                                     .unwrap_or(false);
-                                if from_spark {
+                                if from_blipy {
                                     *engine.current_game.lock().unwrap() = None;
                                     *engine.current_process.lock().unwrap() = String::new();
                                     *engine.is_playing.lock().unwrap() = false;
@@ -322,7 +332,7 @@ pub fn hub_get_status(state: tauri::State<Arc<HubState>>) -> serde_json::Value {
     serde_json::json!({
         "hub_name": state.hub_name,
         "pin": pin,
-        "paired_spark": paired,
+        "paired_blipy": paired,
         "rejected_packets": *state.rejected.lock().unwrap(),
         "protocol_version": PROTOCOL_VERSION,
         "heartbeat_port": HEARTBEAT_PORT,
@@ -337,7 +347,7 @@ pub fn hub_set_pin(pin: String) -> Result<String, String> {
     }
     let base = crate::app_base_dir()?;
     let mut config = crate::auth::load_config_at(&base)?;
-    config.engine_settings.spark_pin = pin;
+    config.engine_settings.blipy_pin = pin;
     crate::auth::save_config_at(&base, &config)?;
     Ok("Hub PIN updated".to_string())
 }
@@ -349,7 +359,7 @@ pub fn hub_set_pairing_key(key: String) -> Result<String, String> {
     }
     let base = crate::app_base_dir()?;
     let mut config = crate::auth::load_config_at(&base)?;
-    config.engine_settings.spark_pairing_key = key;
+    config.engine_settings.blipy_pairing_key = key;
     crate::auth::save_config_at(&base, &config)?;
     Ok("Pairing key updated".to_string())
 }

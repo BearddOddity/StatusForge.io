@@ -29,8 +29,8 @@
     "sb_port": 8080,
     "scan_interval": 5,
     "strict_forge_mode": false,
-    "widget_fade_timer": 15,
-    "widget_poll_rate": 8,
-    "widget_token": "GENERATE_A_RANDOM_TOKEN"
+    "overlay_fade_timer": 15,
+    "overlay_poll_rate": 8,
+    "overlay_token": "GENERATE_A_RANDOM_TOKEN"
   }
 }

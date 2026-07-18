@@ -7,6 +7,7 @@ export interface GameInfo {
 }
 
 export interface EngineStatusData {
+  running: boolean;
   is_playing: boolean;
   game_title: string;
   process_name: string;
@@ -31,7 +32,7 @@ export interface EngineStatus {
   publisher: string;
   release_date: string;
   cover_url: string;
-  widgetToken: string;
+  overlayToken: string;
 }
 
 export interface ApiKeys {
@@ -40,6 +41,7 @@ export interface ApiKeys {
   igdb_client: string;
   igdb_secret: string;
   igdb_token: string;
+  thegamesdb: string;
 }
 
 export interface EngineSettings {
@@ -47,18 +49,18 @@ export interface EngineSettings {
   sb_port: number;
   scan_interval: number;
   grace_period: number;
-  widget_poll_rate: number;
+  overlay_poll_rate: number;
   safe_mode: boolean;
   auto_push: boolean;
   platform_push_enabled: boolean;
-  widget_fade_timer: number;
+  overlay_fade_timer: number;
   strict_forge_mode: boolean;
   sb_action_name: string;
-  widget_token: string;
-  // Spark / dual-PC
-  spark_pin: string;
-  spark_pairing_key: string;
-  spark_link_active: boolean;
+  overlay_token: string;
+  // Blipy / dual-PC
+  blipy_pin: string;
+  blipy_pairing_key: string;
+  blipy_link_active: boolean;
   // Detection pipeline
   emulator_detection: boolean;
   ram_threshold: number;
@@ -98,6 +100,17 @@ export interface AppConfig {
   broadcaster: BroadcasterConfig;
 }
 
+// A user-created alternative name that detection resolves to the entry's
+// canonical title (Stage 0). Metadata beyond `name` is managed backend-side;
+// the editor round-trips names as a comma-separated string.
+export interface GameAlias {
+  name: string;
+  priority: number;
+  language: string;
+  added_at: string;
+  preferred: boolean;
+}
+
 export interface ForgeLibraryEntry {
   title: string;
   genre: string;
@@ -117,7 +130,12 @@ export interface ForgeLibraryEntry {
   sgdb_id: string;
   xbox_title_id: string;
   epic_id: string;
+  thegamesdb_id: string;
   executables: string;
+  // Absent on entries with no aliases (backend skips serializing empty).
+  aliases?: GameAlias[];
+  // Absent on entries with no sync history (backend skips serializing empty).
+  sync_history?: { timestamp: string; action: string; changes: string }[];
 }
 
 export interface ForgeDatabase {

@@ -1,0 +1,361 @@
+@import "tailwindcss";
+
+/* ─── Theme — mirrors StatusForge ───────────────────────────────────────────── */
+
+:root {
+  --font-family:
+    "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --accent: 145, 70, 255;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/montserrat/montserrat-700.woff2") format("woff2");
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font-family);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ─── Drag ─────────────────────────────────────────────────────────────────── */
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+.drag-region button,
+.drag-region input {
+  -webkit-app-region: no-drag;
+}
+
+/* ─── Animations ──────────────────────────────────────────────────────────── */
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ─── Root ────────────────────────────────────────────────────────────────── */
+
+.blipy-root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(var(--accent), 0.1), transparent 55%),
+    rgba(8, 8, 12, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 0 24px rgba(var(--accent), 0.12);
+}
+
+/* ─── Card surface ────────────────────────────────────────────────────────── */
+
+.blipy-card {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+/* ─── Header ──────────────────────────────────────────────────────────────── */
+
+.blipy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.blipy-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.blipy-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.blipy-brand {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+}
+
+.blipy-host {
+  font-size: 11px;
+  font-family: var(--font-family-mono);
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ─── Body ────────────────────────────────────────────────────────────────── */
+
+.blipy-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─── Now Playing row ─────────────────────────────────────────────────────── */
+
+.blipy-now-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.blipy-now-subtitle {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.blipy-now-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Status row ──────────────────────────────────────────────────────────── */
+
+.blipy-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.blipy-status-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* ─── Controls ────────────────────────────────────────────────────────────── */
+
+.blipy-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.blipy-pin-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.blipy-pin-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.blipy-pin-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-family-mono);
+  letter-spacing: 2px;
+  text-align: center;
+  outline: none;
+  transition: all 0.2s;
+}
+.blipy-pin-input:focus {
+  border-color: rgba(145, 70, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(145, 70, 255, 0.08);
+}
+
+/* ─── Buttons — mirror Status Room Btn component ──────────────────────────── */
+
+.blipy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.blipy-btn:active {
+  transform: scale(0.97);
+}
+
+/* primary — matches Btn primary */
+.blipy-btn-primary {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+.blipy-btn-primary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* danger — matches Btn danger */
+.blipy-btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: rgba(239, 68, 68, 0.8);
+}
+.blipy-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: rgba(239, 68, 68, 1);
+}
+
+/* ghost — matches Btn ghost */
+.blipy-btn-ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+}
+.blipy-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* success / toggle-on */
+.blipy-btn-success {
+  background: rgba(52, 199, 89, 0.1);
+  border-color: rgba(52, 199, 89, 0.2);
+  color: rgba(52, 199, 89, 0.8);
+}
+.blipy-btn-success:hover {
+  background: rgba(52, 199, 89, 0.15);
+  border-color: rgba(52, 199, 89, 0.3);
+  color: rgba(52, 199, 89, 1);
+}
+
+/* push — accent action */
+.blipy-btn-push {
+  background: rgba(145, 70, 255, 0.1);
+  border-color: rgba(145, 70, 255, 0.2);
+  color: rgba(145, 70, 255, 0.8);
+  flex: 1;
+  padding: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.blipy-btn-push:hover {
+  background: rgba(145, 70, 255, 0.18);
+  border-color: rgba(145, 70, 255, 0.35);
+  color: rgba(145, 70, 255, 1);
+}
+
+.blipy-push-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* ─── Footer ──────────────────────────────────────────────────────────────── */
+
+.blipy-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.blipy-footer-stat {
+  font-size: 10px;
+  font-weight: 500;
+  font-family: var(--font-family-mono);
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+}

@@ -65,7 +65,7 @@ jobs:
         with:
           workspaces: |
             src-tauri
-            spark-app/src-tauri
+            blipy-app/src-tauri
             forge-detection
 
       - name: Install Linux dependencies

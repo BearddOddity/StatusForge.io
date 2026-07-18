@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>StatusForge Logo Widget</title>
+<title>StatusForge Logo Overlay</title>
 <style>
   body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; display: flex; justify-content: center; align-items: center; -webkit-font-smoothing: antialiased; }
   .widget-container { width: 560px; height: 280px; display: flex; justify-content: center; align-items: center; position: relative; opacity: 0; transition: opacity 1s ease-in-out; }
@@ -49,24 +49,36 @@
 
 <script>
     let lastGame = "";
-    let widgetFadeTimer = null;
+    let titleShownAt = 0;
+    let hasLogo = false;
     let pollRate = 3000;
 
-    // This page is only ever loaded via /forge-widget/<token>/Logo.html, so
-    // the token that unlocked the page itself is right there in the URL —
-    // reuse it for /status and /settings, which require it too.
-    function getWidgetToken() {
+    // The Overlay Generator's picker loads every overlay in an iframe with
+    // ?preview=1 so users can see what each style looks like — that's a
+    // style browser, not a live stream check, so it should never fade or
+    // hide itself based on the real fade timer / idle state the way an
+    // actual OBS source does.
+    const preview = new URLSearchParams(window.location.search).get('preview') === '1';
+
+    // This page is only ever loaded via /forge-overlay/<token>/Logo.html
+    // (or the old /forge-widget/<token>/Logo.html path, kept working for
+    // URLs pasted before the rename), so the token that unlocked the page
+    // itself is right there in the URL — reuse it for /status and
+    // /settings, which require it too.
+    function getOverlayToken() {
         const parts = window.location.pathname.split('/');
-        const idx = parts.indexOf('forge-widget');
+        const idx = parts.indexOf('forge-overlay') >= 0
+            ? parts.indexOf('forge-overlay')
+            : parts.indexOf('forge-widget');
         return idx >= 0 && parts[idx + 1] ? parts[idx + 1] : '';
     }
 
     async function initializeWidget() {
         try {
-            const url = 'http://127.0.0.1:53735/settings?nocache=' + new Date().getTime() + '&token=' + encodeURIComponent(getWidgetToken());
+            const url = 'http://127.0.0.1:53735/settings?nocache=' + new Date().getTime() + '&token=' + encodeURIComponent(getOverlayToken());
             const setRes = await fetch(url);
             const setJson = await setRes.json();
-            pollRate = (setJson.widget_poll_rate || 3) * 1000;
+            pollRate = (setJson.overlay_poll_rate || 3) * 1000;
         } catch(e) {}
         setInterval(pollEngine, pollRate);
         pollEngine();
@@ -74,7 +86,7 @@
 
     async function pollEngine() {
         try {
-            const url = 'http://127.0.0.1:53735/status?nocache=' + new Date().getTime() + '&token=' + encodeURIComponent(getWidgetToken());
+            const url = 'http://127.0.0.1:53735/status?nocache=' + new Date().getTime() + '&token=' + encodeURIComponent(getOverlayToken());
             const res = await fetch(url);
             const data = await res.json();
             const w = document.getElementById("w");
@@ -83,38 +95,49 @@
             if (data.is_playing) {
                 if (data.game_title !== lastGame) {
                     lastGame = data.game_title;
+                    titleShownAt = Date.now();
+                    hasLogo = !!data.logo_url;
 
-                    if (widgetFadeTimer) clearTimeout(widgetFadeTimer);
-
-                    if (data.logo_url) {
+                    if (hasLogo) {
                         logo.classList.remove("visible", "offline-icon");
                         setTimeout(() => {
                             logo.src = data.logo_url;
                             logo.classList.add("visible");
                         }, 300);
-                        w.style.opacity = "1";
-                    } else {
-                        // No logo for this game — nothing sensible to show,
-                        // stay hidden rather than an empty/broken image.
-                        w.style.opacity = "0";
-                    }
-
-                    if (data.fade_timer > 0) {
-                        widgetFadeTimer = setTimeout(() => {
-                            w.style.opacity = "0";
-                        }, data.fade_timer * 1000);
+                    } else if (preview) {
+                        // Detected game has no logo — in preview mode, show
+                        // something (the app icon) rather than a blank image.
+                        logo.classList.add("offline-icon");
+                        logo.src = "icon.png";
+                        logo.classList.add("visible");
                     }
                 }
-            } else {
+
+                if (preview) {
+                    w.style.opacity = "1";
+                } else if (!hasLogo) {
+                    // No logo for this game — nothing sensible to show,
+                    // stay hidden rather than an empty/broken image.
+                    w.style.opacity = "0";
+                } else if (data.fade_timer > 0) {
+                    // Re-checked every poll (not just on a title change) so
+                    // a Settings change to the fade timer takes effect right
+                    // away instead of waiting for the next game switch.
+                    const elapsed = (Date.now() - titleShownAt) / 1000;
+                    w.style.opacity = elapsed >= data.fade_timer ? "0" : "1";
+                } else {
+                    w.style.opacity = "1";
+                }
+            } else if (!preview) {
                 w.style.opacity = "0";
                 lastGame = "";
-                if (widgetFadeTimer) clearTimeout(widgetFadeTimer);
             }
         } catch(e) {}
     }
 
     // Offline fallback — dim app icon so the layout has something to show
     // in the picker preview and when the engine truly isn't running.
+    // Instant in preview mode so the picker never shows a blank gap.
     setTimeout(function() {
         if (!lastGame) {
             lastGame = "__offline__";
@@ -125,7 +148,7 @@
             logo.classList.add("visible");
             w.style.opacity = "1";
         }
-    }, 1500);
+    }, preview ? 0 : 1500);
 
     initializeWidget();
 </script>

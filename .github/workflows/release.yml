@@ -1,4 +1,4 @@
-# Release builds — one installer per OS for BOTH apps (StatusForge + SPARK).
+# Release builds — one installer per OS for BOTH apps (StatusForge + Blipy).
 # This is the canonical build path: Tauri bundles are produced on their own
 # OS runner (no local cross-compilation).
 #
@@ -8,9 +8,9 @@
 # Releases:
 # - StatusForge → release "v__VERSION__" (regular release, so
 #   /releases/latest/download/latest.json always resolves to StatusForge)
-# - SPARK       → moving tag "spark-latest" (marked prerelease so it never
+# - Blipy       → moving tag "blipy-latest" (marked prerelease so it never
 #   claims /releases/latest); its updater endpoint is
-#   /releases/download/spark-latest/latest.json
+#   /releases/download/blipy-latest/latest.json
 #
 # Secrets required (updater artifact signing — minisign, independent of
 # Apple code signing):
@@ -48,11 +48,27 @@ jobs:
             tagName: v__VERSION__
             releaseName: "StatusForge v__VERSION__"
             prerelease: false
-          - name: Spark
-            path: spark-app
-            tagName: spark-latest
-            releaseName: "Spark v__VERSION__"
+            # Cargo package name (target/release/<binName>[.exe]) — differs
+            # from productName, which is only used inside the bundled
+            # installers, not the raw cargo build output.
+            binName: app
+            slug: statusforge
+            versionFile: src-tauri/tauri.conf.json
+            releaseTag: v
+            # Portable build needs the same files bundle.resources copies
+            # into each installer, since the app reads them relative to its
+            # own exe (see app_base_dir() in src-tauri/src/lib.rs).
+            resources: "widgets Config.json.template public"
+          - name: Blipy
+            path: blipy-app
+            tagName: blipy-latest
+            releaseName: "Blipy v__VERSION__"
             prerelease: true
+            binName: blipy
+            slug: blipy
+            versionFile: blipy-app/src-tauri/tauri.conf.json
+            releaseTag: blipy-latest
+            resources: ""
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.app.name }} (${{ matrix.os }})
     steps:
@@ -71,7 +87,7 @@ jobs:
         with:
           workspaces: |
             src-tauri
-            spark-app/src-tauri
+            blipy-app/src-tauri
             forge-detection
 
       - name: Install Linux dependencies
@@ -109,6 +125,65 @@ jobs:
           prerelease: ${{ matrix.app.prerelease }}
           includeUpdaterJson: true
 
+      # tauri-action's tagName above is the literal "v__VERSION__"/moving-tag
+      # config value, not the real resolved tag on the release it just
+      # created — need the actual tag string to `gh release upload` against.
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ matrix.app.releaseTag }}" = "blipy-latest" ]; then
+            echo "tag=blipy-latest" >> "$GITHUB_OUTPUT"
+          else
+            VERSION=$(node -p "require('./${{ matrix.app.versionFile }}').version")
+            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Portable Windows build: no installer, no registry entries, no
+      # Program Files — just the exe next to the same files bundle.resources
+      # copies into the NSIS/MSI installers above. app_base_dir() in
+      # src-tauri/src/lib.rs already stores Config.json and everything else
+      # next to the exe rather than in %APPDATA%, so this works with zero
+      # app-code changes.
+      - name: Build portable Windows zip
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          set -e
+          STAGE="portable-${{ matrix.app.slug }}"
+          mkdir -p "$STAGE"
+          cp "${{ matrix.app.path }}/src-tauri/target/release/${{ matrix.app.binName }}.exe" "$STAGE/"
+          for r in ${{ matrix.app.resources }}; do
+            cp -r "${{ matrix.app.path }}/$r" "$STAGE/"
+          done
+          ZIP_NAME="${{ matrix.app.slug }}-${{ steps.tag.outputs.tag }}-portable-windows-x64.zip"
+          (cd "$STAGE" && 7z a -tzip "../$ZIP_NAME" .)
+          echo "PORTABLE_ASSET=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      # Portable macOS build: the .app bundle tauri-action already produced
+      # is inherently portable (drag-and-drop, no install step) — the only
+      # non-portable part of the default output is the .dmg wrapper, so this
+      # just zips the .app directly instead. ditto (not `zip`) preserves the
+      # bundle's resource forks/extended attrs correctly.
+      - name: Build portable macOS zip
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          set -e
+          APP_PATH=$(find "${{ matrix.app.path }}/src-tauri/target/release/bundle/macos" -maxdepth 1 -name "*.app" | head -n1)
+          ZIP_NAME="${{ matrix.app.slug }}-${{ steps.tag.outputs.tag }}-portable-macos.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_NAME"
+          echo "PORTABLE_ASSET=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      # Linux doesn't need a separate portable step — the AppImage
+      # tauri-action already built above (part of "targets": "all") already
+      # is the portable format; nothing extra to produce.
+      - name: Upload portable build to the release
+        if: matrix.os == 'windows-latest' || matrix.os == 'macos-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" "${{ env.PORTABLE_ASSET }}" --clobber --repo "${{ github.repository }}"
+
   # Wraps each app's just-published Linux .deb into a Flatpak single-file
   # bundle and attaches it to the same release. Runs after `build` so the
   # release + .deb asset already exist to download from.
@@ -126,24 +201,24 @@ jobs:
             debName: statusforge.deb
             manifest: com.bearddoddity.statusforge.yml
             versionFile: src-tauri/tauri.conf.json
-            isSpark: false
-          - name: Spark
-            id: com.bearddoddity.spark
-            debName: spark.deb
-            manifest: com.bearddoddity.spark.yml
-            versionFile: spark-app/src-tauri/tauri.conf.json
-            isSpark: true
+            isBlipy: false
+          - name: Blipy
+            id: com.bearddoddity.blipy
+            debName: blipy.deb
+            manifest: com.bearddoddity.blipy.yml
+            versionFile: blipy-app/src-tauri/tauri.conf.json
+            isBlipy: true
     name: Flatpak (${{ matrix.app.name }})
     steps:
       - uses: actions/checkout@v4
 
       # StatusForge tags as v<version> (tauri-action expands __VERSION__ at
-      # build time); Spark always tags as the moving spark-latest.
+      # build time); Blipy always tags as the moving blipy-latest.
       - name: Resolve release tag
         id: tag
         run: |
-          if [ "${{ matrix.app.isSpark }}" = "true" ]; then
-            echo "tag=spark-latest" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.app.isBlipy }}" = "true" ]; then
+            echo "tag=blipy-latest" >> "$GITHUB_OUTPUT"
           else
             VERSION=$(node -p "require('./${{ matrix.app.versionFile }}').version")
             echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
@@ -177,3 +252,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ steps.tag.outputs.tag }}" "flatpak/${{ matrix.app.id }}.flatpak" --clobber --repo "${{ github.repository }}"
+
+  # A release created with the default GITHUB_TOKEN (which tauri-action uses
+  # above) does NOT fire the `release: published` event for other workflows
+  # in this repo — that's a deliberate GitHub Actions anti-recursion rule,
+  # not a bug. update-download-page.yml's `on: release` trigger is dead as a
+  # result, so it's dispatched explicitly here instead once every asset
+  # (including the Flatpak wraps) actually exists on the release.
+  sync-download-page:
+    needs: [build, flatpak]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger download-page sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run update-download-page.yml --repo "${{ github.repository }}" --ref development_phase

@@ -1,0 +1,32 @@
+[package]
+name = "blipy"
+version = "1.0.0"
+description = "StatusForge Blipy — Dual-PC Game Detection Agent"
+authors = ["BearddOddity"]
+license = "MIT"
+repository = "https://github.com/BearddOddity/StatusForge.io"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "blipy_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.2", features = [] }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.11.2", features = ["protocol-asset", "tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-log = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-autostart = "2"
+log = "0.4"
+
+dirs = "5"
+hostname = "0.4"
+hmac = "0.12"
+sha2 = "0.10"
+forge-detection = { path = "../../forge-detection" }

@@ -22,7 +22,19 @@ export interface SystemPrefs {
   // (latest.json). Feed this into per-channel manifests once signing/releases
   // publish them.
   updateChannel: "stable" | "beta" | "closed-beta";
+  autoUpdateCheckEnabled: boolean;
   showDevTools: boolean;
+  // Reveals the OAuth-managed token previews in Settings > API & Routing
+  // (Access/Refresh Token). Off by default — those values stay masked.
+  showAccessTokens: boolean;
+  // First-launch setup wizard. Set once it's finished/skipped; a "Replay
+  // Setup Guide" button in Settings > System flips it back to false.
+  onboardingComplete: boolean;
+  // Dashboard's "Struggling to get set up?" banner. Defaults to showing (a
+  // fresh install has no stored prefs, so this key is absent and falls back
+  // to the default below) and stays dismissed permanently once closed — it
+  // only comes back on an actual fresh install, not a page reload.
+  setupBannerDismissed: boolean;
 }
 
 export const defaultSystemPrefs: SystemPrefs = {
@@ -40,7 +52,11 @@ export const defaultSystemPrefs: SystemPrefs = {
   customWebhookUrl: "",
   wsAutoReconnect: true,
   updateChannel: "stable",
+  autoUpdateCheckEnabled: true,
   showDevTools: false,
+  showAccessTokens: false,
+  onboardingComplete: false,
+  setupBannerDismissed: false,
 };
 
 export const SYSTEM_PREFS_KEY = "statusforge_system_prefs";

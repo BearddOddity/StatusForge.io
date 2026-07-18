@@ -1,15 +1,17 @@
 import { useState, useRef, useEffect } from "react";
-import type { EngineStatus, ToastType, SystemStats } from "@/types";
+import { listen } from "@tauri-apps/api/event";
+import type { EngineStatus, ToastType, SystemStats, ViewId } from "@/types";
 import {
   tauriApi,
-  getKeychainStatus,
   getSystemStats,
-  fetchWidgetToken,
+  fetchOverlayToken,
   fetchConfig,
   saveConfig,
 } from "@/hooks/useTauriApi";
 import { Card, Btn, FieldSection } from "@/components/ui";
 import { Toggle } from "@/components/SettingsComponents";
+import { resolveImageSrc } from "@/utils/imageSrc";
+import { loadSystemPrefs, saveSystemPrefs } from "@/systemPrefs";
 
 const idleCover = "/just%20chatting.png";
 const offlineCover = "/offline.svg";
@@ -49,6 +51,22 @@ const overlays = [
     icon: "◆",
     width: 560,
     height: 280,
+  },
+  {
+    id: "ib",
+    label: "Info Box",
+    file: "Info_Box.html",
+    icon: "ℹ",
+    width: 560,
+    height: 200,
+  },
+  {
+    id: "cc",
+    label: "Compact Cover",
+    file: "Compact_Cover.html",
+    icon: "🎵",
+    width: 620,
+    height: 230,
   },
 ];
 
@@ -118,13 +136,19 @@ function maskUrl(url: string): string {
   try {
     const u = new URL(url);
     const parts = u.pathname.split("/");
-    const tokenIdx = parts.indexOf("forge-widget") + 1;
-    if (tokenIdx > 0 && parts[tokenIdx]) {
+    // Overlay URLs already saved by a user before the widget->overlay
+    // rename still use the old segment name — recognize both.
+    const routeIdx =
+      parts.indexOf("forge-overlay") >= 0
+        ? parts.indexOf("forge-overlay")
+        : parts.indexOf("forge-widget");
+    const tokenIdx = routeIdx + 1;
+    if (routeIdx >= 0 && parts[tokenIdx]) {
       const raw = parts[tokenIdx];
       const masked = raw.length > 4 ? "•".repeat(raw.length - 4) + raw.slice(-4) : "••••";
       parts[tokenIdx] = masked;
     }
-    return "/" + parts.slice(parts.indexOf("forge-widget") + 1).join("/");
+    return "/" + parts.slice(routeIdx + 1).join("/");
   } catch {
     return url;
   }
@@ -136,11 +160,118 @@ export default function DashboardView({
   engineStatus,
   wsConnected,
   toast,
+  onNavigate,
+  onRefresh,
+  openOverlayPicker,
+  onOverlayPickerOpened,
+  onStartOnboarding,
 }: {
   engineStatus: EngineStatus;
   wsConnected: boolean;
   toast: (msg: string, type?: ToastType) => void;
+  onNavigate: (view: ViewId) => void;
+  onRefresh: () => Promise<void>;
+  // Lets a caller outside this view (the onboarding wizard's "Browse other
+  // overlay styles" link) open the picker modal on arrival instead of
+  // silently switching views with no way to actually reach it.
+  openOverlayPicker?: boolean;
+  onOverlayPickerOpened?: () => void;
+  onStartOnboarding: () => void;
 }) {
+  const [setupHelpDismissed, setSetupHelpDismissed] = useState(
+    () => loadSystemPrefs().setupBannerDismissed
+  );
+  const dismissSetupHelp = () => {
+    setSetupHelpDismissed(true);
+    saveSystemPrefs({ ...loadSystemPrefs(), setupBannerDismissed: true });
+  };
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideText, setOverrideText] = useState("");
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+  // The engine's running flag flips instantly on the backend, but the
+  // Dashboard otherwise only learns about it from the next scheduled status
+  // poll (up to 10s away) -- calling onRefresh() right after the toggle
+  // closes that gap, and this local flag disables the button in the
+  // meantime so a slow click can't fire the command twice.
+  const [engineToggling, setEngineToggling] = useState(false);
+
+  const submitOverride = async () => {
+    const name = overrideText.trim();
+    if (!name) return;
+    setOverrideSubmitting(true);
+    try {
+      const r = await tauriApi("override_game", { title: name });
+      toast(
+        typeof r === "string" ? r : "Failed to override",
+        typeof r === "string" ? "success" : "error"
+      );
+      setOverrideOpen(false);
+      setOverrideText("");
+    } finally {
+      setOverrideSubmitting(false);
+    }
+  };
+
+  // Post-broadcast feedback: "Detected X — correct?" after each automatic
+  // detection. A "No" correction is logged (per-method accuracy stats),
+  // teaches the alias system, and re-broadcasts the right game.
+  const [feedback, setFeedback] = useState<{ title: string; method: string } | null>(null);
+  const [feedbackCorrecting, setFeedbackCorrecting] = useState(false);
+  const [feedbackActual, setFeedbackActual] = useState("");
+
+  useEffect(() => {
+    const subs = [
+      listen<{ title: string; platform?: string }>("game-detected", (e) => {
+        const title = e.payload?.title ?? "";
+        const method = e.payload?.platform ?? "";
+        // Manual overrides are the user's own word — nothing to confirm.
+        if (!title || method === "Manual Override") {
+          setFeedback(null);
+          return;
+        }
+        setFeedback({ title, method });
+        setFeedbackCorrecting(false);
+        setFeedbackActual("");
+      }),
+      listen("game-cleared", () => setFeedback(null)),
+    ];
+    return () => {
+      subs.forEach((s) => s.then((u) => u()).catch(() => {}));
+    };
+  }, []);
+
+  const confirmDetection = async () => {
+    if (!feedback) return;
+    try {
+      await tauriApi("log_detection_feedback", {
+        detectedTitle: feedback.title,
+        method: feedback.method,
+        actualTitle: null,
+      });
+    } catch {
+      // Tally failure isn't worth interrupting the user over.
+    }
+    setFeedback(null);
+  };
+
+  const submitCorrection = async () => {
+    if (!feedback) return;
+    const actual = feedbackActual.trim();
+    if (!actual) return;
+    try {
+      const r = await tauriApi("log_detection_feedback", {
+        detectedTitle: feedback.title,
+        method: feedback.method,
+        actualTitle: actual,
+      });
+      toast(typeof r === "string" ? r : "Correction saved", "success");
+      await tauriApi("override_game", { title: actual });
+    } catch (e) {
+      toast(`Failed to save correction: ${e}`, "error");
+    }
+    setFeedback(null);
+  };
+
   const [overlayUrls, setOverlayUrls] = useState<{ id: string; url: string; label: string }[]>([]);
   const [overlayIdCounter, setOverlayIdCounter] = useState(0);
   const [overlayPickerOpen, setOverlayPickerOpen] = useState(false);
@@ -148,11 +279,18 @@ export default function DashboardView({
   const [overlayViewMode, setOverlayViewMode] = useState<"grid" | "carousel">("grid");
   const overlayPickerRef = useRef<HTMLDivElement>(null);
 
-  const [widgetToken, setWidgetToken] = useState("");
+  useEffect(() => {
+    if (openOverlayPicker) {
+      setOverlayPickerOpen(true);
+      onOverlayPickerOpened?.();
+    }
+  }, [openOverlayPicker, onOverlayPickerOpened]);
+
+  const [overlayToken, setOverlayToken] = useState("");
   useEffect(() => {
     let cancelled = false;
-    fetchWidgetToken().then((t) => {
-      if (!cancelled) setWidgetToken(t);
+    fetchOverlayToken().then((t) => {
+      if (!cancelled) setOverlayToken(t);
     });
     return () => {
       cancelled = true;
@@ -165,7 +303,12 @@ export default function DashboardView({
   // StatusForge knowing until it's used, so `check_platform_live_status`
   // makes a real (read-only) validation call on every refresh.
   const [platforms, setPlatforms] = useState<PlatformConnections>(disconnectedPlatforms);
-  const [sparkPaired, setSparkPaired] = useState<{ hostname: string } | null>(null);
+  // Set once check_platform_live_status has tried a silent token refresh and
+  // it genuinely failed (refresh token itself dead/revoked, not just an
+  // expired access token) — the signal that a manual reconnect is actually
+  // needed, distinct from a transient "Offline".
+  const [needsReauth, setNeedsReauth] = useState({ twitch: false, kick: false });
+  const [blipyPaired, setBlipyPaired] = useState<{ hostname: string } | null>(null);
   const [platformPushEnabled, setPlatformPushEnabled] = useState(true);
   const togglePlatformPush = async () => {
     const config = await fetchConfig();
@@ -184,8 +327,7 @@ export default function DashboardView({
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
-      const [keychain, config, hub, live] = await Promise.all([
-        getKeychainStatus(),
+      const [config, hub, live] = await Promise.all([
         tauriApi("export_config"),
         tauriApi("hub_get_status"),
         tauriApi("check_platform_live_status"),
@@ -197,24 +339,46 @@ export default function DashboardView({
             .platform_push_enabled
         );
       }
-      const routingMode =
-        config && typeof config === "object" && "broadcaster" in config
-          ? (config as { broadcaster: { routing_mode: string } }).broadcaster.routing_mode
-          : "";
+      // check_platform_live_status already accounts for tokens stored in
+      // Config.json OR the OS keychain (auth::load_config_at backfills from
+      // whichever one has it) and does a real live validation call — no
+      // need to separately gate on get_all_keychain_tokens here too. That
+      // extra gate used to require the token specifically be in the OS
+      // keychain, which silently showed "Offline" for anyone who hadn't
+      // migrated tokens there even though push/detection worked fine.
+      // sbot is a TCP reachability check against the configured Streamer.bot
+      // port, not a push validation — StatusForge doesn't push to it
+      // directly in this routing mode (see check_platform_live_status).
       const liveStatus =
         live && typeof live === "object" && !("error" in live)
-          ? (live as { twitch: boolean; kick: boolean })
-          : { twitch: false, kick: false };
+          ? (live as {
+              twitch: boolean;
+              twitch_needs_reauth: boolean;
+              kick: boolean;
+              kick_needs_reauth: boolean;
+              sbot: boolean;
+            })
+          : {
+              twitch: false,
+              twitch_needs_reauth: false,
+              kick: false,
+              kick_needs_reauth: false,
+              sbot: false,
+            };
       setPlatforms({
-        twitch: keychain.stored.includes("twitch_token") && liveStatus.twitch,
-        kick: keychain.stored.includes("kick_token") && liveStatus.kick,
-        sbot: routingMode === "streamer_bot",
+        twitch: liveStatus.twitch,
+        kick: liveStatus.kick,
+        sbot: liveStatus.sbot,
+      });
+      setNeedsReauth({
+        twitch: liveStatus.twitch_needs_reauth,
+        kick: liveStatus.kick_needs_reauth,
       });
       const paired =
-        hub && typeof hub === "object" && "paired_spark" in hub
-          ? (hub as { paired_spark: { hostname: string } | null }).paired_spark
+        hub && typeof hub === "object" && "paired_blipy" in hub
+          ? (hub as { paired_blipy: { hostname: string } | null }).paired_blipy
           : null;
-      setSparkPaired(paired);
+      setBlipyPaired(paired);
     };
     refresh();
     const interval = setInterval(refresh, 10000);
@@ -241,11 +405,11 @@ export default function DashboardView({
   }, []);
 
   const addOverlayUrl = (file: string, label: string) => {
-    if (!widgetToken) {
+    if (!overlayToken) {
       toast("Overlay token not loaded yet — try again in a moment", "error");
       return;
     }
-    const url = `http://127.0.0.1:53735/forge-widget/${widgetToken}/${file}`;
+    const url = `http://127.0.0.1:53735/forge-overlay/${overlayToken}/${file}`;
     const id = `overlay-${overlayIdCounter}`;
     setOverlayUrls((prev) => [...prev, { id, url, label }]);
     setOverlayIdCounter((c) => c + 1);
@@ -270,7 +434,7 @@ export default function DashboardView({
   // "Just Chatting") when one has a custom cover set — falls back to the
   // built-in placeholder otherwise. Offline always wins regardless.
   const placeholderCover = engineStatus.running
-    ? engineStatus.cover_url || idleCover
+    ? resolveImageSrc(engineStatus.cover_url) || idleCover
     : offlineCover;
   const title = isPlaying
     ? engineStatus.game_title
@@ -282,6 +446,33 @@ export default function DashboardView({
     <div>
       {/* Header */}
       <h2 className="text-2xl font-bold text-white tracking-tight mb-5">Dashboard</h2>
+
+      {!setupHelpDismissed && (
+        <div className="card-glass flex items-center justify-between gap-4 px-5 py-3 mb-5 border-purple-500/20 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-lg shrink-0">🧭</span>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-white/85 truncate">
+                Struggling to get set up?
+              </div>
+              <div className="text-[11px] text-white/40">
+                Walk through connecting platforms, overlays, and detection again — step by step.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={dismissSetupHelp}
+              className="text-[11px] text-white/40 hover:text-white/70 transition-colors cursor-pointer bg-transparent border-none px-2 py-1"
+            >
+              Dismiss
+            </button>
+            <Btn variant="success" onClick={onStartOnboarding}>
+              Start Setup Guide
+            </Btn>
+          </div>
+        </div>
+      )}
 
       {/* Now Playing */}
       <Card className="overflow-hidden mb-5">
@@ -299,7 +490,11 @@ export default function DashboardView({
               }}
             >
               <img
-                src={isPlaying ? engineStatus.cover_url || placeholderCover : placeholderCover}
+                src={
+                  isPlaying
+                    ? resolveImageSrc(engineStatus.cover_url) || placeholderCover
+                    : placeholderCover
+                }
                 alt={title}
                 className="w-full h-full object-cover"
                 onError={(e) => {
@@ -330,27 +525,35 @@ export default function DashboardView({
               {engineStatus.running ? (
                 <Btn
                   variant="danger"
+                  disabled={engineToggling}
                   onClick={async () => {
+                    setEngineToggling(true);
                     const r = await tauriApi("stop_engine");
                     toast(
                       typeof r === "string" ? r : "Failed",
                       typeof r === "string" ? "success" : "error"
                     );
+                    await onRefresh();
+                    setEngineToggling(false);
                   }}
                 >
-                  ⏹ Stop Engine
+                  {engineToggling ? "Stopping…" : "⏹ Stop Engine"}
                 </Btn>
               ) : (
                 <Btn
+                  disabled={engineToggling}
                   onClick={async () => {
+                    setEngineToggling(true);
                     const r = await tauriApi("start_engine");
                     toast(
                       typeof r === "string" ? r : "Failed",
                       typeof r === "string" ? "success" : "error"
                     );
+                    await onRefresh();
+                    setEngineToggling(false);
                   }}
                 >
-                  Start Engine
+                  {engineToggling ? "Starting…" : "Start Engine"}
                 </Btn>
               )}
               {isPlaying && engineStatus.game_title && (
@@ -367,7 +570,70 @@ export default function DashboardView({
                   🚫 Exile to Apps
                 </Btn>
               )}
+              <Btn variant="ghost" onClick={() => setOverrideOpen((o) => !o)}>
+                🎮 Override Game
+              </Btn>
             </div>
+            {overrideOpen && (
+              <div className="flex items-center gap-2 mt-3">
+                <input
+                  autoFocus
+                  type="text"
+                  value={overrideText}
+                  onChange={(e) => setOverrideText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitOverride();
+                    if (e.key === "Escape") setOverrideOpen(false);
+                  }}
+                  placeholder="Enter game name..."
+                  className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/40"
+                />
+                <Btn onClick={submitOverride} disabled={overrideSubmitting || !overrideText.trim()}>
+                  Broadcast
+                </Btn>
+                <Btn variant="ghost" onClick={() => setOverrideOpen(false)}>
+                  Cancel
+                </Btn>
+              </div>
+            )}
+            {feedback && isPlaying && (
+              <div className="flex items-center gap-2 mt-3">
+                {!feedbackCorrecting ? (
+                  <>
+                    <span className="text-[11px] text-white/45 truncate">
+                      Detected “{feedback.title}” — is that right?
+                    </span>
+                    <Btn variant="success" onClick={confirmDetection}>
+                      Yes
+                    </Btn>
+                    <Btn variant="ghost" onClick={() => setFeedbackCorrecting(true)}>
+                      No
+                    </Btn>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={feedbackActual}
+                      onChange={(e) => setFeedbackActual(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitCorrection();
+                        if (e.key === "Escape") setFeedback(null);
+                      }}
+                      placeholder="What game is it actually?"
+                      className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/40"
+                    />
+                    <Btn onClick={submitCorrection} disabled={!feedbackActual.trim()}>
+                      Fix &amp; Broadcast
+                    </Btn>
+                    <Btn variant="ghost" onClick={() => setFeedback(null)}>
+                      Dismiss
+                    </Btn>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </Card>
@@ -400,6 +666,7 @@ export default function DashboardView({
             <div className="flex flex-col gap-2">
               {platformDefs.map((p) => {
                 const connected = platforms[p.key];
+                const reauth = (p.key === "twitch" || p.key === "kick") && needsReauth[p.key];
                 return (
                   <div key={p.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
@@ -408,18 +675,35 @@ export default function DashboardView({
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span
-                        className={`w-1.5 h-1.5 rounded-full ${connected ? p.dotColor : "bg-white/20"}`}
+                        className={`w-1.5 h-1.5 rounded-full ${connected ? p.dotColor : reauth ? "bg-amber-400" : "bg-white/20"}`}
                         style={{
-                          animation: connected
-                            ? "var(--user-status-pulse, pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite)"
-                            : "none",
+                          animation:
+                            connected || reauth
+                              ? "var(--user-status-pulse, pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite)"
+                              : "none",
                         }}
                       />
-                      <span
-                        className={`text-[10px] font-medium ${connected ? "text-white/50" : "text-white/25"}`}
-                      >
-                        {connected ? "Connected" : "Offline"}
-                      </span>
+                      {reauth ? (
+                        <button
+                          onClick={() => {
+                            onNavigate("settings");
+                            toast(
+                              `${p.name} needs to be reconnected — open API & Routing to sign in again.`,
+                              "info"
+                            );
+                          }}
+                          className="text-[10px] font-semibold text-amber-400/80 hover:text-amber-400 transition-colors cursor-pointer bg-transparent border-none p-0"
+                          title={`${p.name}'s connection expired — click to reconnect`}
+                        >
+                          Reconnect
+                        </button>
+                      ) : (
+                        <span
+                          className={`text-[10px] font-medium ${connected ? "text-white/50" : "text-white/25"}`}
+                        >
+                          {connected ? "Connected" : "Offline"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -430,31 +714,31 @@ export default function DashboardView({
               <span className="text-xs font-medium text-white/70">Platform Detection</span>
               <Toggle on={platformPushEnabled} onToggle={togglePlatformPush} />
             </div>
-            {/* Spark Pulse */}
+            {/* Blipy Pulse */}
             <div className="mt-3 pt-3 border-t border-white/5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
                     <span
-                      className={`absolute inline-flex h-full w-full rounded-full ${sparkPaired ? "bg-cyan-400/60" : "bg-white/10"}`}
+                      className={`absolute inline-flex h-full w-full rounded-full ${blipyPaired ? "bg-cyan-400/60" : "bg-white/10"}`}
                       style={{
-                        animation: sparkPaired
+                        animation: blipyPaired
                           ? "var(--user-status-pulse, ping 2s cubic-bezier(0, 0, 0.2, 1) infinite)"
                           : "none",
                       }}
                     />
                     <span
-                      className={`relative inline-flex h-2 w-2 rounded-full ${sparkPaired ? "bg-cyan-400" : "bg-white/20"}`}
+                      className={`relative inline-flex h-2 w-2 rounded-full ${blipyPaired ? "bg-cyan-400" : "bg-white/20"}`}
                     />
                   </span>
                   <span className="text-[10px] font-semibold tracking-wider text-white/40">
-                    {sparkPaired ? `SPARK · ${sparkPaired.hostname}` : "SPARK"}
+                    {blipyPaired ? `Blipy · ${blipyPaired.hostname}` : "Blipy"}
                   </span>
                 </div>
                 <span
-                  className={`text-[10px] font-mono ${sparkPaired ? "text-cyan-400/60" : "text-white/20"}`}
+                  className={`text-[10px] font-mono ${blipyPaired ? "text-cyan-400/60" : "text-white/20"}`}
                 >
-                  {sparkPaired ? "SYNCED" : "STANDBY"}
+                  {blipyPaired ? "SYNCED" : "STANDBY"}
                 </span>
               </div>
             </div>
@@ -649,9 +933,12 @@ export default function DashboardView({
                     className="group text-left cursor-pointer"
                   >
                     <div className="relative w-full h-[220px] rounded-2xl overflow-hidden border border-white/10 bg-[#0a0a12] transition-all duration-200 group-hover:border-purple-500/50 group-hover:shadow-lg group-hover:shadow-purple-500/15">
-                      {widgetToken ? (
+                      {overlayToken ? (
                         <iframe
-                          src={`http://127.0.0.1:53735/forge-widget/${widgetToken}/${o.file}`}
+                          // ?preview=1 tells the overlay to stay fully visible
+                          // regardless of the real fade timer / idle state —
+                          // this is a style picker, not a live stream check.
+                          src={`http://127.0.0.1:53735/forge-overlay/${overlayToken}/${o.file}?preview=1`}
                           title={`${o.label} preview`}
                           tabIndex={-1}
                           className="pointer-events-none absolute top-1/2 left-1/2 border-0"
@@ -701,10 +988,10 @@ export default function DashboardView({
                           <div
                             className={`relative w-full h-[220px] rounded-2xl overflow-hidden border bg-[#0a0a12] transition-all duration-300 ${a ? "border-purple-500/50 shadow-lg shadow-purple-500/15" : "border-white/10"}`}
                           >
-                            {widgetToken ? (
+                            {overlayToken ? (
                               <iframe
                                 key={o.id}
-                                src={`http://127.0.0.1:53735/forge-widget/${widgetToken}/${o.file}`}
+                                src={`http://127.0.0.1:53735/forge-overlay/${overlayToken}/${o.file}?preview=1`}
                                 title={`${o.label} preview`}
                                 tabIndex={-1}
                                 className="pointer-events-none absolute top-1/2 left-1/2 border-0"

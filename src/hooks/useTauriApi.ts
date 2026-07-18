@@ -26,14 +26,14 @@ export async function fetchEngineStatus(): Promise<EngineStatus> {
       publisher: "",
       release_date: "",
       cover_url: "",
-      widgetToken: "",
+      overlayToken: "",
     };
   }
   return data as EngineStatus;
 }
 
-export async function fetchWidgetToken(): Promise<string> {
-  const t = await tauriApi("get_widget_token");
+export async function fetchOverlayToken(): Promise<string> {
+  const t = await tauriApi("get_overlay_token");
   return typeof t === "string" ? t : "Unknown";
 }
 
@@ -71,11 +71,6 @@ export async function getSystemStats(): Promise<SystemStats | null> {
     return res as SystemStats;
   }
   return null;
-}
-
-export async function getDetectionMode(): Promise<string> {
-  const res = await tauriApi("get_detection_mode");
-  return typeof res === "string" ? res : "native";
 }
 
 export async function getKeychainStatus(): Promise<KeychainStatus> {

@@ -779,9 +779,24 @@ pub fn load_config_at(base_dir: &std::path::Path) -> Result<AppConfig, String> {
 /// only fills gaps, never overrides what Config.json already has.
 fn backfill_from_keychain(config: &mut AppConfig) {
     let read = |keychain_name: &str| -> Option<String> {
-        keyring::Entry::new(crate::KEYRING_SERVICE, keychain_name)
-            .ok()
-            .and_then(|e| e.get_password().ok())
+        let entry = keyring::Entry::new(crate::KEYRING_SERVICE, keychain_name).ok()?;
+        match entry.get_password() {
+            Ok(v) => Some(v),
+            // NoEntry just means this field was never migrated — expected
+            // and silent. Anything else (locked keychain, no Secret Service
+            // provider running, permission denied, ...) means a migrated
+            // credential exists but can't currently be read, which otherwise
+            // looks identical to "never connected" with no way to tell why.
+            Err(keyring::Error::NoEntry) => None,
+            Err(e) => {
+                log::warn!(
+                    "[KEYCHAIN] Failed to read {} from OS keychain: {}",
+                    keychain_name,
+                    e
+                );
+                None
+            }
+        }
     };
 
     if config.broadcaster.twitch_token.is_empty() {
@@ -840,7 +855,7 @@ pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<
     let config_path = base_dir.join("Config.json");
     // `config` may carry secrets that `load_config_at` backfilled in-memory
     // from the OS keychain (e.g. a caller loaded, tweaked one unrelated
-    // field like the SPARK pin, and is saving the whole struct back). Never
+    // field like the Blipy pin, and is saving the whole struct back). Never
     // let an already-migrated field regain a plaintext copy on disk here —
     // re-sync the (possibly refreshed, e.g. after a token-refresh-and-save)
     // value into the keychain instead and blank it in what actually gets
@@ -862,7 +877,7 @@ pub fn save_config_at(base_dir: &std::path::Path, config: &AppConfig) -> Result<
 /// (picks up a refreshed token) and blank it before it's serialized — so
 /// Config.json never regains a plaintext secret once migrated, regardless
 /// of which code path loaded (and keychain-backfilled) this config first.
-fn redact_migrated_secrets(config: &mut AppConfig) {
+pub(crate) fn redact_migrated_secrets(config: &mut AppConfig) {
     let sync = |field: &mut String, keychain_name: &str| {
         if field.is_empty() {
             return;
@@ -874,8 +889,18 @@ fn redact_migrated_secrets(config: &mut AppConfig) {
         // is exactly that signal. A never-migrated field saves as plaintext,
         // same as before this fix existed.
         if entry.get_password().is_ok() {
-            let _ = entry.set_password(field);
-            field.clear();
+            // Only blank the Config.json copy if the keychain write actually
+            // succeeded. If the OS keychain is locked, unavailable, or the
+            // write is otherwise rejected, keep the plaintext value where it
+            // is rather than losing the credential from both places.
+            match entry.set_password(field) {
+                Ok(()) => field.clear(),
+                Err(e) => log::warn!(
+                    "[KEYCHAIN] Failed to sync {} to OS keychain ({}) — keeping it in Config.json",
+                    keychain_name,
+                    e
+                ),
+            }
         }
     };
     sync(&mut config.broadcaster.twitch_token, "twitch_access_token");
@@ -941,16 +966,16 @@ pub fn build_twitch_auth_url(client_id: &str, state: &str, code_challenge: &str)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Widget Token Rotation (Security Audit #5)
+// Overlay Token Rotation (Security Audit #5)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub fn rotate_widget_token(base_dir: &std::path::Path) -> Result<String, String> {
+pub fn rotate_overlay_token(base_dir: &std::path::Path) -> Result<String, String> {
     let mut config = load_config_at(base_dir)?;
     let mut bytes = vec![0u8; 16];
     rand::thread_rng().fill_bytes(&mut bytes);
     let new_token = URL_SAFE_NO_PAD.encode(&bytes);
-    config.engine_settings.widget_token = new_token.clone();
+    config.engine_settings.overlay_token = new_token.clone();
     save_config_at(base_dir, &config)?;
-    log::info!("[AUTH] Widget token rotated successfully");
+    log::info!("[AUTH] Overlay token rotated successfully");
     Ok(new_token)
 }

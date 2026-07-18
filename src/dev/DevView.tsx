@@ -15,11 +15,10 @@ let clearedAtLine: number | null = null;
 interface Diagnostics {
   platform: string;
   engine_pid: number;
-  detection_mode: string;
-  native_engine_running: boolean;
-  native_current_game: { title: string; process: string; platform: string } | null;
-  native_process: string;
-  native_is_playing: boolean;
+  engine_running: boolean;
+  current_game: { title: string; process: string; platform: string } | null;
+  current_process: string;
+  is_playing: boolean;
 }
 
 interface DevSettings {
@@ -56,7 +55,7 @@ function saveSettings(s: DevSettings) {
 function levelColor(line: string): string {
   if (line.includes("ERROR") || line.includes("FATAL")) return "text-red-400";
   if (line.includes("WARNING") || line.includes("WARN")) return "text-yellow-400";
-  if (line.includes("[NATIVE]")) return "text-emerald-400";
+  if (line.includes("[ENGINE]")) return "text-emerald-400";
   if (line.includes("[AUTH]")) return "text-cyan-400";
   if (line.includes("[METADATA]")) return "text-purple-400";
   if (line.includes("[SCAN]") || line.includes("[SCOUT]")) return "text-orange-400";
@@ -87,7 +86,7 @@ function lineLevel(line: string): LogLevel {
     l.includes("couldn't")
   )
     return "warn";
-  // "[NATIVE] debug [FILTER] ..." style lines are routine, not info.
+  // "[ENGINE] debug [FILTER] ..." style lines are routine, not info.
   if (l.includes(" debug ") || l.includes("[filter]")) return "debug";
   return "info";
 }
@@ -293,7 +292,7 @@ export default function DevView() {
       const d = await invoke<Diagnostics>("dev_get_diagnostics");
       setDiag(d);
     } catch {
-      // native engine might not be available on macOS
+      // engine diagnostics might not be available on macOS
       setDiag(null);
     }
   }, []);
@@ -367,23 +366,22 @@ export default function DevView() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <DiagCard label="Platform" value={diag.platform} />
             <DiagCard label="Engine PID" value={diag.engine_pid ? String(diag.engine_pid) : "—"} />
-            <DiagCard label="Detection" value={diag.detection_mode} />
             <DiagCard
-              label="Native Engine"
-              value={diag.native_engine_running ? "Running" : "Stopped"}
-              color={diag.native_engine_running ? "text-green-400" : "text-white/30"}
+              label="Engine"
+              value={diag.engine_running ? "Running" : "Stopped"}
+              color={diag.engine_running ? "text-green-400" : "text-white/30"}
             />
             <DiagCard
               label="Current Game"
-              value={diag.native_current_game?.title || diag.native_process || "—"}
+              value={diag.current_game?.title || diag.current_process || "—"}
               span={2}
             />
             <DiagCard
               label="Playing"
-              value={diag.native_is_playing ? "Yes" : "No"}
-              color={diag.native_is_playing ? "text-green-400" : "text-white/30"}
+              value={diag.is_playing ? "Yes" : "No"}
+              color={diag.is_playing ? "text-green-400" : "text-white/30"}
             />
-            <DiagCard label="Source" value={diag.native_current_game?.platform || "—"} />
+            <DiagCard label="Source" value={diag.current_game?.platform || "—"} />
           </div>
         </div>
       )}

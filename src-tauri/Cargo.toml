@@ -1,10 +1,10 @@
 [package]
 name = "app"
-version = "0.5.8"
+version = "0.5.9"
 description = "A Tauri App"
 authors = ["you"]
 license = "MIT"
-repository = "https://github.com/BeardedOddity/StatusForge.io"
+repository = "https://github.com/BearddOddity/StatusForge.io"
 edition = "2021"
 rust-version = "1.84.0"
 
@@ -29,6 +29,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-process = "2"
 rand = "0.8"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 keyring = "3"

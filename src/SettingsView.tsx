@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { EngineStatus, AppConfig, SettingsSubTab, ToastType, ApiKeys } from "@/types";
 import type { KeychainStatus } from "@/types";
-import { fetchWidgetToken, getKeychainStatus, saveConfig, tauriApi } from "@/hooks/useTauriApi";
+import { fetchOverlayToken, getKeychainStatus, saveConfig, tauriApi } from "@/hooks/useTauriApi";
 import {
   SubTabBtn,
   CollapsibleSection,
@@ -19,6 +21,7 @@ import {
   defaultSystemPrefs,
   loadSystemPrefs,
   saveSystemPrefs,
+  SYSTEM_PREFS_EVENT,
 } from "@/systemPrefs";
 
 import { clampInt } from "@/utils/number";
@@ -33,7 +36,7 @@ function EngineSubTab({
   onRefresh: () => void;
   toast: (msg: string, type?: ToastType) => void;
 }) {
-  const [widgetToken, setWidgetToken] = useState("Loading...");
+  const [overlayToken, setOverlayToken] = useState("Loading...");
   const [keychainInfo, setKeychainInfo] = useState<KeychainStatus | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [platform, setPlatform] = useState<string>("windows");
@@ -59,9 +62,9 @@ function EngineSubTab({
   }, []);
 
   useEffect(() => {
-    fetchWidgetToken()
-      .then((t) => setWidgetToken(t))
-      .catch(() => setWidgetToken(defaultConfig.engine_settings.widget_token));
+    fetchOverlayToken()
+      .then((t) => setOverlayToken(t))
+      .catch(() => setOverlayToken(defaultConfig.engine_settings.overlay_token));
     getKeychainStatus()
       .then((s) => setKeychainInfo(s))
       .catch(() => setKeychainInfo({ stored: ["twitch_token", "kick_token"], count: 2 }));
@@ -114,15 +117,18 @@ function EngineSubTab({
   const [scoreOpen, setScoreOpen] = useState(false);
   const [showPipelineAdvanced, setShowPipelineAdvanced] = useState(false);
 
-  const regenerateWidgetToken = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    const token = Array.from(
-      { length: 22 },
-      () => chars[Math.floor(Math.random() * chars.length)]
-    ).join("");
-    setEngine("widget_token", token);
-    setWidgetToken(token);
-    toast("Overlay token regenerated — save to apply", "info");
+  const regenerateOverlayToken = async () => {
+    // Delegates to the backend (cryptographically-random bytes, saved
+    // immediately) rather than generating one client-side — a token that
+    // gates every overlay URL shouldn't be picked with Math.random().
+    const result = await tauriApi("rotate_overlay_token");
+    if (typeof result !== "string") {
+      toast("Failed to regenerate overlay token", "error");
+      return;
+    }
+    setOverlayToken(result);
+    setEngine("overlay_token", result);
+    toast("Overlay token regenerated", "success");
   };
 
   return (
@@ -151,8 +157,7 @@ function EngineSubTab({
         }
       >
         <p className="text-xs text-white/50 mb-5 leading-relaxed">
-          The detection engine runs on port 53735. Mode:{" "}
-          <strong className="text-white/70">Native (Rust)</strong>. Platform:{" "}
+          The detection engine runs on port 53735. Platform:{" "}
           <strong className="text-white/70">{platform}</strong>.
           {platform === "macos" && (
             <span className="text-yellow-400/70">
@@ -165,11 +170,32 @@ function EngineSubTab({
           <p className="text-white/60 text-xs flex-1">
             Overlay Token:{" "}
             <code className="bg-black/40 px-1.5 py-0.5 rounded font-mono text-white/90">
-              {widgetToken}
+              {overlayToken === "Loading..." ? overlayToken : "•".repeat(overlayToken.length)}
             </code>
           </p>
           <button
-            onClick={regenerateWidgetToken}
+            onClick={() => {
+              navigator.clipboard?.writeText(overlayToken);
+              toast("Overlay token copied to clipboard", "success");
+            }}
+            title="Copy overlay token"
+            className="p-1.5 rounded bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          </button>
+          <button
+            onClick={regenerateOverlayToken}
             className="text-[10px] px-2.5 py-1.5 rounded bg-white/[0.04] border border-white/10 text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all cursor-pointer"
           >
             ↻ Regenerate
@@ -193,18 +219,17 @@ function EngineSubTab({
           return (
             <CollapsibleSection
               title="Detection Engine & Pipeline"
-              description="Native Rust detection engine and the ForgeWaterfall process pipeline."
+              description="How the detection engine decides what you're playing."
               icon="🔄"
               badge={
                 <span className="text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 border transition-all duration-300 bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  NATIVE
+                  {engineStatus.running ? "RUNNING" : "STOPPED"}
                 </span>
               }
             >
               <p className="text-xs text-white/40 mb-4 leading-relaxed">
-                Detection runs <strong className="text-emerald-300/80">natively in Rust</strong> on
-                Windows, macOS, and Linux — no Python required.
+                Detection runs on Windows, macOS, and Linux.
                 {isMacOS && (
                   <>
                     {" "}
@@ -217,31 +242,31 @@ function EngineSubTab({
                 )}
               </p>
 
-              {/* SPARK dual-PC pairing (Hub side) */}
+              {/* Blipy dual-PC pairing (Hub side) */}
               <div className="mt-2 p-3 bg-blue-500/[0.04] border border-blue-500/15 rounded-xl">
                 <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-xs text-white/80 font-medium">SPARK Dual-PC Link</span>
+                  <span className="text-xs text-white/80 font-medium">Blipy Dual-PC Link</span>
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 font-semibold">
                     OPTIONAL
                   </span>
                 </div>
                 <p className="text-[10px] text-white/30 mb-2">
-                  Streaming from two PCs? Run the SPARK agent on the gaming PC — this hub receives
-                  its detections over the LAN and updates overlays exactly like local detection.
+                  Streaming from two PCs? Run Blipy on the gaming PC — this hub receives its
+                  detections over the LAN and updates overlays exactly like local detection.
                 </p>
 
                 <div className="flex items-center justify-between p-2.5 mb-3 bg-white/[0.02] border border-white/5 rounded-lg">
                   <div>
                     <p className="text-xs text-white/70">Activate Link</p>
                     <p className="text-[10px] text-white/30 mt-0.5">
-                      While active, this PC's local detection pauses — SPARK is the only engine
+                      While active, this PC's local detection pauses — Blipy is the only engine
                       running, preventing the two sources from crosswiring.
                     </p>
                   </div>
                   <Toggle
-                    on={config.engine_settings.spark_link_active}
+                    on={config.engine_settings.blipy_link_active}
                     onToggle={() =>
-                      setEngine("spark_link_active", !config.engine_settings.spark_link_active)
+                      setEngine("blipy_link_active", !config.engine_settings.blipy_link_active)
                     }
                   />
                 </div>
@@ -252,15 +277,15 @@ function EngineSubTab({
                 <input
                   type="text"
                   maxLength={4}
-                  value={config.engine_settings.spark_pin}
+                  value={config.engine_settings.blipy_pin}
                   onChange={(e) =>
-                    setEngine("spark_pin", e.target.value.replace(/\D/g, "").slice(0, 4))
+                    setEngine("blipy_pin", e.target.value.replace(/\D/g, "").slice(0, 4))
                   }
                   placeholder="0000"
                   className="input-glass !w-24 tracking-[0.5em] text-center placeholder:tracking-normal font-mono"
                 />
                 <p className="text-[10px] text-white/25 mt-1.5">
-                  4-digit PIN — must match the PIN shown in the SPARK agent on your gaming PC.
+                  4-digit PIN — must match the PIN shown in Blipy on your gaming PC.
                 </p>
               </div>
 
@@ -275,14 +300,14 @@ function EngineSubTab({
                       Detection Pipeline
                     </h4>
                     <p className="text-[11px] text-white/40 mt-0.5">
-                      Configure the 6-stage ForgeWaterfall process pipeline.
+                      Configure the 6-stage detection pipeline.
                     </p>
                   </div>
                 </div>
 
                 <p className="text-xs text-white/40 mb-4 leading-relaxed">
-                  The multi-stage ForgeWaterfall checks each running process and decides whether
-                  it's a game, gets filtered out, or needs a closer look.
+                  Each running process passes through these stages, which decide whether it's a
+                  game, gets filtered out, or needs a closer look.
                 </p>
 
                 {/* Pipeline flow indicator */}
@@ -437,6 +462,18 @@ function EngineSubTab({
                             <p className="text-[10px] text-white/35 mt-0.5">
                               Detect games inside popular emulators (Yuzu, RPCS3, Citra, etc.)
                             </p>
+                            <p className="text-[10px] text-white/25 mt-1">
+                              New to emulation?{" "}
+                              <button
+                                type="button"
+                                onClick={() => openUrl("https://www.emudeck.com/")}
+                                className="text-white/40 hover:text-white/60 underline cursor-pointer"
+                              >
+                                EmuDeck
+                              </button>{" "}
+                              is an easy, beginner-friendly way to set up RetroArch, Dolphin, PCSX2,
+                              RPCS3, and more at once, and it installs straight into Steam.
+                            </p>
                           </div>
                           <Toggle
                             on={config.engine_settings.emulator_detection}
@@ -482,7 +519,8 @@ function EngineSubTab({
                               Chromium / Electron Trap
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
-                              Kills Discord, Spotify, VS Code, and other Electron/Chromium shells
+                              Filters out Discord, Spotify, VS Code, and other Electron/Chromium
+                              apps
                             </p>
                           </div>
                           <Toggle
@@ -499,7 +537,7 @@ function EngineSubTab({
                               Command-Line Flag Trap
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
-                              Kills helper processes launched with utility/render flags
+                              Filters out helper processes launched with utility/render flags
                             </p>
                           </div>
                           <Toggle
@@ -516,7 +554,7 @@ function EngineSubTab({
                               UI Framework Trap
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
-                              Kills known desktop tools like Task Manager, File Explorer, etc.
+                              Filters out known desktop tools like Task Manager, File Explorer, etc.
                             </p>
                           </div>
                           <Toggle
@@ -536,7 +574,7 @@ function EngineSubTab({
                               Window Geometry Trap
                             </span>
                             <p className="text-[10px] text-white/35 mt-0.5">
-                              Kills background or invisible processes with no visible presence
+                              Filters out background or invisible processes with no visible presence
                             </p>
                           </div>
                           <Toggle
@@ -776,7 +814,8 @@ function EngineSubTab({
           icon="⏳"
           badge={
             <span className="text-[10px] bg-white/5 border border-white/5 text-white/50 px-2 py-0.5 rounded font-mono font-medium">
-              Scan: {config.engine_settings.scan_interval}s
+              Scan {config.engine_settings.scan_interval}s · Fade{" "}
+              {config.engine_settings.overlay_fade_timer}s
             </span>
           }
         >
@@ -815,8 +854,8 @@ function EngineSubTab({
                 type="number"
                 min={1}
                 max={60}
-                value={config.engine_settings.widget_poll_rate}
-                onChange={(e) => setEngine("widget_poll_rate", clampInt(e.target.value, 1, 60, 1))}
+                value={config.engine_settings.overlay_poll_rate}
+                onChange={(e) => setEngine("overlay_poll_rate", clampInt(e.target.value, 1, 60, 1))}
                 className="input-glass font-mono"
               />
             </div>
@@ -826,11 +865,11 @@ function EngineSubTab({
               </label>
               <input
                 type="number"
-                min={1}
-                max={300}
-                value={config.engine_settings.widget_fade_timer}
+                min={0}
+                max={120}
+                value={config.engine_settings.overlay_fade_timer}
                 onChange={(e) =>
-                  setEngine("widget_fade_timer", clampInt(e.target.value, 1, 300, 1))
+                  setEngine("overlay_fade_timer", clampInt(e.target.value, 0, 120, 0))
                 }
                 className="input-glass font-mono"
               />
@@ -946,6 +985,14 @@ function EngineSubTab({
                 } else {
                   toast("Migration failed", "error");
                 }
+                // The "Protected"/"Plaintext config" badge and the stored-entries
+                // list both read keychainInfo, which was only ever fetched once
+                // on mount — without this, a successful migration left both
+                // showing the pre-migration state until the user reopened
+                // Settings.
+                getKeychainStatus()
+                  .then(setKeychainInfo)
+                  .catch(() => {});
               }}
               className="btn-cta"
             >
@@ -986,6 +1033,7 @@ const defaultConfig: AppConfig = {
     igdb_client: "",
     igdb_secret: "",
     igdb_token: "",
+    thegamesdb: "",
   },
   broadcaster: {
     routing_mode: "native" as const,
@@ -1005,17 +1053,17 @@ const defaultConfig: AppConfig = {
     sb_port: 8080,
     scan_interval: 15,
     grace_period: 0,
-    widget_poll_rate: 8,
+    overlay_poll_rate: 8,
     safe_mode: false,
     auto_push: false,
     platform_push_enabled: true,
-    widget_fade_timer: 15,
+    overlay_fade_timer: 15,
     strict_forge_mode: false,
     sb_action_name: "UpdateCategory",
-    widget_token: "",
-    spark_pin: "0000",
-    spark_pairing_key: "",
-    spark_link_active: false,
+    overlay_token: "",
+    blipy_pin: "0000",
+    blipy_pairing_key: "",
+    blipy_link_active: false,
     emulator_detection: true,
     ram_threshold: 80,
     process_filter_bypass: false,
@@ -1061,6 +1109,12 @@ const KEY_CATALOG: {
       { key: "igdb_secret", label: "Client Secret" },
       { key: "igdb_token", label: "Access Token" },
     ],
+  },
+  {
+    key: "thegamesdb",
+    label: "TheGamesDB",
+    desc: "Community-run game database — strong coverage for older/retro console games",
+    icon: "🕹️",
   },
 ];
 
@@ -1147,6 +1201,15 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
   const [validatingPlatform, setValidatingPlatform] = useState<string | null>(null);
   const floatingRef = useRef<HTMLDivElement>(null);
   const skipSave = useRef(false);
+
+  const [showAccessTokens, setShowAccessTokens] = useState(
+    () => loadSystemPrefs().showAccessTokens
+  );
+  useEffect(() => {
+    const handler = () => setShowAccessTokens(loadSystemPrefs().showAccessTokens);
+    window.addEventListener(SYSTEM_PREFS_EVENT, handler);
+    return () => window.removeEventListener(SYSTEM_PREFS_EVENT, handler);
+  }, []);
 
   const loadConfig = useCallback(async () => {
     skipSave.current = true;
@@ -1335,6 +1398,25 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
     });
     if (editingKey === entry.key) setEditingKey(null);
     toast("Integration removed — save to confirm", "info");
+  };
+
+  // OAuth-backed entries (Twitch/Kick) route through disconnect_platform,
+  // which deletes the keychain entry too — clearing fields alone leaves it
+  // in place and the next config load just backfills it. Persists right
+  // away, unlike removeRouteEntry's "save to confirm".
+  const disconnectRoute = async (entry: (typeof ROUTING_CATALOG)[number]) => {
+    try {
+      await tauriApi("disconnect_platform", { platform: entry.key });
+    } catch (e) {
+      toast(`Failed to disconnect ${entry.label}: ${e}`, "error");
+      return;
+    }
+    if (editingKey === entry.key) setEditingKey(null);
+    // disconnect_platform already persisted the change to disk — reload
+    // rather than locally clearing fields, so state matches what's saved.
+    const res = await tauriApi("export_config").catch(() => null);
+    if (res) setConfig(res as AppConfig);
+    toast(`${entry.label} disconnected. Reconnect any time in API & Routing.`, "success");
   };
 
   // If a manually-pasted access token is already present, validate it
@@ -1831,7 +1913,14 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                       <EditRemoveButtons
                         isEditing={isEditing}
                         onToggleEdit={() => setEditingKey(isEditing ? null : entry.key)}
-                        onRemove={() => removeRouteEntry(entry as (typeof ROUTING_CATALOG)[number])}
+                        onRemove={() =>
+                          managedFields && managedFields.length > 0
+                            ? disconnectRoute(entry as (typeof ROUTING_CATALOG)[number])
+                            : removeRouteEntry(entry as (typeof ROUTING_CATALOG)[number])
+                        }
+                        removeLabel={
+                          managedFields && managedFields.length > 0 ? "Disconnect" : "Remove"
+                        }
                       />
                     </div>
 
@@ -1839,29 +1928,33 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                       <div className="px-4 pb-3 pt-0">
                         <div className="ml-9 flex flex-col gap-3">
                           <div className="flex flex-col gap-2.5">
-                            {entry.userFields.map((f) => (
-                              <div key={f.key}>
-                                <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1">
-                                  {f.label}
-                                </label>
-                                <input
-                                  type={
-                                    f.key.includes("secret") || f.key.includes("token")
-                                      ? "password"
-                                      : "text"
-                                  }
-                                  value={(bc[f.key as keyof typeof bc] as string) || ""}
-                                  onChange={(e) => setField(f.key, e.target.value)}
-                                  placeholder={`Enter ${f.label}`}
-                                  className="input-glass"
-                                />
-                                {f.hint && (
-                                  <p className="text-[10px] text-white/20 mt-1 leading-snug">
-                                    {f.hint}
-                                  </p>
-                                )}
-                              </div>
-                            ))}
+                            {entry.userFields.map((f) => {
+                              // Access Token specifically (not Client Secret,
+                              // not Refresh Token) is hidden entirely — label,
+                              // input, and hint all disappear — unless "Show
+                              // Access Tokens" is on (Settings > System >
+                              // Network).
+                              if (f.key.includes("token") && !showAccessTokens) return null;
+                              return (
+                                <div key={f.key}>
+                                  <label className="block text-[10px] uppercase tracking-wider text-white/40 mb-1">
+                                    {f.label}
+                                  </label>
+                                  <input
+                                    type={f.key.includes("secret") ? "password" : "text"}
+                                    value={(bc[f.key as keyof typeof bc] as string) || ""}
+                                    onChange={(e) => setField(f.key, e.target.value)}
+                                    placeholder={`Enter ${f.label}`}
+                                    className="input-glass"
+                                  />
+                                  {f.hint && (
+                                    <p className="text-[10px] text-white/20 mt-1 leading-snug">
+                                      {f.hint}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {entry.connectUrl &&
@@ -1957,6 +2050,13 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
 
 // ─── About Sub-tab ───────────────────────────────────────────────────────────
 function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
+  const [appVersion, setAppVersion] = useState("");
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => {});
+  }, []);
+
   return (
     <div>
       <CollapsibleSection
@@ -1966,14 +2066,14 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         defaultOpen={true}
         badge={
           <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold">
-            StatusForge v0.5.0
+            StatusForge v{appVersion || "…"}
           </span>
         }
       >
         <div className="grid grid-cols-2 gap-4">
           {[
-            { label: "App Version", value: "0.5.0", icon: "🚀" },
-            { label: "Tauri Version", value: "2.x Native", icon: "🦀" },
+            { label: "App Version", value: appVersion || "…", icon: "🚀" },
+            { label: "Tauri Version", value: "2.x", icon: "🦀" },
             { label: "Platform", value: navigator.platform, icon: "💻" },
             { label: "Local Database", value: "Forge_Database.json", icon: "📂" },
             { label: "Keychain", value: "Active", icon: "🛡️" },
@@ -2473,6 +2573,16 @@ function SystemSubTab({
           </div>
           <Toggle on={prefs.wsAutoReconnect} onToggle={() => toggle("wsAutoReconnect")} />
         </div>
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/[0.06]">
+          <div>
+            <span className="text-xs text-white/75 font-medium font-sans">Show Access Tokens</span>
+            <p className="text-[10px] text-white/35 mt-0.5">
+              Reveal Access/Refresh Token previews in API &amp; Routing. Off by default — they stay
+              masked.
+            </p>
+          </div>
+          <Toggle on={prefs.showAccessTokens} onToggle={() => toggle("showAccessTokens")} />
+        </div>
       </CollapsibleSection>
 
       {/* Logging & Data */}
@@ -2490,7 +2600,8 @@ function SystemSubTab({
                   : "bg-white/5 border-white/5 text-white/50"
             }`}
           >
-            Channel: {prefs.updateChannel === "closed-beta" ? "Closed Beta" : prefs.updateChannel}
+            {prefs.updateChannel === "closed-beta" ? "Closed Beta" : prefs.updateChannel} · Log{" "}
+            {prefs.logLevel}
           </span>
         }
       >
@@ -2520,6 +2631,20 @@ function SystemSubTab({
               value={prefs.language}
               options={[{ value: "en", label: "English (US)" }]}
               onChange={(v) => set("language", v)}
+            />
+          </div>
+          <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
+            <div>
+              <span className="text-xs text-white/75 font-medium font-sans">
+                Automatically Check for Updates
+              </span>
+              <p className="text-[10px] text-white/35 mt-0.5">
+                Check GitHub releases once per launch. Installing an update is always your call.
+              </p>
+            </div>
+            <Toggle
+              on={prefs.autoUpdateCheckEnabled}
+              onToggle={() => toggle("autoUpdateCheckEnabled")}
             />
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
@@ -2561,6 +2686,15 @@ function SystemSubTab({
         </button>
         <button onClick={exportMetadataReadme} className="btn-ghost">
           Export Library README (.md)
+        </button>
+        <button
+          onClick={() => {
+            saveSystemPrefs({ ...loadSystemPrefs(), onboardingComplete: false });
+            toast("Setup guide reopened", "info");
+          }}
+          className="btn-ghost"
+        >
+          Replay Setup Guide
         </button>
       </div>
     </div>
@@ -3131,7 +3265,7 @@ function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         icon="📐"
         badge={
           <span className="text-[10px] bg-white/5 border border-white/5 text-white/50 px-2 py-0.5 rounded font-mono font-medium">
-            Radius: {prefs.borderRadius}
+            {prefs.borderRadius} · {prefs.panelOpacity}% · {prefs.fontScale}%
           </span>
         }
       >
