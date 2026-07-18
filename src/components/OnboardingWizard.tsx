@@ -4,6 +4,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { ViewId, AppConfig, EngineStatus } from "@/types";
 import { fetchConfig, saveConfig, fetchOverlayToken, tauriApi } from "@/hooks/useTauriApi";
 import OAuthConnectModal from "@/components/OAuthConnectModal";
+import { loadSystemPrefs, saveSystemPrefs } from "@/systemPrefs";
 
 interface Props {
   onFinish: () => void;
@@ -20,6 +21,7 @@ const PLATFORM_INFO: Record<
     gradient: string;
     connectUrl: string;
     devConsoleUrl: string;
+    setupHint: string;
     redirectUri: string;
     clientIdKey: keyof AppConfig["broadcaster"];
     clientSecretKey: keyof AppConfig["broadcaster"];
@@ -33,6 +35,8 @@ const PLATFORM_INFO: Record<
     gradient: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)",
     connectUrl: "http://127.0.0.1:53735/twitch/login",
     devConsoleUrl: "https://dev.twitch.tv/console/apps/create",
+    setupHint:
+      'Give the app any name, set Category to "Application Integration," paste the redirect URL below, then hit Create. Open the app and copy the Client ID — click "New Secret" to generate the Client Secret.',
     redirectUri: "https://127.0.0.1:53735/oauth/callback/twitch",
     clientIdKey: "twitch_client",
     clientSecretKey: "twitch_secret",
@@ -45,6 +49,8 @@ const PLATFORM_INFO: Record<
     gradient: "linear-gradient(135deg, #00e676 0%, #00b248 100%)",
     connectUrl: "http://127.0.0.1:53735/kick/login",
     devConsoleUrl: "https://kick.com/settings/developer",
+    setupHint:
+      'Click "Create Application," give it any name, and paste the redirect URL below. Once it\'s created, copy the Client ID and Client Secret it shows you.',
     redirectUri: "http://localhost:53735/oauth/callback/kick",
     clientIdKey: "kick_client",
     clientSecretKey: "kick_secret",
@@ -53,7 +59,16 @@ const PLATFORM_INFO: Record<
   },
 };
 
-const STEP_LABELS = ["Welcome", "Connect", "Overlay", "Detection", "Done"];
+const STEP_LABELS = [
+  "Welcome",
+  "Connect",
+  "Overlay",
+  "Cover Art",
+  "Detection",
+  "Exit Behavior",
+  "Done",
+];
+const STEAMGRIDDB_API_URL = "https://www.steamgriddb.com/profile/preferences/api";
 
 export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
   const [step, setStep] = useState(0);
@@ -69,6 +84,8 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
   const [overlayToken, setOverlayToken] = useState("");
   const [overlayCopied, setOverlayCopied] = useState(false);
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
+  const [sgdbSaved, setSgdbSaved] = useState(false);
+  const [minimizeToTray, setMinimizeToTray] = useState(() => loadSystemPrefs().minimizeToTray);
 
   useEffect(() => {
     fetchConfig().then(setConfig);
@@ -78,7 +95,7 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
   // step — no point polling in the background for a step they've moved on
   // from.
   useEffect(() => {
-    if (step !== 3) return;
+    if (step !== 4) return;
     let cancelled = false;
     const poll = async () => {
       const res = await tauriApi("get_engine_status");
@@ -144,6 +161,29 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
     setTimeout(() => setOverlayCopied(false), 1500);
   };
 
+  const sgdbKey = config?.api_keys.steamgrid || "";
+  const setSgdbKey = (value: string) => {
+    setConfig((prev) =>
+      prev ? { ...prev, api_keys: { ...prev.api_keys, steamgrid: value } } : prev
+    );
+  };
+  const saveSgdbKey = async () => {
+    if (!config) return;
+    setSaving(true);
+    try {
+      await saveConfig(config);
+      setSgdbSaved(true);
+      setTimeout(() => setSgdbSaved(false), 1500);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const chooseExitBehavior = (toTray: boolean) => {
+    setMinimizeToTray(toTray);
+    saveSystemPrefs({ ...loadSystemPrefs(), minimizeToTray: toTray });
+  };
+
   const isLast = step === STEP_LABELS.length - 1;
   const detected = engineStatus?.is_playing && engineStatus.game_title;
 
@@ -188,7 +228,7 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
                 <div className="text-4xl mb-4">👋</div>
                 <h3 className="text-white font-bold text-lg mb-2">Welcome to StatusForge</h3>
                 <p className="text-white/50 text-[13px] leading-relaxed mb-7 max-w-[340px] mx-auto">
-                  Let's get you set up — three quick steps, each with a real thing to click, not
+                  Let's get you set up — a few quick steps, each with a real thing to click, not
                   just words to read. Skip anything you want and pick it up later in Settings.
                 </p>
                 <button
@@ -268,6 +308,9 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
                                   >
                                     Open {i.label} Developer Console ↗
                                   </button>
+                                  <p className="text-white/35 text-[10.5px] leading-relaxed mt-1.5">
+                                    {i.setupHint}
+                                  </p>
                                 </div>
 
                                 <div className="mb-3">
@@ -397,8 +440,76 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
               </>
             )}
 
-            {/* ── Step 3: Live detection check ────────────────────────── */}
+            {/* ── Step 3: Cover art (SteamGridDB key) ─────────────────── */}
             {step === 3 && (
+              <>
+                <div className="text-4xl mb-4">🖼️</div>
+                <h3 className="text-white font-bold text-lg mb-2">Better cover art (optional)</h3>
+                <p className="text-white/50 text-[13px] leading-relaxed mb-5 max-w-[380px] mx-auto">
+                  StatusForge can pull box art from SteamGridDB for games that don't have one built
+                  in yet — grab a free key and paste it below.
+                </p>
+
+                <div className="w-full text-left mb-5">
+                  <div className="mb-3">
+                    <span className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
+                      1. Get an API key from SteamGridDB
+                    </span>
+                    <button
+                      onClick={() => openUrl(STEAMGRIDDB_API_URL).catch(() => {})}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-semibold cursor-pointer border border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white transition-all"
+                    >
+                      Open SteamGridDB API Preferences ↗
+                    </button>
+                    <p className="text-white/35 text-[10.5px] leading-relaxed mt-1.5">
+                      Log in (or make a free account), then click "Generate" under API Key if you
+                      don't already have one, and copy the key it shows you.
+                    </p>
+                  </div>
+
+                  <div className="mb-1">
+                    <span className="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5 font-semibold">
+                      2. Paste it here
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={sgdbKey}
+                        onChange={(e) => setSgdbKey(e.target.value)}
+                        placeholder="SteamGridDB API Key"
+                        className="input-glass flex-1"
+                      />
+                      <button
+                        onClick={saveSgdbKey}
+                        disabled={!sgdbKey.trim() || saving}
+                        className="px-4 py-2 rounded-lg text-[11px] font-semibold cursor-pointer text-white disabled:opacity-40 disabled:cursor-default shrink-0"
+                        style={{ background: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)" }}
+                      >
+                        {saving ? "Saving…" : sgdbSaved ? "Saved ✓" : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => setStep(4)}
+                    className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-white"
+                    style={{ background: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)" }}
+                  >
+                    Continue
+                  </button>
+                  <button
+                    onClick={() => setStep(4)}
+                    className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/70"
+                  >
+                    Skip
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── Step 4: Live detection check ────────────────────────── */}
+            {step === 4 && (
               <>
                 <div className="text-4xl mb-4">🎮</div>
                 <h3 className="text-white font-bold text-lg mb-2">Try it out</h3>
@@ -441,7 +552,7 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
                 </p>
 
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => setStep(5)}
                   className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-white"
                   style={{ background: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)" }}
                 >
@@ -450,8 +561,87 @@ export default function OnboardingWizard({ onFinish, onNavigate }: Props) {
               </>
             )}
 
-            {/* ── Step 4: Done ────────────────────────────────────────── */}
-            {step === 4 && (
+            {/* ── Step 5: Exit behavior ───────────────────────────────── */}
+            {step === 5 && (
+              <>
+                <div className="text-4xl mb-4">🚪</div>
+                <h3 className="text-white font-bold text-lg mb-2">Closing the window</h3>
+                <p className="text-white/50 text-[13px] leading-relaxed mb-5 max-w-[380px] mx-auto">
+                  What should the ✕ button do? You can change this later in Settings.
+                </p>
+
+                <div className="flex flex-col gap-2.5 w-full mb-5">
+                  <button
+                    onClick={() => chooseExitBehavior(true)}
+                    className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer ${
+                      minimizeToTray
+                        ? "bg-violet-500/10 border-violet-500/30"
+                        : "bg-white/[0.03] border-white/10 hover:border-white/20"
+                    }`}
+                  >
+                    <span
+                      className="w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center"
+                      style={{
+                        borderColor: minimizeToTray ? "#9146FF" : "rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      {minimizeToTray && (
+                        <span className="w-2 h-2 rounded-full" style={{ background: "#9146FF" }} />
+                      )}
+                    </span>
+                    <span>
+                      <span className="block text-white text-[13px] font-semibold">
+                        Keep running in the tray
+                      </span>
+                      <span className="block text-white/40 text-[11px] mt-0.5">
+                        StatusForge keeps updating your stream in the background — click the tray
+                        icon to bring the window back.
+                      </span>
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => chooseExitBehavior(false)}
+                    className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer ${
+                      !minimizeToTray
+                        ? "bg-violet-500/10 border-violet-500/30"
+                        : "bg-white/[0.03] border-white/10 hover:border-white/20"
+                    }`}
+                  >
+                    <span
+                      className="w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center"
+                      style={{
+                        borderColor: !minimizeToTray ? "#9146FF" : "rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      {!minimizeToTray && (
+                        <span className="w-2 h-2 rounded-full" style={{ background: "#9146FF" }} />
+                      )}
+                    </span>
+                    <span>
+                      <span className="block text-white text-[13px] font-semibold">
+                        Quit completely
+                      </span>
+                      <span className="block text-white/40 text-[11px] mt-0.5">
+                        Closing the window shuts StatusForge down — nothing runs until you open it
+                        again.
+                      </span>
+                    </span>
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setStep(6)}
+                  className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-white"
+                  style={{ background: "linear-gradient(135deg, #9146FF 0%, #6441A5 100%)" }}
+                >
+                  Continue
+                </button>
+              </>
+            )}
+
+            {/* ── Step 6: Done ────────────────────────────────────────── */}
+            {step === 6 && (
               <>
                 <div className="text-4xl mb-4">✅</div>
                 <h3 className="text-white font-bold text-lg mb-2">You're all set</h3>
