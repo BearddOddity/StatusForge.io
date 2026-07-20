@@ -24,7 +24,7 @@ tauri-plugin-log = "2"
 tauri-plugin-autostart = "2"
 log = "0.4"
 
-dirs = "5"
+dirs = "6"
 rand = "0.8"
 sha2 = "0.10"
 base64 = "0.22"
