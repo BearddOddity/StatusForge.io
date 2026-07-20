@@ -9,7 +9,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 // somewhere later in an otherwise-relative-looking string — and anything
 // that isn't a well-formed absolute URL at all (a bare filesystem path,
 // which is the common case) falls through to convertFileSrc() too.
-const ALLOWED_IMAGE_PROTOCOLS = new Set(["http:", "https:", "data:", "blob:", "asset:"]);
+const ALLOWED_IMAGE_PROTOCOLS = new Set(["http:", "https:", "asset:"]);
 
 export function resolveImageSrc(value: string): string {
   const trimmed = value.trim();
