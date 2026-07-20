@@ -16,10 +16,10 @@
 # purpose.
 #
 # CodeQL: results upload to GitHub Code Scanning, which requires GitHub
-# Advanced Security — free for public repos, a paid add-on for private ones.
-# This repo is currently private; if GHAS isn't enabled, the "Upload SARIF"
-# step below will fail even though the scan itself ran fine. Enable GHAS for
-# this repo (or make it public) to get full value from this job.
+# Advanced Security — free for public repos (this one is), a paid add-on
+# for private ones. If this repo is ever made private, the "Upload SARIF"
+# step below will start failing even though the scan itself ran fine,
+# until GHAS is enabled for it.
 
 name: Security
 
