@@ -29,6 +29,8 @@ function categorize(name) {
   if (/\.sig$/i.test(name)) return null;
   if (/\.app\.tar\.gz$/i.test(name)) return null;
   if (/^latest\.json$/i.test(name)) return null;
+  if (/portable-windows.*\.zip$/i.test(name)) return "win-portable";
+  if (/portable-macos.*\.zip$/i.test(name)) return "mac-portable";
   if (/\.exe$/i.test(name)) return "win-exe";
   if (/\.msi$/i.test(name)) return "win-msi";
   if (/\.dmg$/i.test(name)) return "mac-dmg";
