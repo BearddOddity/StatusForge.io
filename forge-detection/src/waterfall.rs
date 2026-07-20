@@ -55,6 +55,44 @@ const SYSTEM_EXILES: &[&str] = &[
 
 const BANNED_PATHS: &[&str] = &["c:\\windows", "system32", "/usr/bin", "/usr/sbin", "/sbin"];
 
+/// Window titles of built-in Windows UWP apps that also run under
+/// ApplicationFrameHost.exe (same host process as real Xbox Game Pass
+/// titles, which is why we pierce through it at all — see the Xbox Game
+/// Pass / UWP piercer below). Without this exclusion list, opening any of
+/// these gets misdetected as "a running game" and the user has to manually
+/// exile it after the fact; matching ignores case since Windows doesn't
+/// guarantee title casing across versions/locales.
+const UWP_SYSTEM_APP_TITLES: &[&str] = &[
+    "settings",
+    "microsoft store",
+    "store",
+    "mail",
+    "calendar",
+    "calculator",
+    "photos",
+    "maps",
+    "weather",
+    "news",
+    "xbox console companion",
+    "xbox",
+    "feedback hub",
+    "clock",
+    "alarms & clock",
+    "movies & tv",
+    "groove music",
+    "people",
+    "voice recorder",
+    "tips",
+    "get help",
+    "phone link",
+    "your phone",
+    "snip & sketch",
+    "sticky notes",
+    "paint 3d",
+    "film & tv",
+    "solitaire collection",
+];
+
 const ENGINE_DNA: &[&str] = &[
     // Unity
     "unityplayer.dll",
@@ -311,12 +349,16 @@ impl GameDetector {
 
         // ── Xbox Game Pass / UWP piercer ───────────────────────────────────
         if exe_name == "applicationframehost.exe" && !window_title.is_empty() {
-            // The Windows Settings app is also hosted by ApplicationFrameHost.exe
-            // and its window is titled exactly "Settings" — without this
-            // exclusion, opening Settings gets pierced straight through as a
-            // running game instead of falling through to the browser/system
+            // Built-in Windows apps (Settings, Calculator, Mail, the Store,
+            // ...) are also hosted by ApplicationFrameHost.exe — without this
+            // exclusion, opening any of them gets pierced straight through as
+            // a running game instead of falling through to the browser/system
             // exile checks below.
-            if window_title.trim().eq_ignore_ascii_case("settings") {
+            let title_norm = window_title.trim().to_lowercase();
+            if UWP_SYSTEM_APP_TITLES
+                .iter()
+                .any(|t| title_norm == *t)
+            {
                 return None;
             }
             (self.log)(
@@ -1049,6 +1091,26 @@ mod tests {
                 ),
             )
             .is_none());
+    }
+
+    #[test]
+    fn uwp_piercer_excludes_other_built_in_windows_apps() {
+        let s = scout_with(&[], &[], false);
+        for title in ["Calculator", "Mail", "Microsoft Store", "PHOTOS", "xbox"] {
+            assert!(
+                s.evaluate(
+                    &win(title, true),
+                    &proc(
+                        "applicationframehost.exe",
+                        "c:\\windows\\system32\\applicationframehost.exe",
+                        500,
+                    ),
+                )
+                .is_none(),
+                "\"{}\" should be excluded, not detected as a game",
+                title
+            );
+        }
     }
 
     #[test]
