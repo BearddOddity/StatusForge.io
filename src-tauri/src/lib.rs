@@ -2555,6 +2555,33 @@ mod metadata_import_tests {
     use super::*;
     use crate::config::{ForgeDatabase, ForgeLibraryEntry};
 
+    /// The signer tool adds a cosmetic, pretty-printed "entry" field to the
+    /// envelope alongside the escaped entry_json string it actually signs —
+    /// purely so the published file is readable, not a field the app reads.
+    /// SignedMetadataEnvelope has no deny_unknown_fields, so it must keep
+    /// parsing fine with that extra key present; only the signature itself
+    /// should be what determines pass/fail.
+    #[test]
+    fn envelope_parsing_ignores_the_cosmetic_entry_field() {
+        let mut db = ForgeDatabase::default();
+        let envelope = serde_json::json!({
+            "entry": { "title": "Celeste", "genre": "Platformer" },
+            "entry_json": "{\"title\":\"Celeste\",\"genre\":\"Platformer\"}",
+            "signature": "not-a-real-signature",
+            "signed_by": "BearddOddity",
+        })
+        .to_string();
+
+        // Bogus signature, so this must fail — but on verification, not on
+        // JSON structure (the extra "entry" key shouldn't itself be an error).
+        let err = import_metadata_into_db(&mut db, &envelope).unwrap_err();
+        assert!(
+            err.contains("base64") || err.contains("verify") || err.contains("Signature"),
+            "expected a signature-related error, got: {}",
+            err
+        );
+    }
+
     #[test]
     fn import_fills_blanks_but_never_overwrites_existing_data() {
         let mut db = ForgeDatabase::default();
