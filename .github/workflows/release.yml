@@ -115,6 +115,49 @@ jobs:
         working-directory: ${{ matrix.app.path }}
         run: npm install
 
+      # Needed before the build step (not just after, as originally written)
+      # so the cleanup step below can target the right release.
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ matrix.app.releaseTag }}" = "v" ]; then
+            VERSION=$(node -p "require('./${{ matrix.app.versionFile }}').version")
+            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ matrix.app.releaseTag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Moving-tag releases (blipy-latest, joystick-latest) — and reruns of
+      # this workflow to fold in a hotfix — keep assets from prior successful
+      # runs on the release. tauri-action's uploader has no overwrite option,
+      # so re-running with the same output filenames 422s with
+      # "already_exists". Clear this OS's asset names off the release first
+      # so every run starts clean. Extensions are OS-exclusive, so parallel
+      # matrix jobs targeting the same tag never race on each other's
+      # assets; latest.json is left alone since tauri-action merges it
+      # itself across OS jobs.
+      - name: Clean stale release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="${{ steps.tag.outputs.tag }}"
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            exit 0
+          fi
+          case "${{ matrix.os }}" in
+            windows-latest) PATTERN='\.(exe|msi|zip)$' ;;
+            macos-latest) PATTERN='\.(dmg|app\.tar\.gz)$' ;;
+            ubuntu-latest) PATTERN='\.(deb|rpm|AppImage)$' ;;
+          esac
+          gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+            --jq '.assets[].name' | grep -E "$PATTERN" | while read -r name; do
+              echo "Deleting stale asset: $name"
+              gh release delete-asset "$TAG" "$name" --repo "${{ github.repository }}" --yes || true
+            done
+
       # Bundles per OS: Windows NSIS + MSI, macOS .app + .dmg (unsigned),
       # Linux AppImage + .deb — tauri.conf.json "targets": "all" covers these.
       - name: Build and release ${{ matrix.app.name }}
@@ -139,23 +182,6 @@ jobs:
           releaseDraft: false
           prerelease: ${{ matrix.app.prerelease }}
           includeUpdaterJson: true
-
-      # tauri-action's tagName above is the literal "v__VERSION__"/moving-tag
-      # config value, not the real resolved tag on the release it just
-      # created — need the actual tag string to `gh release upload` against.
-      # releaseTag is "v" as a sentinel for "compute v<version>" (StatusForge,
-      # a real versioned release); any other value is a literal moving tag
-      # (Blipy's blipy-latest, Joystick Companion's joystick-latest, ...).
-      - name: Resolve release tag
-        id: tag
-        shell: bash
-        run: |
-          if [ "${{ matrix.app.releaseTag }}" = "v" ]; then
-            VERSION=$(node -p "require('./${{ matrix.app.versionFile }}').version")
-            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ matrix.app.releaseTag }}" >> "$GITHUB_OUTPUT"
-          fi
 
       # Portable Windows build: no installer, no registry entries, no
       # Program Files — just the exe next to the same files bundle.resources
