@@ -6,6 +6,7 @@ pub use forge_detection as scanner;
 pub mod blipy_protocol;
 pub mod hub;
 pub mod metadata;
+pub mod metadata_signing;
 pub mod server;
 use config::{AppConfig, EngineStatus};
 
@@ -1933,9 +1934,67 @@ fn export_single_game_metadata(app: tauri::AppHandle, title: String) -> Result<S
     Ok(path.to_string_lossy().to_string())
 }
 
-/// The other half of `export_single_game_metadata` — import a community-
-/// shared `*_metadata.json` file, merging it into the matching library
-/// entry (or creating a new one if the title isn't in the library yet).
+/// A file produced by `tools/metadata-signer` — either one entry (single
+/// import) or a whole curated database (bulk import). `entry_json` is the
+/// *exact* payload bytes that were signed; verification checks the
+/// signature against those bytes directly rather than against a
+/// re-serialized struct, so signer and app never need to agree on a
+/// canonical JSON encoding.
+#[derive(serde::Deserialize)]
+struct SignedMetadataEnvelope {
+    entry_json: String,
+    signature: String,
+    #[serde(default)]
+    signed_by: String,
+}
+
+/// Unwraps an import file into its raw JSON payload, verifying a signed
+/// envelope if present. Shared by the single-entry and bulk-database import
+/// paths below.
+///
+/// - A plain (unsigned) file — a normal community `*_metadata.json`, or a
+///   bare database dump — passes through unchanged, `verified = false`.
+/// - A signed envelope whose signature checks out against
+///   `metadata_signing::OFFICIAL_PUBLIC_KEY_B64` unwraps to its inner
+///   `entry_json`, `verified = true`.
+/// - A signed envelope whose signature does NOT check out is rejected
+///   outright — a file claiming to be an official export but failing
+///   verification is a tamper signal, not something to quietly treat as
+///   unsigned.
+fn verify_and_unwrap_payload(json: &str, max_bytes: usize) -> Result<(String, bool, String), String> {
+    if json.len() > max_bytes {
+        return Err("That file is too large to be a metadata export".to_string());
+    }
+
+    match serde_json::from_str::<SignedMetadataEnvelope>(json) {
+        Ok(envelope) => {
+            let ok = metadata_signing::verify_official_signature(
+                &envelope.entry_json,
+                &envelope.signature,
+            )?;
+            if !ok {
+                return Err(
+                    "Signature check failed — this file claims to be an official export but doesn't verify against BearddOddity's key"
+                        .to_string(),
+                );
+            }
+            let signed_by = if envelope.signed_by.is_empty() {
+                "BearddOddity".to_string()
+            } else {
+                envelope.signed_by
+            };
+            Ok((envelope.entry_json, true, signed_by))
+        }
+        Err(_) => Ok((json.to_string(), false, String::new())),
+    }
+}
+
+const MAX_METADATA_IMPORT_BYTES: usize = 256 * 1024;
+const MAX_DATABASE_IMPORT_BYTES: usize = 16 * 1024 * 1024;
+
+/// Pure core of `import_single_game_metadata`, split out so it can be unit
+/// tested against an in-memory `ForgeDatabase` instead of the real
+/// `Documents`-backed store.
 ///
 /// Kept safe for a file that came from someone else's machine, not just
 /// someone else's library:
@@ -1949,20 +2008,14 @@ fn export_single_game_metadata(app: tauri::AppHandle, title: String) -> Result<S
 ///   never read from the import at all — those describe the exporter's own
 ///   machine/library, not this one, so `merge_entry` already leaves them
 ///   alone and this entry point doesn't add any path to overwrite them.
-const MAX_METADATA_IMPORT_BYTES: usize = 256 * 1024;
-
-/// Pure core of `import_single_game_metadata`, split out so it can be unit
-/// tested against an in-memory `ForgeDatabase` instead of the real
-/// `Documents`-backed store.
 fn import_metadata_into_db(
     db: &mut config::ForgeDatabase,
     json: &str,
 ) -> Result<String, String> {
-    if json.len() > MAX_METADATA_IMPORT_BYTES {
-        return Err("That file is too large to be a game metadata export".to_string());
-    }
+    let (payload, verified, signed_by) =
+        verify_and_unwrap_payload(json, MAX_METADATA_IMPORT_BYTES)?;
 
-    let fetched: config::ForgeLibraryEntry = serde_json::from_str(json)
+    let fetched: config::ForgeLibraryEntry = serde_json::from_str(&payload)
         .map_err(|e| format!("Not a valid game metadata file: {}", e))?;
     let title = fetched.title.trim().to_string();
     if title.is_empty() {
@@ -1971,19 +2024,95 @@ fn import_metadata_into_db(
 
     let key = config::find_library_key(db, &title).unwrap_or_else(|| title.clone());
     let existing = db.library.remove(&key).unwrap_or_default();
-    let mut merged = crate::metadata::merge_entry(existing, &fetched);
+    // A verified import's signature proves the data really came from
+    // BearddOddity's curated database, so it's trusted to overwrite fields
+    // that are already set — not just fill in blanks like a normal scan or
+    // an unsigned community import.
+    let mut merged = if verified {
+        crate::metadata::overwrite_entry(existing, &fetched)
+    } else {
+        crate::metadata::merge_entry(existing, &fetched)
+    };
     if merged.title.trim().is_empty() {
         merged.title = title.clone();
     }
     db.library.insert(key, merged);
 
-    Ok(format!("Imported metadata for \"{}\"", title))
+    Ok(if verified {
+        format!(
+            "Imported metadata for \"{}\" — verified official entry from {}",
+            title, signed_by
+        )
+    } else {
+        format!("Imported metadata for \"{}\"", title)
+    })
 }
 
 #[tauri::command]
 fn import_single_game_metadata(json: String) -> Result<String, String> {
     let mut db = server::load_db()?;
     let result = import_metadata_into_db(&mut db, &json)?;
+    server::save_db(&db)?;
+    Ok(result)
+}
+
+/// Bulk counterpart of `import_metadata_into_db` — imports a whole curated
+/// database (a `{title: entry, ...}` map, or a full `Forge_Database.json`
+/// dump with a top-level `library` key) instead of one game at a time.
+/// Same merge safety per-entry as the single-game path; nothing here can
+/// overwrite a field the user already set or locked.
+fn import_database_into_db(db: &mut config::ForgeDatabase, json: &str) -> Result<String, String> {
+    let (payload, verified, signed_by) =
+        verify_and_unwrap_payload(json, MAX_DATABASE_IMPORT_BYTES)?;
+
+    let value: serde_json::Value =
+        serde_json::from_str(&payload).map_err(|e| format!("Not valid JSON: {}", e))?;
+    let library_value = value.get("library").cloned().unwrap_or(value);
+    let incoming: std::collections::HashMap<String, config::ForgeLibraryEntry> =
+        serde_json::from_value(library_value)
+            .map_err(|e| format!("Not a valid game database file: {}", e))?;
+
+    let mut added = 0usize;
+    let mut updated = 0usize;
+    for (raw_title, fetched) in incoming {
+        let title = fetched.title.trim();
+        let title = if title.is_empty() { raw_title.trim() } else { title };
+        if title.is_empty() {
+            continue;
+        }
+        let title = title.to_string();
+
+        let key = config::find_library_key(db, &title).unwrap_or_else(|| title.clone());
+        let is_new = !db.library.contains_key(&key);
+        let existing = db.library.remove(&key).unwrap_or_default();
+        let mut merged = if verified {
+            crate::metadata::overwrite_entry(existing, &fetched)
+        } else {
+            crate::metadata::merge_entry(existing, &fetched)
+        };
+        if merged.title.trim().is_empty() {
+            merged.title = title.clone();
+        }
+        db.library.insert(key, merged);
+        if is_new {
+            added += 1;
+        } else {
+            updated += 1;
+        }
+    }
+
+    let summary = format!("Added {} new and updated {} existing entries", added, updated);
+    Ok(if verified {
+        format!("{} — verified official database from {}", summary, signed_by)
+    } else {
+        summary
+    })
+}
+
+#[tauri::command]
+fn import_game_database(json: String) -> Result<String, String> {
+    let mut db = server::load_db()?;
+    let result = import_database_into_db(&mut db, &json)?;
     server::save_db(&db)?;
     Ok(result)
 }
@@ -2414,6 +2543,7 @@ pub fn run() {
             export_metadata_readme,
             export_single_game_metadata,
             import_single_game_metadata,
+            import_game_database,
             refresh_platform_push,
         ])
         .run(tauri::generate_context!())

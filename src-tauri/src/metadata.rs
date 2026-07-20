@@ -67,6 +67,50 @@ pub fn merge_entry(
     existing
 }
 
+/// Like `merge_entry`, but for metadata that's been cryptographically
+/// verified as coming from BearddOddity's curated database (see
+/// `metadata_signing` and the signed-import paths in `lib.rs`): a
+/// signature-checked field is trusted enough to overwrite a value that's
+/// already there, not just fill in a blank one. Still respects
+/// `locked_fields` — a user's own manual lock is "don't touch this on my
+/// machine," independent of how much the source is trusted. Covers every
+/// shareable metadata field, including the three (`discord_app_id`,
+/// `xbox_title_id`, `epic_id`) that regular scans don't fill in.
+pub fn overwrite_entry(
+    mut existing: ForgeLibraryEntry,
+    fetched: &ForgeLibraryEntry,
+) -> ForgeLibraryEntry {
+    macro_rules! fill {
+        ($($f:ident),*) => {$(
+            if !fetched.$f.is_empty()
+                && !existing.locked_fields.iter().any(|f| f == stringify!($f))
+            {
+                existing.$f = fetched.$f.clone();
+            }
+        )*};
+    }
+    fill!(
+        genre,
+        release_year,
+        developer,
+        publisher,
+        cover_url,
+        logo_url,
+        igdb_id,
+        rawg_id,
+        sgdb_id,
+        steam_id,
+        gog_id,
+        thegamesdb_id,
+        twitch_id,
+        kick_id,
+        discord_app_id,
+        xbox_title_id,
+        epic_id
+    );
+    existing
+}
+
 /// Scan all configured sources for `title` and merge the results into `existing`.
 pub async fn scan(
     title: &str,
@@ -874,6 +918,27 @@ mod tests {
         let merged = merge_entry(existing, &fetched);
         assert_eq!(merged.cover_url, ""); // locked — stays empty
         assert_eq!(merged.developer, "RAWG Dev"); // unlocked field still fills normally
+    }
+
+    #[test]
+    fn overwrite_replaces_already_set_fields_but_still_respects_a_lock() {
+        let existing = ForgeLibraryEntry {
+            title: "Celeste".to_string(),
+            developer: "Stale Dev".to_string(),
+            genre: "Wrong Genre".to_string(),
+            locked_fields: vec!["genre".to_string()],
+            ..Default::default()
+        };
+        let fetched = ForgeLibraryEntry {
+            developer: "Maddy Makes Games".to_string(),
+            genre: "Platformer".to_string(),
+            discord_app_id: "12345".to_string(),
+            ..Default::default()
+        };
+        let merged = overwrite_entry(existing, &fetched);
+        assert_eq!(merged.developer, "Maddy Makes Games"); // verified data wins even though already set
+        assert_eq!(merged.genre, "Wrong Genre"); // still locked — even a verified import won't touch it
+        assert_eq!(merged.discord_app_id, "12345"); // field merge_entry doesn't cover at all
     }
 
     /// Hits the real, unofficial Steam/GOG endpoints — not run in CI (no key
