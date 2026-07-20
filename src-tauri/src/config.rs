@@ -409,12 +409,12 @@ fn default_sb_action_name() -> String {
 }
 fn default_overlay_token() -> String {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..16)
         .map(|_| {
             const CHARSET: &[u8] =
                 b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-            CHARSET[rng.gen_range(0..CHARSET.len())] as char
+            CHARSET[rng.random_range(0..CHARSET.len())] as char
         })
         .collect()
 }
