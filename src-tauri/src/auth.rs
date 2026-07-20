@@ -129,7 +129,7 @@ fn build_popup_response(platform: &str, success: bool, error_msg: &str) -> Strin
     });
 
     format!(
-        r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>StatusForge.io</title>
+        r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>StatusForge</title>
 <style>
 body{{background:#050505;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:-apple-system,BlinkMacSystemFont,sans-serif}}
 .card{{background:#0c0c0c;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:40px 36px;text-align:center;max-width:360px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.6)}}
@@ -144,7 +144,7 @@ p{{font-size:13px;color:rgba(255,255,255,0.45);margin:0}}
 <p>{msg}</p>
 {detail}
 </div>
-<div class="brand">StatusForge.io</div>
+<div class="brand">StatusForge</div>
 <script>
 try{{window.opener&&window.opener.postMessage({payload},"{origin}")}}catch(e){{}}
 setTimeout(function(){{window.close()}},1500);

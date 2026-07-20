@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "StatusForge.io",
+  "productName": "StatusForge",
   "version": "0.5.9",
   "identifier": "com.bearddoddity.statusforge",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "StatusForge.io",
+        "title": "StatusForge",
         "width": 1200,
         "height": 800,
         "resizable": true,
