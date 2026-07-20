@@ -39,6 +39,21 @@ not required/
 # Ignore Playwright MCP preview screenshots/traces
 .playwright-mcp/
 
+# Ignore local Flatpak build output (flatpak-builder state + the .deb it
+# downloads to wrap + the .flatpak it produces) — only the manifests/
+# metainfo under flatpak/ are source, everything else there is generated
+# by running flatpak-builder, same as release.yml's flatpak job does.
+flatpak/.flatpak-builder/
+flatpak/build/
+flatpak/repo/
+flatpak/*.deb
+flatpak/*.flatpak
+
+# Ignore local portable-build staging (release.yml's portable Windows/macOS
+# zip steps, if run locally)
+portable-*/
+*-portable-*.zip
+
 # Ignore editor/OS junk
 .vscode/
 .idea/
