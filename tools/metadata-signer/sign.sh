@@ -7,10 +7,10 @@
 #       into src-tauri/src/metadata_signing.rs if you ever rotate it), and
 #       writes the private key to ./signing_key.b64.
 #
-#   ./sign.sh entry.json signed_entry.json
+#   ./sign.sh entry.json signed_entry.json [path/to/signing_key.b64]
 #       Signs entry.json (one game, or a whole database dump) using
-#       ./signing_key.b64 and writes the signed file ready to publish on
-#       bearddoddity.github.io.
+#       ./signing_key.b64 (or the key file path given as the 3rd arg) and
+#       writes the signed file ready to publish on bearddoddity.github.io.
 #
 # Safety: signing_key.b64 is gitignored and this script never prints its
 # contents or uploads it anywhere. Still, it's the only thing that can
@@ -24,8 +24,8 @@ KEY_FILE="signing_key.b64"
 
 usage() {
   echo "Usage:"
-  echo "  ./sign.sh keygen                       — generate a new signing key (one-time)"
-  echo "  ./sign.sh <entry.json> <signed_out.json> — sign a file with $KEY_FILE"
+  echo "  ./sign.sh keygen                                            — generate a new signing key (one-time)"
+  echo "  ./sign.sh <entry.json> <signed_out.json> [key_file]         — sign a file (default key: $KEY_FILE)"
   exit 1
 }
 
@@ -48,13 +48,15 @@ if [ "$1" = "keygen" ]; then
   exit 0
 fi
 
-[ $# -eq 2 ] || usage
+[ $# -ge 2 ] && [ $# -le 3 ] || usage
 ENTRY_FILE="$1"
 OUT_FILE="$2"
+[ $# -eq 3 ] && KEY_FILE="$3"
 
 if [ ! -f "$KEY_FILE" ]; then
-  echo "No $KEY_FILE found here. Run ./sign.sh keygen first, or copy your"
-  echo "existing signing_key.b64 into this folder (tools/metadata-signer/)."
+  echo "No key file found at $KEY_FILE."
+  echo "Run ./sign.sh keygen first, copy your existing signing_key.b64 into"
+  echo "this folder (tools/metadata-signer/), or pass its path as the 3rd arg."
   exit 1
 fi
 
