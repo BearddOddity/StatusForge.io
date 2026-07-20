@@ -1119,7 +1119,7 @@ const KEY_CATALOG: {
     label: "TheGamesDB",
     desc: "Community-run game database — strong coverage for older/retro console games",
     icon: "🕹️",
-    keyUrl: "https://thegamesdb.net/member/api",
+    keyUrl: "https://thegamesdb.net/",
   },
 ];
 
