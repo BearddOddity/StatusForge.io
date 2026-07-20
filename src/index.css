@@ -1084,6 +1084,15 @@ input[type="range"]::-moz-range-thumb {
   background: rgba(248, 113, 113, 0.2);
   color: #f87171;
 }
+.btn-icon-sm.link {
+  background: rgba(145, 70, 255, 0.1);
+  color: rgba(192, 132, 252, 0.85);
+  border-color: rgba(145, 70, 255, 0.18);
+}
+.btn-icon-sm.link:hover {
+  background: rgba(145, 70, 255, 0.2);
+  color: #c084fc;
+}
 
 /* ── Reusable settings panel card ─────────────────────────────────────────── */
 .surface-card {

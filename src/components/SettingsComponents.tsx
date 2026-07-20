@@ -304,14 +304,26 @@ export function EditRemoveButtons({
   onToggleEdit,
   onRemove,
   removeLabel = "Remove",
+  onOpenLink,
+  linkLabel = "Get Key ↗",
 }: {
   isEditing: boolean;
   onToggleEdit: () => void;
   onRemove: () => void;
   removeLabel?: string;
+  /** Opens the provider's page for grabbing this key/credential. Button is
+   * omitted entirely when not provided (e.g. entries with no external
+   * signup page). */
+  onOpenLink?: () => void;
+  linkLabel?: string;
 }) {
   return (
     <div className="flex items-center gap-1.5 shrink-0">
+      {onOpenLink && (
+        <button onClick={onOpenLink} className="btn-icon-sm link" title="Open provider's key page">
+          {linkLabel}
+        </button>
+      )}
       <button onClick={onToggleEdit} className={`btn-icon-sm edit ${isEditing ? "active" : ""}`}>
         {isEditing ? "Close" : "Edit"}
       </button>

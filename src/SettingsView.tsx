@@ -1085,6 +1085,7 @@ const KEY_CATALOG: {
   label: string;
   desc: string;
   icon: string;
+  keyUrl: string;
   group?: { key: string; label: string }[];
 }[] = [
   {
@@ -1092,18 +1093,21 @@ const KEY_CATALOG: {
     label: "SteamGridDB",
     desc: "Custom grid artwork, hero banners, and logo images",
     icon: "🖼️",
+    keyUrl: "https://www.steamgriddb.com/profile/preferences/api",
   },
   {
     key: "rawg",
     label: "RAWG",
     desc: "Game metadata — genres, ratings, release dates, screenshots",
     icon: "🎮",
+    keyUrl: "https://rawg.io/apidocs",
   },
   {
     key: "igdb",
     label: "IGDB",
     desc: "Twitch-authenticated IGDB API — game data, covers, screenshots, release dates",
     icon: "🎮",
+    keyUrl: "https://dev.twitch.tv/console/apps",
     group: [
       { key: "igdb_client", label: "Client ID" },
       { key: "igdb_secret", label: "Client Secret" },
@@ -1115,6 +1119,7 @@ const KEY_CATALOG: {
     label: "TheGamesDB",
     desc: "Community-run game database — strong coverage for older/retro console games",
     icon: "🕹️",
+    keyUrl: "https://thegamesdb.net/member/api",
   },
 ];
 
@@ -1126,6 +1131,7 @@ const ROUTING_CATALOG: {
   icon: React.ReactNode;
   color: string;
   connectUrl: string;
+  keyUrl: string;
   userFields: { key: string; label: string; hint?: string; optional?: boolean }[];
   managedFields?: { key: string; label: string }[];
 }[] = [
@@ -1133,6 +1139,7 @@ const ROUTING_CATALOG: {
     key: "twitch",
     label: "Twitch",
     desc: "OAuth2 via Twitch — game category updates, stream info, broadcaster identity",
+    keyUrl: "https://dev.twitch.tv/console/apps",
     icon: (
       <svg width="16" height="16" viewBox="0 0 2400 2800" fill="currentColor">
         <path d="M500,0L0,500v1800h600v500l500-500h400l900-900V0H500z M2200,1300l-400,400h-400l-350,350v-350H600V200h1600 V1300z" />
@@ -1164,6 +1171,7 @@ const ROUTING_CATALOG: {
     key: "kick",
     label: "Kick",
     desc: "OAuth2 via Kick — channel updates, chat, stream metadata",
+    keyUrl: "https://kick.com/settings/developer",
     icon: (
       <svg width="16" height="16" viewBox="0 0 453.9 510.6" fill="currentColor">
         <path d="M0,0h170.2v113.5h56.7v-56.7h56.7V0h170.2v170.2h-56.7v56.7h-56.7v56.7h56.7v56.7h56.7v170.2h-170.2v-56.7h-56.7v-56.7h-56.7v113.5H0V0Z" />
@@ -1574,6 +1582,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
     label: k,
     desc: "",
     icon: "🔑",
+    keyUrl: "",
   }));
   const allKeyDisplay = [...displayKeyEntries, ...orphanKeyEntries];
   const keyCount = allKeyDisplay.length;
@@ -1599,6 +1608,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
     icon: "🔗",
     color: "#fff",
     connectUrl: "",
+    keyUrl: "",
     userFields: [{ key: k, label: k }],
   })) as typeof displayRouteEntries;
   const allRouteDisplay = [...displayRouteEntries, ...orphanRouteEntries];
@@ -1726,20 +1736,12 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={() => setEditingKey(isEditing ? null : entry.key)}
-                          className={`btn-icon-sm edit ${isEditing ? "active" : ""}`}
-                        >
-                          {isEditing ? "Close" : "Edit"}
-                        </button>
-                        <button
-                          onClick={() => removeKeyEntry(entry as (typeof KEY_CATALOG)[number])}
-                          className="btn-icon-sm remove"
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      <EditRemoveButtons
+                        isEditing={isEditing}
+                        onToggleEdit={() => setEditingKey(isEditing ? null : entry.key)}
+                        onOpenLink={entry.keyUrl ? () => openUrl(entry.keyUrl).catch(() => {}) : undefined}
+                        onRemove={() => removeKeyEntry(entry as (typeof KEY_CATALOG)[number])}
+                      />
                     </div>
 
                     {isEditing && (
@@ -1913,6 +1915,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                       <EditRemoveButtons
                         isEditing={isEditing}
                         onToggleEdit={() => setEditingKey(isEditing ? null : entry.key)}
+                        onOpenLink={entry.keyUrl ? () => openUrl(entry.keyUrl).catch(() => {}) : undefined}
                         onRemove={() =>
                           managedFields && managedFields.length > 0
                             ? disconnectRoute(entry as (typeof ROUTING_CATALOG)[number])

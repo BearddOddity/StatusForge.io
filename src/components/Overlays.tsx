@@ -288,7 +288,13 @@ export function OverlayMetadataPanel({
                           [field.key]: val,
                         }))
                       }
-                      onSave={(val) => onSave({ title: editData.title, [field.key]: val })}
+                      onSave={(val) =>
+                        onSave(
+                          field.key === "title"
+                            ? { old_title: entry?.title ?? editData.title, title: val }
+                            : { title: editData.title, [field.key]: val }
+                        )
+                      }
                       onSearch={
                         field.key !== "title" &&
                         field.key !== "executables" &&

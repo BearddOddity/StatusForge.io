@@ -177,11 +177,52 @@ pub fn upsert_library_entry(
     // already stored under slightly different casing/padding. The old key
     // is removed and re-inserted under `title` so the key always tracks
     // whatever title was most recently saved, keeping key == entry.title.
-    let existing_key = crate::config::find_library_key(db, &title);
-    let existing = existing_key
+    //
+    // A title edit is a rename, not a fresh entry: the editor sends the
+    // pre-edit title as `old_title` precisely so a correction like
+    // "ONCE_HUMAN" -> "Once Human" (which differs by more than
+    // case/whitespace, so find_library_key alone can't bridge it) still
+    // resolves to the same row instead of forking a blank duplicate that
+    // loses the executables/aliases already saved on the original.
+    let old_title = body
+        .get("old_title")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let existing_key = old_title
+        .and_then(|old| crate::config::find_library_key(db, old))
+        .or_else(|| crate::config::find_library_key(db, &title));
+    let mut existing = existing_key
         .as_ref()
         .and_then(|k| db.library.remove(k))
         .unwrap_or_default();
+
+    // Keep the pre-rename title reachable as a Detection Alias so a raw
+    // scanner/window-title hit under the old (often garbled) name still
+    // resolves to this entry rather than re-forking a duplicate the next
+    // time the game launches.
+    if let Some(old) = old_title {
+        let old_norm = forge_detection::alias::normalize_alias_name(old);
+        let new_norm = forge_detection::alias::normalize_alias_name(&title);
+        if old_norm != new_norm
+            && !existing
+                .aliases
+                .iter()
+                .any(|a| forge_detection::alias::normalize_alias_name(&a.name) == old_norm)
+        {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            existing.aliases.push(crate::config::GameAlias {
+                name: old.to_string(),
+                priority: 1,
+                language: "en".to_string(),
+                added_at: format!("{:010}", now),
+                preferred: false,
+            });
+        }
+    }
 
     // The editor sends `aliases` as a comma-separated string (same shape as
     // `executables`); resolve it into structured GameAlias values BEFORE the
@@ -892,6 +933,37 @@ mod tests {
         // title is required
         let bad = serde_json::json!({ "genre": "X" });
         assert!(upsert_library_entry(&mut db, bad.as_object().unwrap()).is_err());
+    }
+
+    #[test]
+    fn renaming_title_updates_in_place_instead_of_forking_a_duplicate() {
+        let mut db = ForgeDatabase::default();
+        db.library.insert(
+            "ONCE_HUMAN".to_string(),
+            ForgeLibraryEntry {
+                title: "ONCE_HUMAN".to_string(),
+                executables: "Once_Human.exe".to_string(),
+                ..Default::default()
+            },
+        );
+        db.listed_apps
+            .insert("once_human.exe".to_string(), "ONCE_HUMAN".to_string());
+
+        let body = serde_json::json!({
+            "old_title": "ONCE_HUMAN",
+            "title": "Once Human",
+        });
+        let title = upsert_library_entry(&mut db, body.as_object().unwrap()).unwrap();
+
+        assert_eq!(title, "Once Human");
+        assert_eq!(db.library.len(), 1, "rename must not fork a duplicate entry");
+        let e = &db.library["Once Human"];
+        assert_eq!(e.executables, "Once_Human.exe", "exe association carries over");
+        assert!(
+            e.aliases.iter().any(|a| a.name == "ONCE_HUMAN"),
+            "the pre-rename title becomes a detection alias so future raw \
+             detections under the old name still resolve here"
+        );
     }
 
     #[test]
