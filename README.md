@@ -13,6 +13,20 @@ StatusForge watches what game you're playing and keeps your stream's category up
 - **Works across two PCs.** The optional Blipy companion agent runs on a separate gaming PC and forwards detections to StatusForge on your streaming PC.
 - **Ships overlays.** Browser-source overlays for your streaming software, driven by the same detection engine.
 
+## Repository layout
+
+This repo holds StatusForge itself plus its companion apps and shared code:
+
+- **`src/`, `src-tauri/`** — StatusForge, the main app (React + Rust/Tauri). `npm run tauri dev` at the repo root runs this.
+- **`forge-detection/`** — the Rust game-detection engine, shared as a crate by StatusForge and Blipy.
+- **`blipy-app/`** — Blipy, the optional dual-PC companion agent (its own Tauri app, own `package.json`/`src-tauri/`).
+- **`joystick-bot/`** — the optional Joystick.tv chat bot companion (own Tauri app; see [`joystick-bot/README.md`](joystick-bot/README.md)).
+- **`docs/`** — test plans and other project docs.
+- **`scripts/`** — repo maintenance scripts (capability checks, the Pages download-page sync).
+- **`widgets/`, `public/`, `icons/`** — overlay assets and app icons bundled into releases.
+
+Each app folder builds independently (`cd blipy-app && npm install && npm run tauri dev`, etc.) — they don't share a build step, only the `forge-detection` crate and this repo.
+
 ## Platform support
 
 Windows 10/11 is the primary, tested target. macOS and Linux builds exist and are community-supported — file an issue if something's broken there.
