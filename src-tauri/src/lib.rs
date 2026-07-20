@@ -1925,12 +1925,67 @@ fn export_single_game_metadata(app: tauri::AppHandle, title: String) -> Result<S
         .chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect();
-    let path = dir.join(format!("statusforge_game_{}.json", slug));
+    let path = dir.join(format!("{}_metadata.json", slug));
     let raw = serde_json::to_string_pretty(entry)
         .map_err(|e| format!("Failed to serialize entry: {}", e))?;
     std::fs::write(&path, raw).map_err(|e| format!("Failed to write export file: {}", e))?;
 
     Ok(path.to_string_lossy().to_string())
+}
+
+/// The other half of `export_single_game_metadata` — import a community-
+/// shared `*_metadata.json` file, merging it into the matching library
+/// entry (or creating a new one if the title isn't in the library yet).
+///
+/// Kept safe for a file that came from someone else's machine, not just
+/// someone else's library:
+/// - Size-capped and schema-validated by `serde_json` before anything
+///   touches the database — malformed input just fails to parse.
+/// - Merged through `metadata::merge_entry`, the same "only fill empty
+///   fields, never touch a locked field" logic a normal metadata scan uses.
+///   An imported file can add missing info; it can never overwrite
+///   something the user already set or typed in by hand.
+/// - `executables`, `locked_fields`, `aliases`, and `sync_history` are
+///   never read from the import at all — those describe the exporter's own
+///   machine/library, not this one, so `merge_entry` already leaves them
+///   alone and this entry point doesn't add any path to overwrite them.
+const MAX_METADATA_IMPORT_BYTES: usize = 256 * 1024;
+
+/// Pure core of `import_single_game_metadata`, split out so it can be unit
+/// tested against an in-memory `ForgeDatabase` instead of the real
+/// `Documents`-backed store.
+fn import_metadata_into_db(
+    db: &mut config::ForgeDatabase,
+    json: &str,
+) -> Result<String, String> {
+    if json.len() > MAX_METADATA_IMPORT_BYTES {
+        return Err("That file is too large to be a game metadata export".to_string());
+    }
+
+    let fetched: config::ForgeLibraryEntry = serde_json::from_str(json)
+        .map_err(|e| format!("Not a valid game metadata file: {}", e))?;
+    let title = fetched.title.trim().to_string();
+    if title.is_empty() {
+        return Err("Metadata file is missing a game title".to_string());
+    }
+
+    let key = config::find_library_key(db, &title).unwrap_or_else(|| title.clone());
+    let existing = db.library.remove(&key).unwrap_or_default();
+    let mut merged = crate::metadata::merge_entry(existing, &fetched);
+    if merged.title.trim().is_empty() {
+        merged.title = title.clone();
+    }
+    db.library.insert(key, merged);
+
+    Ok(format!("Imported metadata for \"{}\"", title))
+}
+
+#[tauri::command]
+fn import_single_game_metadata(json: String) -> Result<String, String> {
+    let mut db = server::load_db()?;
+    let result = import_metadata_into_db(&mut db, &json)?;
+    server::save_db(&db)?;
+    Ok(result)
 }
 
 /// Escape pipe characters so a title/genre/etc. containing `|` doesn't break
@@ -2358,10 +2413,72 @@ pub fn run() {
             export_game_database,
             export_metadata_readme,
             export_single_game_metadata,
+            import_single_game_metadata,
             refresh_platform_push,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod metadata_import_tests {
+    use super::*;
+    use crate::config::{ForgeDatabase, ForgeLibraryEntry};
+
+    #[test]
+    fn import_fills_blanks_but_never_overwrites_existing_data() {
+        let mut db = ForgeDatabase::default();
+        db.library.insert(
+            "Celeste".to_string(),
+            ForgeLibraryEntry {
+                title: "Celeste".to_string(),
+                developer: "My Own Notes".to_string(), // user already set this
+                locked_fields: vec!["developer".to_string()],
+                executables: "C:\\Users\\me\\celeste.exe".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let import_json = serde_json::json!({
+            "title": "Celeste",
+            "developer": "Someone Else's Import",
+            "genre": "Platformer",
+            "executables": "D:\\some\\other\\machine\\celeste.exe",
+        })
+        .to_string();
+
+        let msg = import_metadata_into_db(&mut db, &import_json).unwrap();
+        assert!(msg.contains("Celeste"));
+
+        let e = &db.library["Celeste"];
+        assert_eq!(e.developer, "My Own Notes"); // locked field untouched
+        assert_eq!(e.genre, "Platformer"); // blank field filled in
+        assert_eq!(e.executables, "C:\\Users\\me\\celeste.exe"); // local path never imported
+    }
+
+    #[test]
+    fn import_creates_a_new_entry_when_title_is_unknown() {
+        let mut db = ForgeDatabase::default();
+        let import_json = serde_json::json!({
+            "title": "Hollow Knight",
+            "genre": "Metroidvania",
+        })
+        .to_string();
+
+        import_metadata_into_db(&mut db, &import_json).unwrap();
+        let e = &db.library["Hollow Knight"];
+        assert_eq!(e.title, "Hollow Knight");
+        assert_eq!(e.genre, "Metroidvania");
+    }
+
+    #[test]
+    fn import_rejects_missing_title_and_oversized_or_malformed_input() {
+        let mut db = ForgeDatabase::default();
+        assert!(import_metadata_into_db(&mut db, r#"{"genre": "X"}"#).is_err());
+        assert!(import_metadata_into_db(&mut db, "not json").is_err());
+        let huge = "x".repeat(MAX_METADATA_IMPORT_BYTES + 1);
+        assert!(import_metadata_into_db(&mut db, &huge).is_err());
+    }
 }
 
 #[cfg(test)]

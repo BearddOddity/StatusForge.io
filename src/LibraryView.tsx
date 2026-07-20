@@ -228,6 +228,30 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
     }
   };
 
+  // Reads the picked file as plain text in the browser sandbox (no backend
+  // path access — the OS file dialog is the only thing that chose this
+  // file), then hands the raw JSON to the backend. import_single_game_metadata
+  // does the actual validation/merge; a bad or hostile file can only fail to
+  // parse or fill in blanks, never overwrite what's already in the library.
+  const importMetadataFile = async (file: File) => {
+    let json: string;
+    try {
+      json = await file.text();
+    } catch {
+      toast("Couldn't read that file", "error");
+      return;
+    }
+    const res = await tauriApi("import_single_game_metadata", { json });
+    if (typeof res === "string") {
+      toast(res, "success");
+      load();
+    } else {
+      const err =
+        res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
+      toast(err ? `Import failed: ${err}` : "Import failed", "error");
+    }
+  };
+
   const reinstate = async (proc: string) => {
     const token = await fetchOverlayToken();
     try {
@@ -514,6 +538,29 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
                 />
               </svg>
             </button>
+            <label
+              className="px-2.5 py-2 text-xs font-semibold text-white/50 hover:text-white/80 active:text-white transition-all cursor-pointer border-none bg-transparent hover:bg-white/[0.06] active:bg-white/[0.1] flex items-center"
+              title="Import Game Metadata (.json)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 16V4m0 0L8 8m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"
+                />
+              </svg>
+              <input
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) importMetadataFile(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
           </div>
         </div>
       </div>
