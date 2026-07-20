@@ -19,7 +19,7 @@ static APP_BASE_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
 /// Must be called from `setup()` so we have an AppHandle.
 fn init_app_base_dir(app: &tauri::AppHandle) {
     // resource_dir() returns the platform-specific resource directory.
-    // On Windows installed: next to the exe (e.g. C:\Program Files\StatusForge.io\)
+    // On Windows installed: next to the exe (e.g. C:\Program Files\StatusForge\)
     // In dev: the src-tauri/ directory (where Cargo.toml lives)
     // Bundled resources via ../ in tauri.conf.json land in _up_/ subdir of resource_dir.
     let resource_dir = app
@@ -2091,7 +2091,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let mut builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip("StatusForge.io")
+        .tooltip("StatusForge")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main(app),
             "quit" => app.exit(0),
