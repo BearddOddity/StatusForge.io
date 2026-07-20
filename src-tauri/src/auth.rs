@@ -51,7 +51,7 @@ const WEBVIEW_ORIGIN: &str = "http://localhost:5173";
 
 pub fn generate_code_verifier() -> String {
     let mut bytes = vec![0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(&bytes)
 }
 
@@ -972,7 +972,7 @@ pub fn build_twitch_auth_url(client_id: &str, state: &str, code_challenge: &str)
 pub fn rotate_overlay_token(base_dir: &std::path::Path) -> Result<String, String> {
     let mut config = load_config_at(base_dir)?;
     let mut bytes = vec![0u8; 16];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     let new_token = URL_SAFE_NO_PAD.encode(&bytes);
     config.engine_settings.overlay_token = new_token.clone();
     save_config_at(base_dir, &config)?;
