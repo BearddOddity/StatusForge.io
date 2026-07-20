@@ -620,6 +620,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
           onSearch={handleAddGameScan}
           gameCategories={[]}
           libraryGenres={[]}
+          onImportGame={importMetadataFile}
         />
       )}
 

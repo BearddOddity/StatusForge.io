@@ -21,7 +21,7 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 /// Ed25519 public key (32 raw bytes, base64) for BearddOddity's official
 /// game-metadata database. Safe to publish — it can only verify signatures,
 /// never create them.
-pub const OFFICIAL_PUBLIC_KEY_B64: &str = "REPLACE_WITH_GENERATED_PUBLIC_KEY";
+pub const OFFICIAL_PUBLIC_KEY_B64: &str = "ApISHpdtip3ezaOflMlN+f2b+asysAaCeyUW0WzK+Zs=";
 
 /// Verifies `signature_b64` is a valid Ed25519 signature over the exact
 /// bytes of `payload_json`, produced by the private key matching
@@ -59,6 +59,15 @@ pub fn verify_official_signature(payload_json: &str, signature_b64: &str) -> Res
 mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
+
+    /// Catches a typo/truncation in the embedded constant at test time
+    /// instead of failing every real verification silently at runtime.
+    #[test]
+    fn embedded_public_key_decodes_to_32_bytes() {
+        let bytes = STANDARD.decode(OFFICIAL_PUBLIC_KEY_B64).unwrap();
+        assert_eq!(bytes.len(), 32);
+        assert!(VerifyingKey::from_bytes(&bytes.try_into().unwrap()).is_ok());
+    }
 
     // Self-contained: generates its own throwaway keypair rather than
     // depending on the real embedded constant, so this test doesn't need to

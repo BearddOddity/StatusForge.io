@@ -36,6 +36,11 @@ not required/
 **/target/
 *.log
 
+# Metadata-signer private key — must NEVER be committed. Only the public
+# key (embedded in src-tauri/src/metadata_signing.rs) belongs in the repo.
+tools/metadata-signer/signing_key.b64
+tools/metadata-signer/*.b64
+
 # Ignore Playwright MCP preview screenshots/traces
 .playwright-mcp/
 

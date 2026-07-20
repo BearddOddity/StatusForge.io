@@ -454,6 +454,11 @@ interface AddGameOverlayPanelProps {
   } | null>;
   gameCategories: string[];
   libraryGenres: string[];
+  /// Imports a single *_metadata.json file (community-shared or a signed
+  /// "verified official" export) straight into the library, bypassing this
+  /// form entirely — the file already has everything a manual entry would
+  /// ask for.
+  onImportGame: (file: File) => void;
 }
 
 export function AddGameOverlayPanel({
@@ -463,6 +468,7 @@ export function AddGameOverlayPanel({
   onSearch,
   gameCategories,
   libraryGenres,
+  onImportGame,
 }: AddGameOverlayPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState("");
@@ -626,6 +632,22 @@ export function AddGameOverlayPanel({
           <Btn onClick={handleSearch} disabled={!title.trim()} className="flex-1 justify-center">
             🔍 Search APIs
           </Btn>
+          <label className="px-4 py-2 rounded-xl text-[11px] font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer border bg-transparent border-white/[0.06] text-white/45 hover:bg-white/[0.04] hover:border-white/10 hover:text-white/70 flex-1 flex items-center justify-center gap-1">
+            📥 Import Game
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  onImportGame(file);
+                  onClose();
+                }
+                e.target.value = "";
+              }}
+            />
+          </label>
           <Btn variant="success" onClick={handleSubmit} className="flex-1 justify-center">
             ➕ Add Game
           </Btn>

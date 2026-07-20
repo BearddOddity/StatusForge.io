@@ -2383,6 +2383,30 @@ function SystemSubTab({
     }
   };
 
+  // Bulk counterpart of the per-game import in the Add Game popup — reads
+  // the picked file in the browser sandbox (no backend path access) and
+  // hands the raw JSON to import_game_database, which does the actual
+  // signature check/merge. A signed file from BearddOddity's curated
+  // database gets applied field-for-field (still respecting any locks);
+  // anything else only fills in blanks.
+  const importLibraryFile = async (file: File) => {
+    let json: string;
+    try {
+      json = await file.text();
+    } catch {
+      toast("Couldn't read that file", "error");
+      return;
+    }
+    const res = await tauriApi("import_game_database", { json });
+    if (typeof res === "string") {
+      toast(res, "success");
+    } else {
+      const err =
+        res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
+      toast(err ? `Import failed: ${err}` : "Import failed", "error");
+    }
+  };
+
   const startupCount = [prefs.launchOnLogin, prefs.autoStartEngine, prefs.minimizeToTray].filter(
     Boolean
   ).length;
@@ -2679,24 +2703,49 @@ function SystemSubTab({
         </div>
       </CollapsibleSection>
 
+      <CollapsibleSection
+        title="Game Database"
+        description="Back up or share your library's metadata, or import a curated database."
+        icon="🗄️"
+      >
+        <div className="flex gap-3 flex-wrap">
+          <button
+            onClick={exportGameDatabase}
+            className="btn-ghost"
+            title="Full raw backup of every scraped field for every game (JSON)"
+          >
+            Export Full Database (.json)
+          </button>
+          <button
+            onClick={exportMetadataReadme}
+            className="btn-ghost"
+            title="Shareable Markdown table (cover, title, genre, year, dev, publisher) — paste into a GitHub README"
+          >
+            Export Shareable Library Table (.md)
+          </button>
+          <label
+            className="btn-ghost cursor-pointer"
+            title="Import a shared or BearddOddity-verified game database (JSON) — signed entries overwrite matching fields, unsigned ones only fill in blanks"
+          >
+            Import Library (.json)
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importLibraryFile(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+      </CollapsibleSection>
+
       {/* Actions */}
       <div className="flex gap-3 mt-5 flex-wrap">
         <button onClick={exportConfig} className="btn-ghost">
           Export Config
-        </button>
-        <button
-          onClick={exportGameDatabase}
-          className="btn-ghost"
-          title="Full raw backup of every scraped field for every game (JSON)"
-        >
-          Export Full Database (.json)
-        </button>
-        <button
-          onClick={exportMetadataReadme}
-          className="btn-ghost"
-          title="Shareable Markdown table (cover, title, genre, year, dev, publisher) — paste into a GitHub README"
-        >
-          Export Shareable Library Table (.md)
         </button>
         <button
           onClick={() => {
