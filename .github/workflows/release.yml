@@ -1,16 +1,20 @@
-# Release builds — one installer per OS for BOTH apps (StatusForge + Blipy).
-# This is the canonical build path: Tauri bundles are produced on their own
-# OS runner (no local cross-compilation).
+# Release builds — one installer per OS for all three apps (StatusForge +
+# Blipy + Joystick Companion). This is the canonical build path: Tauri
+# bundles are produced on their own OS runner (no local cross-compilation).
 #
 # Triggers: pushing a version tag (git tag v0.5.0 && git push --tags) or
 # manual "Run workflow" in the Actions tab.
 #
 # Releases:
-# - StatusForge → release "v__VERSION__" (regular release, so
+# - StatusForge      → release "v__VERSION__" (regular release, so
 #   /releases/latest/download/latest.json always resolves to StatusForge)
-# - Blipy       → moving tag "blipy-latest" (marked prerelease so it never
-#   claims /releases/latest); its updater endpoint is
+# - Blipy             → moving tag "blipy-latest" (marked prerelease so it
+#   never claims /releases/latest); its updater endpoint is
 #   /releases/download/blipy-latest/latest.json
+# - Joystick Companion → moving tag "joystick-latest" (also prerelease),
+#   same reasoning as Blipy. Note it doesn't have an in-app updater yet
+#   (no tauri-plugin-updater dependency) — the moving tag just gives it a
+#   stable download URL; nothing in the app itself checks it.
 #
 # Secrets required (updater artifact signing — minisign, independent of
 # Apple code signing):
@@ -69,6 +73,16 @@ jobs:
             versionFile: blipy-app/src-tauri/tauri.conf.json
             releaseTag: blipy-latest
             resources: ""
+          - name: Joystick Companion
+            path: joystick-bot
+            tagName: joystick-latest
+            releaseName: "Joystick Companion v__VERSION__"
+            prerelease: true
+            binName: joystick-bot
+            slug: joystickbot
+            versionFile: joystick-bot/src-tauri/tauri.conf.json
+            releaseTag: joystick-latest
+            resources: ""
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.app.name }} (${{ matrix.os }})
     steps:
@@ -88,6 +102,7 @@ jobs:
           workspaces: |
             src-tauri
             blipy-app/src-tauri
+            joystick-bot/src-tauri
             forge-detection
 
       - name: Install Linux dependencies
@@ -128,15 +143,18 @@ jobs:
       # tauri-action's tagName above is the literal "v__VERSION__"/moving-tag
       # config value, not the real resolved tag on the release it just
       # created — need the actual tag string to `gh release upload` against.
+      # releaseTag is "v" as a sentinel for "compute v<version>" (StatusForge,
+      # a real versioned release); any other value is a literal moving tag
+      # (Blipy's blipy-latest, Joystick Companion's joystick-latest, ...).
       - name: Resolve release tag
         id: tag
         shell: bash
         run: |
-          if [ "${{ matrix.app.releaseTag }}" = "blipy-latest" ]; then
-            echo "tag=blipy-latest" >> "$GITHUB_OUTPUT"
-          else
+          if [ "${{ matrix.app.releaseTag }}" = "v" ]; then
             VERSION=$(node -p "require('./${{ matrix.app.versionFile }}').version")
             echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ matrix.app.releaseTag }}" >> "$GITHUB_OUTPUT"
           fi
 
       # Portable Windows build: no installer, no registry entries, no
@@ -201,27 +219,34 @@ jobs:
             debName: statusforge.deb
             manifest: com.bearddoddity.statusforge.yml
             versionFile: src-tauri/tauri.conf.json
-            isBlipy: false
+            releaseTag: v
           - name: Blipy
             id: com.bearddoddity.blipy
             debName: blipy.deb
             manifest: com.bearddoddity.blipy.yml
             versionFile: blipy-app/src-tauri/tauri.conf.json
-            isBlipy: true
+            releaseTag: blipy-latest
+          - name: Joystick Companion
+            id: com.bearddoddity.joystickbot
+            debName: joystickbot.deb
+            manifest: com.bearddoddity.joystickbot.yml
+            versionFile: joystick-bot/src-tauri/tauri.conf.json
+            releaseTag: joystick-latest
     name: Flatpak (${{ matrix.app.name }})
     steps:
       - uses: actions/checkout@v4
 
       # StatusForge tags as v<version> (tauri-action expands __VERSION__ at
-      # build time); Blipy always tags as the moving blipy-latest.
+      # build time); Blipy and Joystick Companion always tag as their own
+      # moving tag. Same "v" sentinel convention as the build job above.
       - name: Resolve release tag
         id: tag
         run: |
-          if [ "${{ matrix.app.isBlipy }}" = "true" ]; then
-            echo "tag=blipy-latest" >> "$GITHUB_OUTPUT"
-          else
+          if [ "${{ matrix.app.releaseTag }}" = "v" ]; then
             VERSION=$(node -p "require('./${{ matrix.app.versionFile }}').version")
             echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ matrix.app.releaseTag }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install Flatpak tooling

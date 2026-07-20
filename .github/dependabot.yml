@@ -18,6 +18,15 @@ updates:
       npm-minor-patch:
         update-types: ["minor", "patch"]
 
+  # Joystick Companion frontend
+  - package-ecosystem: "npm"
+    directory: "/joystick-bot"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+
   # StatusForge Rust crate
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
@@ -39,6 +48,15 @@ updates:
   # Blipy companion app
   - package-ecosystem: "cargo"
     directory: "/blipy-app/src-tauri"
+    schedule:
+      interval: "weekly"
+    groups:
+      cargo-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Joystick Companion
+  - package-ecosystem: "cargo"
+    directory: "/joystick-bot/src-tauri"
     schedule:
       interval: "weekly"
     groups:

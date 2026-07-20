@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.bearddoddity.joystickbot</id>
+  <name>BearO's Joystick Companion</name>
+  <summary>Joystick.tv category sync and chat bot for StatusForge.io</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      Polls a running StatusForge.io install for the game currently being
+      detected and pushes category updates and chat announcements to
+      Joystick.tv, plus a small chat bot with a !game command.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.bearddoddity.joystickbot.desktop</launchable>
+  <url type="homepage">https://github.com/BearddOddity/StatusForge.io</url>
+  <categories>
+    <category>Network</category>
+    <category>Utility</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-07-20"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>
