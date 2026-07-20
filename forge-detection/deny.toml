@@ -5,18 +5,16 @@
 # only sets what we actually need, not the full generated template.
 #
 # forge-detection doesn't depend on tauri, so it doesn't inherit that crate's
-# gtk-rs/unic-* advisories the way src-tauri's deny.toml does — but it does
-# pull in plist -> quick-xml directly, hitting the same quick-xml advisories.
+# gtk-rs/unic-* advisories the way src-tauri's deny.toml does. It used to
+# also pull in plist -> quick-xml (RUSTSEC-2026-0194/0195), but that's fixed
+# now — plist 1.10.0 carries a patched quick-xml.
 
 [graph]
 all-features = false
 no-default-features = false
 
 [advisories]
-ignore = [
-    { id = "RUSTSEC-2026-0194", reason = "transitive via plist -> quick-xml, not a direct dependency; re-check when upgrading plist" },
-    { id = "RUSTSEC-2026-0195", reason = "transitive via plist -> quick-xml, not a direct dependency; re-check when upgrading plist" },
-]
+ignore = []
 
 [licenses]
 allow = [

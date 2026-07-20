@@ -10,8 +10,18 @@ no-default-features = false
 
 [advisories]
 ignore = [
-    { id = "RUSTSEC-2026-0194", reason = "transitive via tauri-utils -> plist -> quick-xml, not a direct dependency; re-check when upgrading tauri" },
-    { id = "RUSTSEC-2026-0195", reason = "transitive via tauri-utils -> plist -> quick-xml, not a direct dependency; re-check when upgrading tauri" },
+    # GitHub's advisory database (GHSA) tracks this as an actual moderate-
+    # severity vulnerability — Dependabot alerts on it — even though
+    # cargo-audit/cargo-deny's own RUSTSEC classification buckets "unsound"
+    # as non-blocking by default, same tier as the "unmaintained" notices
+    # below. Traced the full chain: tauri -> tray-icon -> libappindicator
+    # -> gtk -> glib 0.18.5. libappindicator 0.9.0 is the latest version
+    # published to crates.io and has never moved past gtk-rs 0.18, so
+    # there is currently no available upgrade path (confirmed 2026-07-20:
+    # bumping tauri to its newest patch, 2.11.5, bumps tray-icon but still
+    # resolves glib to 0.18.5). Re-check when libappindicator or tray-icon
+    # publishes a version on gtk-rs 0.20+.
+    { id = "RUSTSEC-2024-0429", reason = "glib unsoundness, blocked on libappindicator 0.9.0 (latest available) still using gtk-rs 0.18 — no fix exists yet" },
     # The following are all "unmaintained" notices (no CVE/vulnerability),
     # all transitive through Tauri's own dependency tree — not fixable from
     # this project without Tauri itself dropping/replacing these deps.
