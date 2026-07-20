@@ -1,24 +1,26 @@
-# Keeps statusforge/download.html AND the Addons section of
-# statusforge/index.html on BearddOddity.github.io in sync with whatever's
-# actually published — these pages previously had hand-updated
-# links/badges that silently went stale.
+# Keeps statusforge/download.html, blipy/index.html, joystick/index.html,
+# and the Addons section of statusforge/index.html on
+# BearddOddity.github.io in sync with whatever's actually published — these
+# pages previously had hand-updated links/badges that silently went stale.
 #
-# The download.html sync runs automatically for the StatusForge release
-# itself, not Blipy/Joystick Companion (they always publish to their own
-# moving "*-latest" tags as prereleases; the `if:` below filters those
-# release events out so this doesn't fire twice per StatusForge release).
-# The Addons section sync always pulls blipy-latest/joystick-latest
-# directly by tag regardless of what triggered the run, since it's not
-# tied to whichever app's release fired the event. Can also be run
-# manually (Actions tab -> this workflow -> "Run workflow") to sync
-# everything against current state, e.g. to verify the deploy key/secret
-# are set up correctly without waiting for a real release.
+# The statusforge/download.html sync runs automatically for the StatusForge
+# release itself, not Blipy/Joystick Companion (they always publish to
+# their own moving "*-latest" tags as prereleases; the `if:` below filters
+# those release events out so this doesn't fire twice per StatusForge
+# release). The Blipy/Joystick page + Addons section syncs always pull
+# blipy-latest/joystick-latest directly by tag regardless of what triggered
+# the run, since they're not tied to whichever app's release fired the
+# event. Can also be run manually (Actions tab -> this workflow -> "Run
+# workflow") to sync everything against current state, e.g. to verify the
+# deploy key/secret are set up correctly without waiting for a real
+# release.
 #
 # Requires a deploy key with write access to BearddOddity.github.io,
 # stored here as the PAGES_DEPLOY_SSH_KEY secret (Settings > Secrets and
 # variables > Actions). See scripts/update-download-page.mjs for the
-# asset -> platform matching logic, scripts/update-addons-section.mjs for
-# the addon badges/links.
+# asset -> platform matching logic (shared by all three download-style
+# pages), scripts/update-addons-section.mjs for the Addons section version
+# badges.
 
 name: Update download page
 
@@ -73,15 +75,22 @@ jobs:
       - name: Update Addons section
         run: node scripts/update-addons-section.mjs pages-site/statusforge/index.html blipy-release.json joystick-release.json
 
+      - name: Update Blipy and Joystick Companion pages
+        run: |
+          node scripts/update-download-page.mjs pages-site/blipy/index.html blipy-release.json \
+            || echo "Blipy page sync failed — leaving it as-is"
+          node scripts/update-download-page.mjs pages-site/joystick/index.html joystick-release.json \
+            || echo "Joystick Companion page sync failed — leaving it as-is"
+
       - name: Commit and push
         working-directory: pages-site
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add statusforge/download.html statusforge/index.html
+          git add statusforge/download.html statusforge/index.html blipy/index.html joystick/index.html
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
           fi
-          git commit -m "chore: sync StatusForge download page + addons section to $(node -p "require('../release.json').tag_name" 2>/dev/null || echo latest)"
+          git commit -m "chore: sync StatusForge/Blipy/Joystick Companion pages to $(node -p "require('../release.json').tag_name" 2>/dev/null || echo latest)"
           git push

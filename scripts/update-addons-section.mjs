@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Keeps the Blipy / Joystick Companion version badges + release links in
+// Keeps the Blipy / Joystick Companion version badges in
 // BearddOddity.github.io's statusforge/index.html Addons section in sync
 // with whatever's actually published on their moving release tags
-// (blipy-latest, joystick-latest) — same idea as
-// update-download-page.mjs, just for the addon cards instead of the full
-// platform download grid (they don't get one of those; a link to their
-// GitHub release page is enough for an early-access addon).
+// (blipy-latest, joystick-latest). Each addon also has its own full page
+// (blipy/index.html, joystick/index.html) with a download grid — those are
+// synced by the existing update-download-page.mjs (same id="sf-version"/
+// data-asset conventions), not by this script.
 import { readFileSync, writeFileSync } from "node:fs";
 
 const [, , filePath, blipyJsonPath, joystickJsonPath] = process.argv;
@@ -16,7 +16,7 @@ if (!filePath || !blipyJsonPath || !joystickJsonPath) {
   process.exit(1);
 }
 
-// The release name is "Blipy v0.1.0" / "Joystick Companion v0.1.0" — the
+// The release name is "Blipy v1.0.0" / "Joystick Companion v0.1.0" — the
 // tag itself is a moving "*-latest" string, not a real version number.
 function versionFromRelease(release) {
   const match = (release.name || "").match(/v[\d.]+/);
@@ -31,12 +31,6 @@ function applyAddon(html, idPrefix, releaseJsonPath) {
     new RegExp(`(id="${idPrefix}-version"[^>]*>)[^<]*(</span>)`),
     `$1${version}$2`
   );
-  if (release.html_url) {
-    html = html.replace(
-      new RegExp(`(id="${idPrefix}-release-link"[^>]*href=")[^"]*(")`),
-      `$1${release.html_url}$2`
-    );
-  }
   return { html, version };
 }
 
