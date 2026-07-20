@@ -29,7 +29,7 @@ rand = "0.8"
 sha2 = "0.10"
 base64 = "0.22"
 urlencoding = "2"
-keyring = "3"
+keyring = "4"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
