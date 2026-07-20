@@ -17,7 +17,7 @@
 //! heartbeats so a genuinely old v1 client gets a clear version-mismatch
 //! error instead of being treated as garbage.
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
