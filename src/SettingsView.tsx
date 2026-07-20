@@ -2375,7 +2375,7 @@ function SystemSubTab({
   const exportMetadataReadme = async () => {
     const res = await tauriApi("export_metadata_readme");
     if (typeof res === "string") {
-      toast(`Library README saved to ${res}`, "success");
+      toast(`Library table saved to ${res}`, "success");
     } else {
       const err =
         res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
@@ -2684,11 +2684,19 @@ function SystemSubTab({
         <button onClick={exportConfig} className="btn-ghost">
           Export Config
         </button>
-        <button onClick={exportGameDatabase} className="btn-ghost">
-          Export Game Database
+        <button
+          onClick={exportGameDatabase}
+          className="btn-ghost"
+          title="Full raw backup of every scraped field for every game (JSON)"
+        >
+          Export Full Database (.json)
         </button>
-        <button onClick={exportMetadataReadme} className="btn-ghost">
-          Export Library README (.md)
+        <button
+          onClick={exportMetadataReadme}
+          className="btn-ghost"
+          title="Shareable Markdown table (cover, title, genre, year, dev, publisher) — paste into a GitHub README"
+        >
+          Export Shareable Library Table (.md)
         </button>
         <button
           onClick={() => {
