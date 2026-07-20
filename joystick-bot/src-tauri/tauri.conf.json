@@ -39,7 +39,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsi"
+      }
+    },
     "icon": ["icons/icon.png", "icons/icon.ico"]
   }
 }
