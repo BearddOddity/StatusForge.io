@@ -1901,6 +1901,38 @@ fn export_metadata_readme(app: tauri::AppHandle) -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
+/// Write a single library entry's full metadata to `Documents/StatusForge
+/// Logs/` as its own pretty-printed JSON file — meant for contributing one
+/// game at a time to a shared community database, without shipping a whole
+/// user's library (which may include private/unwanted entries) via the full
+/// `export_game_database` dump.
+#[tauri::command]
+fn export_single_game_metadata(app: tauri::AppHandle, title: String) -> Result<String, String> {
+    let db = server::load_db()?;
+    let key = config::find_library_key(&db, &title)
+        .ok_or_else(|| format!("\"{}\" isn't in your library", title))?;
+    let entry = &db.library[&key];
+
+    let docs = app
+        .path()
+        .document_dir()
+        .map_err(|e| format!("Failed to resolve Documents folder: {}", e))?;
+    let dir = docs.join("StatusForge Logs");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create export folder: {}", e))?;
+
+    let slug: String = key
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
+    let path = dir.join(format!("statusforge_game_{}.json", slug));
+    let raw = serde_json::to_string_pretty(entry)
+        .map_err(|e| format!("Failed to serialize entry: {}", e))?;
+    std::fs::write(&path, raw).map_err(|e| format!("Failed to write export file: {}", e))?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// Escape pipe characters so a title/genre/etc. containing `|` doesn't break
 /// the Markdown table's column boundaries.
 fn md_escape(s: &str) -> String {
@@ -2325,6 +2357,7 @@ pub fn run() {
             dev_export_error_log,
             export_game_database,
             export_metadata_readme,
+            export_single_game_metadata,
             refresh_platform_push,
         ])
         .run(tauri::generate_context!())

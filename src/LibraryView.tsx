@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { ForgeDatabase, ForgeLibraryEntry, ToastType } from "@/types";
-import { fetchOverlayToken } from "@/hooks/useTauriApi";
+import { fetchOverlayToken, tauriApi } from "@/hooks/useTauriApi";
 import { Card, Btn } from "@/components/ui";
 import CarouselView from "@/components/CarouselView";
 import GridView from "@/components/GridView";
@@ -214,6 +214,17 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
       load();
     } catch {
       toast("Save failed", "error");
+    }
+  };
+
+  const exportEntry = async (title: string) => {
+    const res = await tauriApi("export_single_game_metadata", { title });
+    if (typeof res === "string") {
+      toast(`"${title}" exported to ${res}`, "success");
+    } else {
+      const err =
+        res && typeof res === "object" && "error" in res ? (res as { error: string }).error : "";
+      toast(err ? `Export failed: ${err}` : "Export failed", "error");
     }
   };
 
@@ -541,6 +552,7 @@ export default function LibraryView({ toast }: { toast: (msg: string, type?: Toa
             (await handleScanMetadata(activeEntry.title)) as Record<string, string> | null
           }
           onExile={handleExile}
+          onExportEntry={exportEntry}
           saving={false}
         />
       )}

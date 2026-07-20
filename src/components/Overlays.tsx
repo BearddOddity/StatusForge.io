@@ -34,6 +34,7 @@ interface OverlayMetadataPanelProps {
   onSave: (entry: Record<string, string>) => void;
   onSearchApis: (field: string, query: string) => Promise<Record<string, string> | null>;
   onExile?: (title: string) => void;
+  onExportEntry?: (title: string) => void;
   saving: boolean;
 }
 
@@ -100,6 +101,7 @@ export function OverlayMetadataPanel({
   onSave,
   onSearchApis,
   onExile,
+  onExportEntry,
   saving,
 }: OverlayMetadataPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -227,6 +229,15 @@ export function OverlayMetadataPanel({
           <Btn variant="ghost" onClick={() => runScan()} className="w-full justify-center mt-2">
             🔍 Scan Metadata
           </Btn>
+          {onExportEntry && entry.title && (
+            <Btn
+              variant="ghost"
+              onClick={() => onExportEntry(entry.title)}
+              className="w-full justify-center mt-2"
+            >
+              📤 Export This Game
+            </Btn>
+          )}
           {onExile && (
             <Btn
               variant="danger"
