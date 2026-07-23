@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { tauriApi } from "@/hooks/useTauriApi";
-import type { AppConfig } from "@/types";
+import { tauriApi } from "@statusforge/hooks/useTauriApi";
+import type { AppConfig } from "@statusforge/types";
 
 type Status = "connecting" | "success" | "error";
 

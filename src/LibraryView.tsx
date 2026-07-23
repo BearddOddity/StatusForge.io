@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import type { ForgeDatabase, ForgeLibraryEntry, ToastType } from "@/types";
-import { fetchOverlayToken, tauriApi } from "@/hooks/useTauriApi";
-import { Card, Btn } from "@/components/ui";
-import CarouselView from "@/components/CarouselView";
-import GridView from "@/components/GridView";
+import type { ForgeDatabase, ForgeLibraryEntry, ToastType } from "@statusforge/types";
+import { fetchOverlayToken, tauriApi } from "@statusforge/hooks/useTauriApi";
+import { Card } from "@statusforge/components/ui";
+import CarouselView from "@statusforge/components/CarouselView";
+import GridView from "@statusforge/components/GridView";
 import {
   OverlayMetadataPanel,
   ExiledManagerPanel,
   AddGameOverlayPanel,
-} from "@/components/Overlays";
+} from "@statusforge/components/Overlays";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES

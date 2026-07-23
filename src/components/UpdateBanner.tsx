@@ -1,4 +1,4 @@
-import { Btn } from "@/components/ui";
+import { Btn } from "@statusforge/components/ui";
 
 export default function UpdateBanner({
   version,

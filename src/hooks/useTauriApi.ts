@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig, EngineStatus, KeychainStatus, SystemStats } from "@/types";
-import { loadSystemPrefs } from "@/systemPrefs";
+import type { AppConfig, EngineStatus, KeychainStatus, SystemStats } from "@statusforge/types";
+import { loadSystemPrefs } from "@statusforge/systemPrefs";
 
 export async function tauriApi(
   command: string,

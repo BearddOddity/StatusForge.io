@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { ForgeLibraryEntry } from "@/types";
+import type { ForgeLibraryEntry } from "@statusforge/types";
 import { Card, CoverImage } from "./ui";
 
 const CARD_WIDTH = 280;
@@ -144,7 +144,6 @@ export default function CarouselView({
 
 function CarouselCard({
   entry,
-  index,
   isActive,
   offset,
   onSelect,

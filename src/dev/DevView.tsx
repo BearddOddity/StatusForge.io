@@ -95,13 +95,13 @@ function lineLevel(line: string): LogLevel {
 // the capture group when present (e.g. the game/category name).
 const HUMANIZE: { re: RegExp; msg: (m: RegExpMatchArray) => string }[] = [
   // Toasts mirrored from the UI — already plain English, just drop the tag.
-  { re: /\[TOAST\]\s*(.+)/, msg: (m) => m[1].trim() },
+  { re: /\[TOAST\]\s*(.+)/, msg: (m) => m[1]!.trim() },
   // Detection lifecycle
   { re: /NEW GAME:\s*(.+?)\s*\((.+?)\)/, msg: (m) => `🎮 Detected game: ${m[1]} — via ${m[2]}.` },
   {
     re: /Grace period expired\. Dropping:\s*(.+)/,
     msg: (m) =>
-      `⏹ Stopped showing "${m[1].trim()}" — the game closed or stayed out of focus past the grace period.`,
+      `⏹ Stopped showing "${m[1]!.trim()}" — the game closed or stayed out of focus past the grace period.`,
   },
   // Category push — success
   {

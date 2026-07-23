@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import type { AppConfig, EngineStatus } from "@/types";
-import { fetchConfig, saveConfig, fetchOverlayToken, tauriApi } from "@/hooks/useTauriApi";
-import OAuthConnectModal from "@/components/OAuthConnectModal";
-import { loadSystemPrefs, saveSystemPrefs } from "@/systemPrefs";
+import type { AppConfig, EngineStatus } from "@statusforge/types";
+import { fetchConfig, saveConfig, fetchOverlayToken, tauriApi } from "@statusforge/hooks/useTauriApi";
+import OAuthConnectModal from "@statusforge/components/OAuthConnectModal";
+import { loadSystemPrefs, saveSystemPrefs } from "@statusforge/systemPrefs";
 
 interface Props {
   onFinish: () => void;

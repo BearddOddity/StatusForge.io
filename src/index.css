@@ -479,9 +479,12 @@ input[type="submit"]:not(:disabled):hover {
   color: rgba(255, 255, 255, 0.5);
 }
 .badge-purple {
-  background: rgba(145, 70, 255, 0.1);
-  border-color: rgba(145, 70, 255, 0.2);
-  color: #c084fc;
+  background: color-mix(in srgb, var(--user-accent, #9146ff) 10%, transparent);
+  border-color: color-mix(in srgb, var(--user-accent, #9146ff) 20%, transparent);
+  color: color-mix(in srgb, var(--user-accent, #9146ff) 100%, white 30%);
+}
+input[type="range"].accent-purple-500 {
+  accent-color: var(--user-accent, #9146ff);
 }
 .badge-green {
   background: rgba(74, 222, 128, 0.1);

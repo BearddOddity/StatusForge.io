@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { resolveImageSrc } from "@/utils/imageSrc";
+import { resolveImageSrc } from "@statusforge/utils/imageSrc";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Card — surface container (glass treatment)
@@ -74,7 +74,12 @@ export function UiBtn({
 }) {
   return (
     <button
-      className={`px-5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg shadow-purple-500/15 hover:shadow-purple-500/25 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer border-none ${className}`}
+      className={`px-5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-lg hover:-translate-y-0.5 active:translate-y-0 cursor-pointer border-none ${className}`}
+      style={{
+        background:
+          "linear-gradient(to right, var(--user-accent, #9146FF), color-mix(in srgb, var(--user-accent, #9146FF) 100%, black 30%))",
+        boxShadow: "0 10px 25px -5px color-mix(in srgb, var(--user-accent, #9146FF) 15%, transparent)",
+      }}
       disabled={disabled}
       onClick={onClick}
     >

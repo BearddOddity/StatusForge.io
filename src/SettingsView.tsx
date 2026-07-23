@@ -1,35 +1,30 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import type { EngineStatus, AppConfig, SettingsSubTab, ToastType, ApiKeys } from "@/types";
-import type { KeychainStatus } from "@/types";
-import { fetchOverlayToken, getKeychainStatus, saveConfig, tauriApi } from "@/hooks/useTauriApi";
+import type { EngineStatus, AppConfig, SettingsSubTab, ToastType, ApiKeys } from "@statusforge/types";
+import type { KeychainStatus } from "@statusforge/types";
+import { fetchOverlayToken, getKeychainStatus, saveConfig, tauriApi } from "@statusforge/hooks/useTauriApi";
 import {
   SubTabBtn,
   CollapsibleSection,
   Toggle,
-  SettingsRow,
-  SettingsInput,
   GlassSelect,
   SettingsPanel,
   EditRemoveButtons,
-} from "@/components/SettingsComponents";
-import OAuthConnectModal from "@/components/OAuthConnectModal";
-import { type ThemePrefs, loadThemePrefs, saveThemePrefs, applyThemePrefs } from "@/theme";
+} from "@statusforge/components/SettingsComponents";
+import OAuthConnectModal from "@statusforge/components/OAuthConnectModal";
 import {
   type SystemPrefs,
-  defaultSystemPrefs,
   loadSystemPrefs,
   saveSystemPrefs,
   SYSTEM_PREFS_EVENT,
-} from "@/systemPrefs";
+} from "@statusforge/systemPrefs";
 
-import { clampInt } from "@/utils/number";
+import { clampInt } from "@statusforge/utils/number";
 
 // ─── Engine Sub-tab ─────────────────────────────────────────────────────────
 function EngineSubTab({
   engineStatus,
-  onRefresh,
   toast,
 }: {
   engineStatus: EngineStatus;
@@ -41,10 +36,6 @@ function EngineSubTab({
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [platform, setPlatform] = useState<string>("windows");
   const skipSave = useRef(false);
-
-  const [oauthModal, setOauthModal] = useState<{ platform: "twitch" | "kick"; url: string } | null>(
-    null
-  );
 
   const loadConfig = useCallback(async () => {
     skipSave.current = true;
@@ -332,7 +323,7 @@ function EngineSubTab({
                   ))}
                   <span className="text-[11px] font-medium text-white/50 ml-2">
                     Waterfall Mode:{" "}
-                    <span className="text-purple-300">
+                    <span className="text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)]">
                       {config.engine_settings.strict_forge_mode ? "Strict Lockdown" : "Standard"}
                     </span>
                   </span>
@@ -494,7 +485,7 @@ function EngineSubTab({
                                 Processes consuming less memory are discarded as non-games
                               </p>
                             </div>
-                            <span className="text-xs font-mono font-semibold text-purple-300">
+                            <span className="text-xs font-mono font-semibold text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)]">
                               {config.engine_settings.ram_threshold} MB
                             </span>
                           </div>
@@ -754,7 +745,7 @@ function EngineSubTab({
                                 Minimum score needed to count as a game
                               </p>
                             </div>
-                            <span className="text-xs font-mono font-semibold text-purple-300">
+                            <span className="text-xs font-mono font-semibold text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)]">
                               {config.engine_settings.confidence_threshold.toFixed(1)}
                             </span>
                           </div>
@@ -789,7 +780,7 @@ function EngineSubTab({
                   {/* Stage 6: Forged Output */}
                   <div className="flex items-center justify-between py-3">
                     <div className="flex items-center gap-3.5">
-                      <span className="w-6 h-6 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                      <span className="w-6 h-6 rounded-lg bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_10%,transparent)] border border-[color-mix(in_srgb,var(--user-accent,#9146ff)_20%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_15%)] text-[10px] font-bold flex items-center justify-center shrink-0">
                         6
                       </span>
                       <div>
@@ -885,7 +876,7 @@ function EngineSubTab({
           description="What to show when no game is running."
           icon="🌙"
           badge={
-            <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold max-w-[120px] truncate">
+            <span className="text-[10px] bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_10%,transparent)] border border-[color-mix(in_srgb,var(--user-accent,#9146ff)_20%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] px-2.5 py-1 rounded-full font-semibold max-w-[120px] truncate">
               {config.engine_settings.idle_category || "None"}
             </span>
           }
@@ -1484,7 +1475,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
       >
         <div
           ref={floatingRef}
-          className={`relative w-[380px] h-full max-h-[600px] m-4 flex flex-col bg-black/20 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-purple-900/20 ${
+          className={`relative w-[380px] h-full max-h-[600px] m-4 flex flex-col bg-black/20 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-[color-mix(in_srgb,var(--user-accent,#9146ff)_20%,transparent)] ${
             floatingClosing ? "animate-float-card-out" : "animate-float-card-in"
           }`}
         >
@@ -1624,7 +1615,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
           onClick={() => setSection("keys")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border cursor-pointer ${
             section === "keys"
-              ? "bg-purple-500/15 text-purple-300 border-purple-500/25 shadow-md shadow-purple-500/5"
+              ? "bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_15%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] border-[color-mix(in_srgb,var(--user-accent,#9146ff)_25%,transparent)] shadow-md shadow-[color-mix(in_srgb,var(--user-accent,#9146ff)_5%,transparent)]"
               : "bg-transparent text-white/40 border-transparent hover:text-white/80 hover:bg-white/[0.04]"
           }`}
         >
@@ -1640,7 +1631,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
           onClick={() => setSection("routing")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border cursor-pointer ${
             section === "routing"
-              ? "bg-purple-500/15 text-purple-300 border-purple-500/25 shadow-md shadow-purple-500/5"
+              ? "bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_15%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] border-[color-mix(in_srgb,var(--user-accent,#9146ff)_25%,transparent)] shadow-md shadow-[color-mix(in_srgb,var(--user-accent,#9146ff)_5%,transparent)]"
               : "bg-transparent text-white/40 border-transparent hover:text-white/80 hover:bg-white/[0.04]"
           }`}
         >
@@ -1661,7 +1652,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
             <h3 className="text-white font-semibold">API Keys</h3>
             <button
               onClick={() => openFloating("keys")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/25 hover:bg-purple-500/25 hover:border-purple-500/40 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_15%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] border border-[color-mix(in_srgb,var(--user-accent,#9146ff)_25%,transparent)] hover:bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_25%,transparent)] hover:border-[color-mix(in_srgb,var(--user-accent,#9146ff)_40%,transparent)] transition-all cursor-pointer"
             >
               <span className="text-sm leading-none">+</span>
               Add Key
@@ -1714,7 +1705,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                     key={entry.key}
                     className={`rounded-xl border transition-all duration-200 ${
                       isEditing
-                        ? "bg-white/[0.04] border-purple-500/30"
+                        ? "bg-white/[0.04] border-[color-mix(in_srgb,var(--user-accent,#9146ff)_30%,transparent)]"
                         : "bg-white/[0.02] border-white/[0.06] hover:border-white/10"
                     }`}
                   >
@@ -1800,7 +1791,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
             <h3 className="text-white font-semibold">Broadcaster Routing</h3>
             <button
               onClick={() => openFloating("routing")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/25 hover:bg-purple-500/25 hover:border-purple-500/40 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_15%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] border border-[color-mix(in_srgb,var(--user-accent,#9146ff)_25%,transparent)] hover:bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_25%,transparent)] hover:border-[color-mix(in_srgb,var(--user-accent,#9146ff)_40%,transparent)] transition-all cursor-pointer"
             >
               <span className="text-sm leading-none">+</span>
               Add Integration
@@ -1883,7 +1874,7 @@ function ApiRoutingSubTab({ toast }: { toast: (msg: string, type?: ToastType) =>
                     key={entry.key}
                     className={`rounded-xl border transition-all duration-200 ${
                       isEditing
-                        ? "bg-white/[0.04] border-purple-500/30"
+                        ? "bg-white/[0.04] border-[color-mix(in_srgb,var(--user-accent,#9146ff)_30%,transparent)]"
                         : "bg-white/[0.02] border-white/[0.06] hover:border-white/10"
                     }`}
                   >
@@ -2068,7 +2059,7 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
         icon="ℹ️"
         defaultOpen={true}
         badge={
-          <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold">
+          <span className="text-[10px] bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_10%,transparent)] border border-[color-mix(in_srgb,var(--user-accent,#9146ff)_20%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] px-2.5 py-1 rounded-full font-semibold">
             StatusForge v{appVersion || "…"}
           </span>
         }
@@ -2114,187 +2105,9 @@ function AboutSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void
 // SystemPrefs interface/defaults/apply live in src/systemPrefs.ts (shared with
 // App.tsx boot wiring and useWebSocket).
 
-function AdvancedAnimations({
-  prefs,
-  set,
-}: {
-  prefs: ThemePrefs;
-  set: (key: keyof ThemePrefs, value: string | boolean) => void;
-}) {
-  return (
-    <>
-      <div className="border-t border-white/[0.03] pt-4">
-        <label className="block text-xs text-white/70 font-semibold mb-2 uppercase tracking-wider text-[9px]">
-          Global Transition Speed
-        </label>
-        <div className="grid grid-cols-4 gap-2">
-          {(["instant", "fast", "normal", "slow"] as const).map((speed) => (
-            <button
-              key={speed}
-              onClick={() => set("transitionSpeed", speed)}
-              className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
-                prefs.transitionSpeed === speed
-                  ? "bg-purple-500/15 text-purple-300 border-purple-500/25 shadow"
-                  : "bg-white/[0.03] text-white/40 border-white/[0.06] hover:bg-white/[0.06]"
-              }`}
-            >
-              {speed.toUpperCase()}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Cover art effects */}
-      <div className="border-t border-white/[0.03] pt-4">
-        <span className="block text-white/40 text-[9px] uppercase tracking-wider font-semibold mb-3">
-          Cover Artwork Effects
-        </span>
-        <div className="flex flex-col gap-3.5">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Cover Breathing Scaling</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Slow pulsing zoom on &quot;Now Playing&quot; cover arts
-              </p>
-            </div>
-            <Toggle
-              on={prefs.coverBreathe}
-              onToggle={() => set("coverBreathe", !prefs.coverBreathe)}
-            />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Cover Glint Reflection</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                A soft light sweep across cover art
-              </p>
-            </div>
-            <Toggle on={prefs.coverGlint} onToggle={() => set("coverGlint", !prefs.coverGlint)} />
-          </div>
-        </div>
-      </div>
-
-      {/* Library Cards */}
-      <div className="border-t border-white/[0.03] pt-4">
-        <span className="block text-white/40 text-[9px] uppercase tracking-wider font-semibold mb-3">
-          Library Card Elements
-        </span>
-        <div className="flex flex-col gap-3.5">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Hover Card Lifting</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Lift cards slightly and add a shadow on hover
-              </p>
-            </div>
-            <Toggle
-              on={prefs.cardHoverLift}
-              onToggle={() => set("cardHoverLift", !prefs.cardHoverLift)}
-            />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Card Sweep Glint</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                A soft light sweep across the card on hover
-              </p>
-            </div>
-            <Toggle on={prefs.cardGlint} onToggle={() => set("cardGlint", !prefs.cardGlint)} />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Holographic Borders</span>
-              <p className="text-[10px] text-white/35 mt-0.5">Rainbow border animation on hover</p>
-            </div>
-            <Toggle
-              on={prefs.holoEffects}
-              onToggle={() => set("holoEffects", !prefs.holoEffects)}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Core UI feedback */}
-      <div className="border-t border-white/[0.03] pt-4">
-        <span className="block text-white/40 text-[9px] uppercase tracking-wider font-semibold mb-3">
-          Dashboard Elements
-        </span>
-        <div className="flex flex-col gap-3.5">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs text-white/75 font-medium font-sans">
-                Pulsing Indicators
-              </span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Pulsing dots for live and active status
-              </p>
-            </div>
-            <Toggle
-              on={prefs.statusPulse}
-              onToggle={() => set("statusPulse", !prefs.statusPulse)}
-            />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Toast Notifications</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Smooth slide-in animation for toast notifications
-              </p>
-            </div>
-            <Toggle
-              on={prefs.toastAnimations}
-              onToggle={() => set("toastAnimations", !prefs.toastAnimations)}
-            />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Modal Animations</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Smooth scale and fade when modals open
-              </p>
-            </div>
-            <Toggle
-              on={prefs.modalAnimations}
-              onToggle={() => set("modalAnimations", !prefs.modalAnimations)}
-            />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium font-sans">
-                Usage Bar Transition
-              </span>
-              <p className="text-[10px] text-white/35 mt-0.5 font-sans">
-                Smoothly animate the CPU / Memory usage bars
-              </p>
-            </div>
-            <Toggle
-              on={prefs.progressBarAnimation}
-              onToggle={() => set("progressBarAnimation", !prefs.progressBarAnimation)}
-            />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.02] pt-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Button Hover Lift</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Subtle lift and shadow when hovering over buttons
-              </p>
-            </div>
-            <Toggle
-              on={prefs.buttonHoverEffects}
-              onToggle={() => set("buttonHoverEffects", !prefs.buttonHoverEffects)}
-            />
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
 
 function SystemSubTab({
   toast,
-  config,
-  setConfig,
-  onSaveConfig,
 }: {
   toast: (msg: string, type?: ToastType) => void;
   config: AppConfig | null;
@@ -2302,7 +2115,6 @@ function SystemSubTab({
   onSaveConfig: (section: string) => Promise<void>;
 }) {
   const [prefs, setPrefs] = useState<SystemPrefs>(loadSystemPrefs);
-  const [showAnimAdvanced, setShowAnimAdvanced] = useState(false);
 
   const toggle = (key: keyof SystemPrefs) => {
     setPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -2425,7 +2237,7 @@ function SystemSubTab({
         description="Control what happens when your computer starts."
         icon="🚀"
         badge={
-          <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold">
+          <span className="text-[10px] bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_10%,transparent)] border border-[color-mix(in_srgb,var(--user-accent,#9146ff)_20%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] px-2.5 py-1 rounded-full font-semibold">
             {startupCount} / 3 Enabled
           </span>
         }
@@ -2495,7 +2307,7 @@ function SystemSubTab({
         description="Get desktop notifications for important events."
         icon="🔔"
         badge={
-          <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold">
+          <span className="text-[10px] bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_10%,transparent)] border border-[color-mix(in_srgb,var(--user-accent,#9146ff)_20%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] px-2.5 py-1 rounded-full font-semibold">
             {notifyCount} / 3 Active
           </span>
         }
@@ -2540,7 +2352,7 @@ function SystemSubTab({
         description="Publish live status events to a custom webhook."
         icon="🎮"
         badge={
-          <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full font-semibold">
+          <span className="text-[10px] bg-[color-mix(in_srgb,var(--user-accent,#9146ff)_10%,transparent)] border border-[color-mix(in_srgb,var(--user-accent,#9146ff)_20%,transparent)] text-[color-mix(in_srgb,var(--user-accent,#9146ff)_100%,white_30%)] px-2.5 py-1 rounded-full font-semibold">
             {integrationsCount} / 1 Hooked
           </span>
         }
@@ -2761,768 +2573,25 @@ function SystemSubTab({
   );
 }
 
-// ─── Theme prefs ──────────────────────────────────────────────────────────────
-// Storage + CSS application live in src/theme.ts (shared with App.tsx so the
-// full theme applies on boot, not just after visiting this tab).
-
-const ACCENT_PRESETS: { name: string; color: string; bg: string }[] = [
-  { name: "Twitch Purple", color: "#9146FF", bg: "#080212" },
-  { name: "Kick Green", color: "#53FC18", bg: "#0a1403" },
-  { name: "Electric Blue", color: "#3b82f6", bg: "#030818" },
-  { name: "Crimson", color: "#ef4444", bg: "#120303" },
-  { name: "Amber", color: "#f59e0b", bg: "#120e02" },
-  { name: "Cyan", color: "#06b6d4", bg: "#021014" },
-  { name: "Pink", color: "#ec4899", bg: "#12030c" },
-  { name: "Silver", color: "#94a3b8", bg: "#0a0c10" },
-];
-
-const BG_PRESETS: { name: string; color: string }[] = [
-  { name: "Forge Black", color: "#050505" },
-  { name: "Charcoal", color: "#0c0c0e" },
-  { name: "Obsidian", color: "#0a0a12" },
-  { name: "Midnight", color: "#02040a" },
-  { name: "Warm Dark", color: "#0a0806" },
-  { name: "Slate", color: "#0d1117" },
-];
-
-// ─── Image Compression Helper ────────────────────────────────────────────────
-// Compresses uploaded images to JPEG at 85% quality, max 1920px, to keep
-// data URLs small enough for localStorage (~5MB quota).
-function compressImage(file: File, maxSize = 1920, quality = 0.85): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Reject files larger than 25MB (before compression)
-    if (file.size > 25 * 1024 * 1024) {
-      reject(new Error("Image too large. Max 25 MB."));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let w = img.width;
-        let h = img.height;
-        if (w > maxSize || h > maxSize) {
-          if (w > h) {
-            h = Math.round((h * maxSize) / w);
-            w = maxSize;
-          } else {
-            w = Math.round((w * maxSize) / h);
-            h = maxSize;
-          }
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Canvas not supported"));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = () => reject(new Error("Failed to load image"));
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsDataURL(file);
-  });
-}
-
-// The individual toggles inside the Animations "Advanced" dropdown — kept in
-// one place so the Quality/Performance master switches can drive them all.
-const ADVANCED_ANIM_KEYS = [
-  "coverBreathe",
-  "coverGlint",
-  "cardHoverLift",
-  "cardGlint",
-  "holoEffects",
-  "statusPulse",
-  "toastAnimations",
-  "modalAnimations",
-  "progressBarAnimation",
-  "buttonHoverEffects",
-] as const satisfies readonly (keyof ThemePrefs)[];
-
 // ─── Theme Sub-tab ────────────────────────────────────────────────────────────
-function ThemeSubTab({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
-  const [prefs, setPrefs] = useState<ThemePrefs>(loadThemePrefs);
-  const [showAnimAdvanced, setShowAnimAdvanced] = useState(false);
-
-  const set = <K extends keyof ThemePrefs>(key: K, value: ThemePrefs[K]) => {
-    setPrefs((prev) => ({ ...prev, [key]: value }));
-  };
-
-  // Quality and Performance are mutually exclusive — only one can be active.
-  // Quality (on) forces every Advanced toggle on and switches Performance
-  // off; Performance (on) forces them all off and switches Quality off.
-  const toggleQuality = () => {
-    setPrefs((prev) => {
-      const enabling = !prev.animationsEnabled;
-      const next: ThemePrefs = {
-        ...prev,
-        animationsEnabled: enabling,
-        reducedMotion: enabling ? false : prev.reducedMotion,
-      };
-      if (enabling) {
-        ADVANCED_ANIM_KEYS.forEach((key) => {
-          next[key] = true;
-        });
-      }
-      return next;
-    });
-  };
-
-  const togglePerformance = () => {
-    setPrefs((prev) => {
-      const enabling = !prev.reducedMotion;
-      const next: ThemePrefs = {
-        ...prev,
-        reducedMotion: enabling,
-        animationsEnabled: enabling ? false : prev.animationsEnabled,
-      };
-      if (enabling) {
-        ADVANCED_ANIM_KEYS.forEach((key) => {
-          next[key] = false;
-        });
-      }
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        saveThemePrefs(prefs);
-        applyThemePrefs(prefs);
-      } catch {
-        if (prefs.bgImage.startsWith("data:") && prefs.bgImage.length > 4 * 1024 * 1024) {
-          toast("Background image too large for storage. Try a smaller image.", "error");
-        }
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [prefs]);
-
-  const radiusLabel = (r: ThemePrefs["borderRadius"]) =>
-    r === "sharp" ? "Sharp (2px)" : r === "soft" ? "Soft (8px)" : "Rounded (16px)";
-
-  const handleBgImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    set("bgImage", "");
-    compressImage(file)
-      .then((compressed) => {
-        try {
-          set("bgImage", compressed);
-        } catch {
-          toast("Failed to save background — image may be too large", "error");
-        }
-      })
-      .catch((err) => {
-        toast(err.message || "Failed to process image", "error");
-      });
-    e.target.value = "";
-  };
-
+// Appearance now lives entirely in StreamerSuite's centralized Settings ->
+// Appearance tab (src/components/settings/ThemeTab.tsx) — same storage
+// (src/apps/statusforge/theme.ts reads/writes the unified settings key), so
+// this sub-tab is just a pointer rather than a second copy of every control.
+function ThemeSubTab() {
   return (
-    <div>
-      {/* Live Theme Preview — top of tab */}
-      <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 mb-5 relative overflow-hidden">
-        <div className="flex items-center justify-between mb-4">
-          <h4 className="text-white font-semibold text-xs uppercase tracking-wider">
-            Live Theme Preview
-          </h4>
-          <div className="flex items-center gap-2">
-            <span
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: prefs.accentColor }}
-            />
-            <span className="text-[10px] font-mono text-white/30">
-              {prefs.accentColor.toUpperCase()}
-            </span>
-            <span className="text-white/10">•</span>
-            <span
-              className="w-2.5 h-2.5 rounded-full border border-white/10"
-              style={{ backgroundColor: prefs.bgColor }}
-            />
-            <span className="text-[10px] font-mono text-white/30">
-              {prefs.bgColor.toUpperCase()}
-            </span>
-          </div>
-        </div>
-        <div
-          className="relative rounded-xl p-5 border border-white/10 overflow-hidden shadow-2xl"
-          style={{ backgroundColor: prefs.bgColor }}
-        >
-          {prefs.bgImage && (
-            <div
-              className="absolute inset-0 z-0"
-              style={{
-                backgroundImage: `url(${prefs.bgImage})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                opacity: prefs.bgOpacity / 100,
-                filter: `blur(${prefs.bgBlur}px)`,
-              }}
-            />
-          )}
-          <div className="relative z-10">
-            <div
-              className="p-4 mb-3 border border-white/10"
-              style={{
-                backgroundColor: `rgba(255,255,255,${(prefs.panelOpacity / 100) * 0.06})`,
-                borderRadius:
-                  prefs.borderRadius === "sharp"
-                    ? "2px"
-                    : prefs.borderRadius === "soft"
-                      ? "8px"
-                      : "16px",
-              }}
-            >
-              <p className="text-xs font-bold mb-1" style={{ color: prefs.accentColor }}>
-                Sample Card Container
-              </p>
-              <p className="text-[10px] text-white/50 mb-3 leading-relaxed">
-                See your theme changes update in real-time as you adjust settings below.
-              </p>
-              <div className="flex gap-2">
-                <span
-                  className="px-3 py-1.5 text-[10px] font-bold shadow-sm"
-                  style={{
-                    backgroundColor: `${prefs.accentColor}22`,
-                    color: prefs.accentColor,
-                    border: `1px solid ${prefs.accentColor}44`,
-                    borderRadius:
-                      prefs.borderRadius === "sharp"
-                        ? "2px"
-                        : prefs.borderRadius === "soft"
-                          ? "6px"
-                          : "12px",
-                  }}
-                >
-                  Primary Button
-                </span>
-                <span
-                  className="px-3 py-1.5 text-[10px] font-medium text-white/60 bg-white/[0.04] border border-white/10"
-                  style={{
-                    borderRadius:
-                      prefs.borderRadius === "sharp"
-                        ? "2px"
-                        : prefs.borderRadius === "soft"
-                          ? "6px"
-                          : "12px",
-                  }}
-                >
-                  Ghost Button
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span
-                className="w-2 h-2 rounded-full animate-pulse"
-                style={{ backgroundColor: prefs.accentColor }}
-              />
-              <span className="text-[10px] text-white/40 font-medium">Streamer status active</span>
-              <span className="text-[10px] text-white/20 font-mono ml-auto">Token: KXMDV•••Sg</span>
-            </div>
-          </div>
-        </div>
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mb-4 text-2xl">
+        🎨
       </div>
-
-      {/* Colors */}
-      <CollapsibleSection
-        title="App Colors & Presets"
-        description="Pick your accent color and base background."
-        icon="🎨"
-        badge={
-          <div className="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded border border-white/5 font-mono text-[10px]">
-            <span
-              className="w-2 h-2 rounded-full shadow"
-              style={{ backgroundColor: prefs.accentColor }}
-            />
-            {prefs.accentColor.toUpperCase()}
-          </div>
-        }
-      >
-        {/* Accent Color */}
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Accent Color</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Primary highlights, toggles, borders, and main interactable buttons
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 hover:border-white/20 transition-all shrink-0 shadow-sm p-0.5"
-                style={{ backgroundColor: prefs.accentColor }}
-              >
-                <input
-                  type="color"
-                  value={prefs.accentColor}
-                  onChange={(e) => set("accentColor", e.target.value)}
-                  className="w-full h-full cursor-pointer opacity-0"
-                />
-              </div>
-              <input
-                type="text"
-                value={prefs.accentColor}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (/^#[0-9a-fA-F]{6}$/.test(v)) set("accentColor", v);
-                }}
-                className="input-glass !w-24 !py-1.5 !px-2.5 text-[11px] font-mono text-center uppercase"
-                maxLength={7}
-                placeholder="#9146FF"
-              />
-            </div>
-          </div>
-          {/* Accent Presets */}
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 pt-2">
-            {ACCENT_PRESETS.map((p) => (
-              <button
-                key={p.color}
-                onClick={() => {
-                  set("accentColor", p.color);
-                  set("bgColor", p.bg);
-                }}
-                className={`relative flex flex-col items-center gap-2 p-3 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border shrink-0 w-[72px] group ${
-                  prefs.accentColor === p.color
-                    ? "border-white/25 bg-white/[0.08] text-white/90 shadow-lg shadow-black/20"
-                    : "border-white/[0.05] bg-white/[0.02] text-white/40 hover:bg-white/[0.06] hover:text-white/70 hover:border-white/10"
-                }`}
-              >
-                <div
-                  className="w-8 h-8 rounded-lg shadow-sm transition-transform group-hover:scale-110"
-                  style={{ backgroundColor: p.color }}
-                />
-                <span className="truncate w-full text-center leading-tight">{p.name}</span>
-                {prefs.accentColor === p.color && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white text-black text-[8px] font-bold flex items-center justify-center shadow-md">
-                    ✓
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Base Background Color */}
-        <div className="border-t border-white/[0.03] pt-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Base Background Color</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Primary underlying background fill for the viewport
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 hover:border-white/20 transition-all shrink-0 shadow-sm p-0.5"
-                style={{ backgroundColor: prefs.bgColor }}
-              >
-                <input
-                  type="color"
-                  value={prefs.bgColor}
-                  onChange={(e) => set("bgColor", e.target.value)}
-                  className="w-full h-full cursor-pointer opacity-0"
-                />
-              </div>
-              <input
-                type="text"
-                value={prefs.bgColor}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (/^#[0-9a-fA-F]{6}$/.test(v)) set("bgColor", v);
-                }}
-                className="input-glass !w-24 !py-1.5 !px-2.5 text-[11px] font-mono text-center uppercase"
-                maxLength={7}
-                placeholder="#050505"
-              />
-            </div>
-          </div>
-          {/* Background Presets */}
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 pt-2">
-            {BG_PRESETS.map((p) => (
-              <button
-                key={p.color}
-                onClick={() => set("bgColor", p.color)}
-                className={`relative flex flex-col items-center gap-2 p-3 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border shrink-0 w-[72px] group ${
-                  prefs.bgColor === p.color
-                    ? "border-white/25 bg-white/[0.08] text-white/90 shadow-lg shadow-black/20"
-                    : "border-white/[0.05] bg-white/[0.02] text-white/40 hover:bg-white/[0.06] hover:text-white/70 hover:border-white/10"
-                }`}
-              >
-                <div
-                  className="w-8 h-8 rounded-lg shadow-sm border border-white/[0.08] transition-transform group-hover:scale-110"
-                  style={{ backgroundColor: p.color }}
-                />
-                <span className="truncate w-full text-center leading-tight">{p.name}</span>
-                {prefs.bgColor === p.color && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white text-black text-[8px] font-bold flex items-center justify-center shadow-md">
-                    ✓
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      {/* Background Image / Blur */}
-      <CollapsibleSection
-        title="Background Wallpaper"
-        description="Set a custom background image, opacity, and blur."
-        icon="🖼️"
-        badge={
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
-              prefs.bgImage
-                ? "bg-purple-500/10 border-purple-500/20 text-purple-300"
-                : "bg-white/5 border-white/5 text-white/40"
-            }`}
-          >
-            {prefs.bgImage ? "Active" : "None"}
-          </span>
-        }
-      >
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Upload custom wallpaper</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Add a background image behind the app
-              </p>
-            </div>
-            {prefs.bgImage && (
-              <button
-                onClick={() => set("bgImage", "")}
-                className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400/70 hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-
-          {prefs.bgImage ? (
-            <div className="relative w-full h-32 rounded-xl overflow-hidden border border-white/10 group">
-              <img
-                src={prefs.bgImage}
-                alt="Background preview"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <label className="px-3.5 py-1.5 rounded-xl bg-white/10 border border-white/20 text-white/90 text-xs font-semibold cursor-pointer hover:bg-white/20 transition-all">
-                  Upload New
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleBgImageUpload}
-                  />
-                </label>
-              </div>
-            </div>
-          ) : (
-            <label className="flex flex-col items-center justify-center w-full h-32 rounded-xl border border-dashed border-white/15 cursor-pointer hover:border-white/25 hover:bg-white/[0.02] transition-all">
-              <svg
-                className="w-6 h-6 text-white/20 mb-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-              <span className="text-xs text-white/40 font-medium">Click to upload wallpaper</span>
-              <span className="text-[10px] text-white/20 mt-0.5">PNG, JPG, WEBP</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleBgImageUpload}
-              />
-            </label>
-          )}
-          <div className="mt-3">
-            <input
-              type="url"
-              value={prefs.bgImage.startsWith("data:") ? "" : prefs.bgImage}
-              onChange={(e) => set("bgImage", e.target.value)}
-              placeholder="Or paste an image URL…"
-              className="input-glass font-mono"
-            />
-          </div>
-        </div>
-
-        {/* Background Opacity */}
-        <div className="mb-5 border-t border-white/[0.03] pt-4">
-          <div className="flex items-center justify-between mb-1.5">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Background Opacity</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                How visible the background image is
-              </p>
-            </div>
-            <span className="text-xs font-mono font-semibold text-purple-300">
-              {prefs.bgOpacity}%
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={prefs.bgOpacity}
-            onChange={(e) => set("bgOpacity", parseInt(e.target.value))}
-            className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
-          />
-          <div className="flex justify-between text-[9px] text-white/20 mt-0.5 font-mono">
-            <span>0% — transparent</span>
-            <span>100% — solid</span>
-          </div>
-        </div>
-
-        {/* Background Blur */}
-        <div className="border-t border-white/[0.03] pt-4">
-          <div className="flex items-center justify-between mb-1.5">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Background Blur</span>
-              <p className="text-[10px] text-white/35 mt-0.5 font-sans">
-                Blur the background image
-              </p>
-            </div>
-            <span className="text-xs font-mono font-semibold text-purple-300">
-              {prefs.bgBlur}px
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={40}
-            step={1}
-            value={prefs.bgBlur}
-            onChange={(e) => set("bgBlur", parseInt(e.target.value))}
-            className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
-          />
-          <div className="flex justify-between text-[9px] text-white/20 mt-0.5 font-mono">
-            <span>0px — ultra sharp</span>
-            <span>40px — heavy frost</span>
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      {/* Panels & Radius */}
-      <CollapsibleSection
-        title="Panels & Geometry"
-        description="Adjust corner rounding, text size, and panel transparency."
-        icon="📐"
-        badge={
-          <span className="text-[10px] bg-white/5 border border-white/5 text-white/50 px-2 py-0.5 rounded font-mono font-medium">
-            {prefs.borderRadius} · {prefs.panelOpacity}% · {prefs.fontScale}%
-          </span>
-        }
-      >
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-1.5">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Glass Panel Opacity</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                How transparent panel backgrounds are
-              </p>
-            </div>
-            <span className="text-xs font-mono font-semibold text-purple-300">
-              {prefs.panelOpacity}%
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={prefs.panelOpacity}
-            onChange={(e) => set("panelOpacity", parseInt(e.target.value))}
-            className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
-          />
-          <div className="flex justify-between text-[9px] text-white/20 mt-0.5 font-mono">
-            <span>0% — hollow</span>
-            <span>100% — solid dark</span>
-          </div>
-        </div>
-
-        {/* Border Radius */}
-        <div className="flex items-center justify-between border-t border-white/[0.03] pt-4 mb-5">
-          <div>
-            <span className="text-xs text-white/75 font-medium">Border Radius</span>
-            <p className="text-[10px] text-white/35 mt-0.5">
-              How rounded corners are on cards and buttons
-            </p>
-          </div>
-          <GlassSelect
-            value={prefs.borderRadius}
-            options={[
-              { value: "sharp", label: radiusLabel("sharp") },
-              { value: "soft", label: radiusLabel("soft") },
-              { value: "rounded", label: radiusLabel("rounded") },
-            ]}
-            onChange={(v) => set("borderRadius", v as any)}
-          />
-        </div>
-
-        {/* Font Scale */}
-        <div className="border-t border-white/[0.03] pt-4">
-          <div className="flex items-center justify-between mb-1.5">
-            <div>
-              <span className="text-xs text-white/75 font-medium font-sans">Global Font Scale</span>
-              <p className="text-[10px] text-white/35 mt-0.5">Scale text size across the app</p>
-            </div>
-            <span className="text-xs font-mono font-semibold text-purple-300">
-              {prefs.fontScale}%
-            </span>
-          </div>
-          <input
-            type="range"
-            min={75}
-            max={125}
-            step={5}
-            value={prefs.fontScale}
-            onChange={(e) => set("fontScale", parseInt(e.target.value))}
-            className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
-          />
-          <div className="flex justify-between text-[9px] text-white/20 mt-0.5 font-mono">
-            <span>75% — compact</span>
-            <span>125% — generous</span>
-          </div>
-        </div>
-
-        {/* Font Family */}
-        <div className="border-t border-white/[0.03] pt-4 mt-5">
-          <div className="flex items-center justify-between mb-1.5">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Font Family</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Type any Google Fonts family name — fetched on demand. Leave as "Montserrat" to use
-                the bundled default (works offline).
-              </p>
-            </div>
-          </div>
-          <input
-            type="text"
-            value={prefs.fontFamily}
-            onChange={(e) => set("fontFamily", e.target.value)}
-            placeholder="Montserrat"
-            className="input-glass"
-          />
-          {prefs.fontFamily.trim() && prefs.fontFamily.trim().toLowerCase() !== "montserrat" && (
-            <p className="text-[10px] text-white/25 mt-1.5">
-              If "{prefs.fontFamily.trim()}" isn't a real Google Fonts family, the UI quietly falls
-              back to Montserrat.
-            </p>
-          )}
-        </div>
-
-        {/* Font Weight */}
-        <div className="flex items-center justify-between border-t border-white/[0.03] pt-4 mt-5">
-          <div>
-            <span className="text-xs text-white/75 font-medium">Font Weight</span>
-            <p className="text-[10px] text-white/35 mt-0.5">
-              Base body text weight — headings keep their own weight
-            </p>
-          </div>
-          <GlassSelect
-            value={String(prefs.fontWeight)}
-            options={[
-              { value: "400", label: "Regular (400)" },
-              { value: "500", label: "Medium (500)" },
-              { value: "600", label: "Semibold (600)" },
-              { value: "700", label: "Bold (700)" },
-              { value: "800", label: "Extra Bold (800)" },
-              { value: "900", label: "Black (900)" },
-            ]}
-            onChange={(v) => set("fontWeight", parseInt(v) as ThemePrefs["fontWeight"])}
-          />
-        </div>
-
-        {/* One shared preview for scale + family + weight together */}
-        <div className="mt-5 bg-white/[0.02] border border-white/5 rounded-xl px-4 py-2.5">
-          <p
-            style={{
-              fontSize: `${prefs.fontScale}%`,
-              fontFamily: `"${prefs.fontFamily.trim() || "Montserrat"}"`,
-              fontWeight: prefs.fontWeight,
-            }}
-            className="text-white/60 truncate"
-          >
-            Preview: StatusForge game evaluation engines are ready.
-          </p>
-        </div>
-      </CollapsibleSection>
-
-      {/* Animations & Visual Effects */}
-      <CollapsibleSection
-        title="Animations"
-        description="Toggle holographic borders, breathing covers, status sweeps, and progress bars."
-        icon="✨"
-        badge={
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
-              prefs.animationsEnabled
-                ? "bg-green-500/10 border-green-500/20 text-green-400"
-                : "bg-white/5 border-white/5 text-white/40"
-            }`}
-          >
-            {prefs.animationsEnabled ? "Motion Active" : "Static UI"}
-          </span>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Quality</span>
-              <p className="text-[10px] text-white/35 mt-0.5">
-                Turn on transitions and motion effects
-              </p>
-            </div>
-            <Toggle on={prefs.animationsEnabled} onToggle={toggleQuality} />
-          </div>
-          <div className="flex items-center justify-between border-t border-white/[0.03] pt-4">
-            <div>
-              <span className="text-xs text-white/75 font-medium">Performance</span>
-              <p className="text-[10px] text-white/35 mt-0.5 font-sans">
-                Turn off hover animations for better performance
-              </p>
-            </div>
-            <Toggle on={prefs.reducedMotion} onToggle={togglePerformance} />
-          </div>
-
-          {showAnimAdvanced && <AdvancedAnimations prefs={prefs} set={set} />}
-
-          {!showAnimAdvanced && (
-            <button
-              type="button"
-              onClick={() => setShowAnimAdvanced(true)}
-              className="mt-2 w-full text-left text-[10px] uppercase tracking-wider font-semibold text-white/30 hover:text-white/60 transition-colors cursor-pointer px-3 py-2.5 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] bg-white/[0.01] hover:bg-white/[0.03]"
-            >
-              ▸ Advanced
-            </button>
-          )}
-          {showAnimAdvanced && (
-            <button
-              type="button"
-              onClick={() => setShowAnimAdvanced(false)}
-              className="mt-2 w-full text-left text-[10px] uppercase tracking-wider font-semibold text-white/30 hover:text-white/60 transition-colors cursor-pointer px-3 py-2.5 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] bg-white/[0.01] hover:bg-white/[0.03]"
-            >
-              ▸ Simple
-            </button>
-          )}
-        </div>
-      </CollapsibleSection>
+      <p className="text-sm text-white/60 max-w-xs">
+        Appearance is managed in one place now — accent color, background, fonts, and effects all
+        live in StreamerSuite&apos;s centralized Settings.
+      </p>
+      <p className="text-[11px] text-white/25 mt-2">
+        Open StreamerSuite Settings &rarr; Appearance to make changes. They apply here
+        automatically.
+      </p>
     </div>
   );
 }
@@ -3556,7 +2625,7 @@ export default function SettingsView({
     loadConfig();
   }, [loadConfig]);
 
-  const saveSection = async (section: string) => {
+  const saveSection = async (_section: string) => {
     if (!config) return;
     try {
       const res = await saveConfig(config);
@@ -3618,7 +2687,7 @@ export default function SettingsView({
           <EngineSubTab engineStatus={engineStatus} onRefresh={onRefresh} toast={toast} />
         )}
         {subTab === "api-routing" && <ApiRoutingSubTab toast={toast} />}
-        {subTab === "theme" && <ThemeSubTab toast={toast} />}
+        {subTab === "theme" && <ThemeSubTab />}
         {subTab === "about" && <AboutSubTab toast={toast} />}
       </div>
     </div>

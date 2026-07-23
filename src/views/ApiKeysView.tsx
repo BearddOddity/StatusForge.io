@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import type { AppConfig, ToastType } from "@/types";
-import { tauriApi, saveConfig } from "@/hooks/useTauriApi";
-import { Card, Btn, Field } from "@/components/primitives";
+import type { AppConfig, ToastType } from "@statusforge/types";
+import { tauriApi, saveConfig } from "@statusforge/hooks/useTauriApi";
+import { Card, Btn, Field } from "@statusforge/components/primitives";
 
 export default function ApiKeysView({ toast }: { toast: (msg: string, type?: ToastType) => void }) {
   const [config, setConfig] = useState<AppConfig | null>(null);

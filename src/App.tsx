@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -6,25 +6,26 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
-import appIcon from "../icons/icon.png";
-import type { EngineStatus, ViewId } from "@/types";
-import { fetchEngineStatus, fetchOverlayToken, tauriApi } from "@/hooks/useTauriApi";
+import appIcon from "./assets/icon.png";
+import "./index.css";
+import type { EngineStatus, ViewId } from "@statusforge/types";
+import { fetchEngineStatus, fetchOverlayToken, tauriApi } from "@statusforge/hooks/useTauriApi";
 import {
   loadSystemPrefs,
   saveSystemPrefs,
   applySystemPrefs,
   SYSTEM_PREFS_EVENT,
-} from "@/systemPrefs";
-import { useWebSocket } from "@/hooks/useWebSocket";
-import { useUpdater } from "@/hooks/useUpdater";
-import { useToasts, ToastContainer } from "@/components/Toast";
-import UpdateBanner from "@/components/UpdateBanner";
-import DashboardView from "@/views/DashboardView";
-import LibraryView from "@/LibraryView";
-import { THEME_PREFS_EVENT, loadThemePrefs, saveThemePrefs, applyThemePrefs } from "@/theme";
-import SettingsView from "@/SettingsView";
-import DevView from "@/dev/DevView";
-import OnboardingWizard from "@/components/OnboardingWizard";
+} from "@statusforge/systemPrefs";
+import { useWebSocket } from "@statusforge/hooks/useWebSocket";
+import { useUpdater } from "@statusforge/hooks/useUpdater";
+import { useToasts, ToastContainer } from "@statusforge/components/Toast";
+import UpdateBanner from "@statusforge/components/UpdateBanner";
+import DashboardView from "@statusforge/views/DashboardView";
+import LibraryView from "@statusforge/LibraryView";
+import { THEME_PREFS_EVENT, loadThemePrefs, saveThemePrefs, applyThemePrefs } from "@statusforge/theme";
+import SettingsView from "@statusforge/SettingsView";
+import DevView from "@statusforge/dev/DevView";
+import OnboardingWizard from "@statusforge/components/OnboardingWizard";
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewId>("dashboard");

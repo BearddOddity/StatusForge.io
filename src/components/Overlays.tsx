@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { type ExiledApp } from "@/types";
+import { type ExiledApp } from "@statusforge/types";
 import { Btn, MetadataField, CoverImage, FieldSection } from "./ui";
-import { resolveImageSrc } from "@/utils/imageSrc";
+import { resolveImageSrc } from "@statusforge/utils/imageSrc";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // OverlayMetadataPanel — right-slide metadata editor
@@ -150,8 +150,9 @@ export function OverlayMetadataPanel({
     const result = await onSearchApis(field || "", entry.title);
     if (!result) return;
     if (field) {
-      if (result[field]) {
-        setEditData((prev) => ({ ...prev, [field]: result[field] }));
+      const value = result[field];
+      if (value) {
+        setEditData((prev) => ({ ...prev, [field]: value }));
       }
     } else {
       setEditData((prev) => ({ ...prev, ...result }));
@@ -303,7 +304,7 @@ export function OverlayMetadataPanel({
                         onSave(
                           field.key === "title"
                             ? { old_title: entry?.title ?? editData.title, title: val }
-                            : { title: editData.title, [field.key]: val }
+                            : ({ title: editData.title, [field.key]: val } as Record<string, string>)
                         )
                       }
                       onSearch={

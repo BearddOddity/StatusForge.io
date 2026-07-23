@@ -1,4 +1,4 @@
-import type { ForgeLibraryEntry } from "@/types";
+import type { ForgeLibraryEntry } from "@statusforge/types";
 import { useRef, useCallback, type MouseEvent } from "react";
 import { Card, CoverImage } from "./ui";
 

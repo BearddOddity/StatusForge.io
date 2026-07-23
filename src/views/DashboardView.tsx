@@ -1,17 +1,17 @@
 import { useState, useRef, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { EngineStatus, ToastType, SystemStats, ViewId } from "@/types";
+import type { EngineStatus, ToastType, SystemStats, ViewId } from "@statusforge/types";
 import {
   tauriApi,
   getSystemStats,
   fetchOverlayToken,
   fetchConfig,
   saveConfig,
-} from "@/hooks/useTauriApi";
-import { Card, Btn, FieldSection } from "@/components/ui";
-import { Toggle } from "@/components/SettingsComponents";
-import { resolveImageSrc } from "@/utils/imageSrc";
-import { loadSystemPrefs, saveSystemPrefs } from "@/systemPrefs";
+} from "@statusforge/hooks/useTauriApi";
+import { Card, Btn, FieldSection } from "@statusforge/components/ui";
+import { Toggle } from "@statusforge/components/SettingsComponents";
+import { resolveImageSrc } from "@statusforge/utils/imageSrc";
+import { loadSystemPrefs, saveSystemPrefs } from "@statusforge/systemPrefs";
 
 const idleCover = "/just%20chatting.png";
 const offlineCover = "/offline.svg";
@@ -1043,11 +1043,11 @@ export default function DashboardView({
                 <div className="flex justify-center mt-4">
                   <Btn
                     onClick={() => {
-                      addOverlayUrl(overlays[overlayIndex].file, overlays[overlayIndex].label);
+                      addOverlayUrl(overlays[overlayIndex]!.file, overlays[overlayIndex]!.label);
                       setOverlayPickerOpen(false);
                     }}
                   >
-                    Use {overlays[overlayIndex].label}
+                    Use {overlays[overlayIndex]!.label}
                   </Btn>
                 </div>
               </div>

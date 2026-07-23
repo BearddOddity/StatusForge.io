@@ -1,6 +1,21 @@
 // ─── Shared theme preferences: storage + CSS variable application ───────────
 // Used by both App.tsx (apply on boot) and SettingsView's Theme tab (apply on
 // change), so every theme setting persists and takes effect after reload.
+//
+// Storage: this used to own a private "statusforge_theme_prefs" localStorage
+// key, completely separate from the rest of StreamerSuite's Settings ->
+// Appearance tab — so opening StatusForge would silently clobber whatever
+// accent/background/effects the user had just set elsewhere, and vice
+// versa. It now reads/writes the SAME unified settings key
+// (SharedSettingsContext's STORAGE_KEY, under its .theme section) and
+// notifies that context of external writes via SETTINGS_CHANGED_EVENT, so
+// there's exactly one source of truth for theme regardless of which
+// screen edited it. The functions below keep their original signatures —
+// only their storage backing changed — so nothing in App.tsx or
+// SettingsView.tsx needed to change.
+
+import { STORAGE_KEY, SETTINGS_CHANGED_EVENT, defaultSharedSettings, resolveImageSrc } from "@/settings";
+import type { ThemeConfig } from "@/settings";
 
 export interface ThemePrefs {
   accentColor: string;
@@ -59,22 +74,103 @@ export const defaultThemePrefs: ThemePrefs = {
   buttonHoverEffects: true,
 };
 
-export const THEME_PREFS_KEY = "statusforge_theme_prefs";
-/** Fired on window after theme prefs are written (storage events don't fire in the same window). */
-export const THEME_PREFS_EVENT = "sf-theme-prefs-changed";
+/** Fired after theme prefs are written — same event SharedSettingsContext
+ *  listens for and dispatches, so a save from either screen reaches both. */
+export const THEME_PREFS_EVENT = SETTINGS_CHANGED_EVENT;
+
+// ThemePrefs.fontWeight is a number union (this UI's own dropdown values);
+// the unified ThemeConfig.fontWeight is a string (matches the main
+// Appearance tab's <select> value type). Every other overlapping field
+// already shares the same name and type between the two.
+function toThemePrefs(theme: ThemeConfig): ThemePrefs {
+  const fontWeight = Number(theme.fontWeight);
+  return {
+    accentColor: theme.accentColor,
+    bgColor: theme.bgColor,
+    bgOpacity: theme.bgOpacity,
+    bgBlur: theme.bgBlur,
+    bgImage: theme.bgImage,
+    panelOpacity: theme.panelOpacity,
+    borderRadius: theme.borderRadius,
+    fontScale: theme.fontScale,
+    fontFamily: theme.fontFamily,
+    fontWeight: ([400, 500, 600, 700, 800, 900] as const).includes(fontWeight as 400) ? (fontWeight as ThemePrefs["fontWeight"]) : 400,
+    sidebarIconOnly: theme.sidebarIconOnly,
+    animationsEnabled: theme.animationsEnabled,
+    reducedMotion: theme.reducedMotion,
+    transitionSpeed: theme.transitionSpeed,
+    coverBreathe: theme.coverBreathe,
+    coverGlint: theme.coverGlint,
+    cardHoverLift: theme.cardHoverLift,
+    cardGlint: theme.cardGlint,
+    holoEffects: theme.holoEffects,
+    statusPulse: theme.statusPulse,
+    toastAnimations: theme.toastAnimations,
+    modalAnimations: theme.modalAnimations,
+    progressBarAnimation: theme.progressBarAnimation,
+    buttonHoverEffects: theme.buttonHoverEffects,
+  };
+}
+
+// See the matching guard (and its size rationale) in
+// SharedSettingsContext.tsx's load(): a previously-stored oversized
+// wallpaper must be stripped on read too, or every write through this path
+// re-inherits it and keeps failing the localStorage quota forever.
+const MAX_BG_IMAGE_CHARS = 3_000_000;
+
+function readUnifiedTheme(): ThemeConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.theme) {
+        const merged = { ...defaultSharedSettings.theme, ...parsed.theme };
+        if (merged.bgImage && merged.bgImage.length > MAX_BG_IMAGE_CHARS) merged.bgImage = "";
+        return merged;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return defaultSharedSettings.theme;
+}
 
 export function loadThemePrefs(): ThemePrefs {
-  try {
-    const stored = localStorage.getItem(THEME_PREFS_KEY);
-    return stored ? { ...defaultThemePrefs, ...JSON.parse(stored) } : defaultThemePrefs;
-  } catch {
-    return defaultThemePrefs;
-  }
+  return toThemePrefs(readUnifiedTheme());
 }
 
 export function saveThemePrefs(prefs: ThemePrefs) {
-  localStorage.setItem(THEME_PREFS_KEY, JSON.stringify(prefs));
-  window.dispatchEvent(new Event(THEME_PREFS_EVENT));
+  let unified: Record<string, unknown> = {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) unified = JSON.parse(raw);
+  } catch {
+    /* ignore */
+  }
+  const nextTheme: ThemeConfig = {
+    ...defaultSharedSettings.theme,
+    ...readUnifiedTheme(),
+    ...prefs,
+    fontWeight: String(prefs.fontWeight),
+  };
+  const next = { ...unified, theme: nextTheme };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch (err) {
+    // Same failure mode as SharedSettingsContext's persist effect: an
+    // oversized bgImage data URI can blow the localStorage quota. Drop it
+    // and retry once so the rest of the theme still saves.
+    console.error("Failed to persist theme prefs, retrying without background image:", err);
+    if (nextTheme.bgImage) {
+      const fallback = { ...unified, theme: { ...nextTheme, bgImage: "" } };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(fallback));
+      } catch {
+        /* give up — nothing more we can safely drop */
+      }
+    }
+  }
+  window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
 }
 
 // Google Fonts <link> element id — reused/updated in place rather than
@@ -119,7 +215,7 @@ export function applyThemePrefs(prefs: ThemePrefs) {
   root.style.setProperty("--user-bg", prefs.bgColor);
   root.style.setProperty("--user-bg-opacity", String(prefs.bgOpacity / 100));
   root.style.setProperty("--user-bg-blur", `${prefs.bgBlur}px`);
-  root.style.setProperty("--user-bg-image", prefs.bgImage ? `url(${prefs.bgImage})` : "none");
+  root.style.setProperty("--user-bg-image", prefs.bgImage ? `url(${resolveImageSrc(prefs.bgImage)})` : "none");
   root.style.setProperty("--user-panel-opacity", String(prefs.panelOpacity / 100));
   root.style.setProperty("--user-font-scale", String(prefs.fontScale / 100));
   root.style.setProperty("--user-font-family", `"${(prefs.fontFamily || "Montserrat").trim()}"`);

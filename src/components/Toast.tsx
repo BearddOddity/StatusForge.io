@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import type { Toast as ToastItem, ToastType } from "@/types";
-import { tauriApi } from "@/hooks/useTauriApi";
+import { useState, useRef, useCallback } from "react";
+import type { Toast as ToastItem, ToastType } from "@statusforge/types";
+import { tauriApi } from "@statusforge/hooks/useTauriApi";
 
 // ─── Toast hook ───────────────────────────────────────────────────────────────
 

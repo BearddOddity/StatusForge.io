@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { EngineStatusData } from "@/types";
-import { loadSystemPrefs } from "@/systemPrefs";
+import type { EngineStatusData } from "@statusforge/types";
+import { loadSystemPrefs } from "@statusforge/systemPrefs";
 
 export function useWebSocket(token: string) {
   const [connected, setConnected] = useState(false);

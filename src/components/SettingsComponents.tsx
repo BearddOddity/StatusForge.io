@@ -17,11 +17,17 @@ export function SubTabBtn({
     <button
       onClick={onClick}
       className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 border cursor-pointer select-none whitespace-nowrap outline-none
-        ${
-          active
-            ? "bg-purple-500/15 text-purple-300 border-purple-500/25 shadow-md shadow-purple-500/5"
-            : "bg-transparent text-white/40 border-transparent hover:text-white/80 hover:bg-white/[0.04]"
-        }`}
+        ${active ? "shadow-md" : "bg-transparent text-white/40 border-transparent hover:text-white/80 hover:bg-white/[0.04]"}`}
+      style={
+        active
+          ? {
+              background: "color-mix(in srgb, var(--user-accent, #9146FF) 15%, transparent)",
+              color: "color-mix(in srgb, var(--user-accent, #9146FF) 100%, white 30%)",
+              borderColor: "color-mix(in srgb, var(--user-accent, #9146FF) 25%, transparent)",
+              boxShadow: "0 2px 12px color-mix(in srgb, var(--user-accent, #9146FF) 5%, transparent)",
+            }
+          : undefined
+      }
     >
       <span className="text-sm leading-none">{icon}</span>
       {label}
@@ -114,11 +120,21 @@ export function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) 
   return (
     <button
       onClick={onToggle}
-      className={`w-10 h-6 rounded-full relative shrink-0 transition-all duration-300 cursor-pointer outline-none border focus:ring-1 focus:ring-purple-500/30 ${
+      className={`w-10 h-6 rounded-full relative shrink-0 transition-all duration-300 cursor-pointer outline-none border ${
         on
-          ? "bg-gradient-to-r from-purple-500 to-indigo-600 border-purple-400/40 shadow-md shadow-purple-500/20"
+          ? "border-transparent shadow-md"
           : "bg-white/[0.07] border-white/10 hover:bg-white/[0.12] hover:border-white/15"
       }`}
+      style={
+        on
+          ? {
+              background:
+                "linear-gradient(to right, var(--user-accent, #9146FF), color-mix(in srgb, var(--user-accent, #9146FF) 100%, black 30%))",
+              boxShadow: "0 2px 8px color-mix(in srgb, var(--user-accent, #9146FF) 20%, transparent)",
+              outlineColor: "color-mix(in srgb, var(--user-accent, #9146FF) 30%, transparent)",
+            }
+          : undefined
+      }
     >
       <span
         className={`absolute top-[2px] w-4.5 h-4.5 rounded-full shadow-md transition-all duration-300 ease-out ${
