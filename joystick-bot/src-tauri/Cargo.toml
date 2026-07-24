@@ -32,7 +32,7 @@ urlencoding = "2"
 keyring = "4"
 reqwest = { version = "0.13", features = ["blocking", "json", "form", "query"] }
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 axum = "0.8"
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
