@@ -27,6 +27,16 @@ This repo holds StatusForge itself plus its companion apps and shared code:
 
 Each app folder builds independently (`cd blipy-app && npm install && npm run tauri dev`, etc.) — they don't share a build step, only the `forge-detection` crate and this repo.
 
+## Branch policy
+
+`main` is the standalone StatusForge product — the only branch anyone builds
+or ships from. StatusForge is also vendored into
+[StreamerSuite](https://github.com/BearddOddity/StreamerSuite) as one of its
+launcher tools; that adaptation (shared theme/settings, StreamerSuite's own
+import paths) lives entirely on the `streamersuite-integration` branch and
+must never be merged into or otherwise land on `main`. If you're working on
+the StreamerSuite integration, branch/commit there, not here.
+
 ## Platform support
 
 Windows 10/11 is the primary, tested target. macOS and Linux builds exist and are community-supported — file an issue if something's broken there.
