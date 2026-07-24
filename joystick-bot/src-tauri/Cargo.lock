@@ -2233,7 +2233,7 @@ dependencies = [
  "futures-util",
  "keyring",
  "log",
- "rand 0.8.7",
+ "rand 0.10.2",
  "reqwest",
  "rustls",
  "serde",
